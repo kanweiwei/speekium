@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 语音助手 - 对接 Claude Code CLI
-流程: [唤醒词/按键] → 录音 → Whisper识别 → Claude回复 → Edge TTS朗读
+流程: [唤醒词/按键] → 录音 → Whisper识别 → Claude流式回复 → 边生成边朗读
 """
 
 import subprocess
@@ -9,6 +9,8 @@ import tempfile
 import asyncio
 import sys
 import os
+import json
+import re
 import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write as write_wav
@@ -22,6 +24,7 @@ USE_WAKE_WORD = True  # 是否使用唤醒词（True=唤醒词，False=按回车
 WAKE_WORD = "hey_jarvis"
 WAKE_THRESHOLD = 0.5
 SILENCE_DURATION = 2.5  # 静音多少秒后停止录音
+USE_STREAMING = True  # 是否使用流式输出（边生成边朗读）
 
 # Claude 系统提示词（优化语音输出）
 SYSTEM_PROMPT = """你是一个语音助手，请遵循以下规则：
@@ -59,11 +62,7 @@ class VoiceAssistant:
     def wait_for_wake_word(self):
         """等待唤醒词"""
         model = self.load_wake_model()
-
-        # 重置模型状态，清除之前的缓存
         model.reset()
-
-        # 短暂延迟，避免之前的语音被误检测
         sd.sleep(500)
 
         print(f"\n👂 等待唤醒词 'Hey Jarvis'...", flush=True)
@@ -75,7 +74,6 @@ class VoiceAssistant:
             nonlocal detected
             if detected:
                 return
-            # 转换为 int16 格式（openwakeword 需要）
             audio_float = indata[:, 0]
             audio_int16 = (audio_float * 32767).astype(np.int16)
             prediction = model.predict(audio_int16)
@@ -182,6 +180,7 @@ class VoiceAssistant:
         return text.strip()
 
     def ask_claude(self, question):
+        """非流式调用 Claude"""
         print("🤖 Claude 思考中...", flush=True)
         try:
             result = subprocess.run(
@@ -200,24 +199,98 @@ class VoiceAssistant:
         except Exception as e:
             return f"出错了: {e}"
 
-    async def speak(self, text):
+    async def ask_claude_stream(self, question):
+        """流式调用 Claude，返回句子生成器"""
+        print("🤖 Claude 思考中...", flush=True)
+
+        cmd = [
+            "claude", "-p", question,
+            "--dangerously-skip-permissions",
+            "--system-prompt", SYSTEM_PROMPT,
+            "--output-format", "stream-json",
+            "--include-partial-messages",
+            "--verbose"
+        ]
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        buffer = ""
+        full_response = ""
+        sentence_endings = re.compile(r'([。！？\n])')
+
+        async for line in process.stdout:
+            try:
+                data = json.loads(line.decode('utf-8'))
+
+                # 提取流式文本片段
+                if data.get("type") == "stream_event":
+                    event = data.get("event", {})
+                    if event.get("type") == "content_block_delta":
+                        delta = event.get("delta", {})
+                        if delta.get("type") == "text_delta":
+                            text = delta.get("text", "")
+                            buffer += text
+                            full_response += text
+
+                            # 检查是否有完整句子
+                            while True:
+                                match = sentence_endings.search(buffer)
+                                if match:
+                                    end_pos = match.end()
+                                    sentence = buffer[:end_pos].strip()
+                                    buffer = buffer[end_pos:]
+                                    if sentence:
+                                        print(f"🗣️  {sentence}", flush=True)
+                                        yield sentence
+                                else:
+                                    break
+
+            except json.JSONDecodeError:
+                continue
+            except Exception as e:
+                print(f"⚠️ 解析错误: {e}", flush=True)
+                continue
+
+        # 处理剩余内容
+        if buffer.strip():
+            print(f"🗣️  {buffer.strip()}", flush=True)
+            yield buffer.strip()
+
+        await process.wait()
+
+    async def generate_audio(self, text):
+        """生成 TTS 音频文件，返回文件路径"""
         import edge_tts
-        print("🔊 朗读中...", flush=True)
-        tmp_file = None
         try:
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_file = f.name
                 communicate = edge_tts.Communicate(text, TTS_VOICE, rate=TTS_RATE)
                 await communicate.save(tmp_file)
-                subprocess.run(["afplay", tmp_file])
+                return tmp_file
         except Exception as e:
-            print(f"⚠️ TTS 失败: {e}", flush=True)
-        finally:
-            if tmp_file and os.path.exists(tmp_file):
+            print(f"⚠️ TTS 生成失败: {e}", flush=True)
+            return None
+
+    async def play_audio(self, tmp_file):
+        """播放音频文件并清理（异步）"""
+        if tmp_file and os.path.exists(tmp_file):
+            try:
+                process = await asyncio.create_subprocess_exec("afplay", tmp_file)
+                await process.wait()
+            finally:
                 os.remove(tmp_file)
 
+    async def speak(self, text):
+        """TTS 朗读（单句）"""
+        tmp_file = await self.generate_audio(text)
+        await self.play_audio(tmp_file)
+
     async def chat_once(self):
-        # 录音
+        """单次对话 - 非流式"""
         if USE_WAKE_WORD:
             audio = self.record_audio_auto()
         else:
@@ -235,6 +308,47 @@ class VoiceAssistant:
         response = self.ask_claude(text)
         await self.speak(response)
 
+    async def chat_once_stream(self):
+        """单次对话 - 流式（边生成边朗读，音频预生成）"""
+        if USE_WAKE_WORD:
+            audio = self.record_audio_auto()
+        else:
+            audio = self.record_audio_manual()
+
+        if audio is None or len(audio) < SAMPLE_RATE * 0.5:
+            print("⚠️  录音太短，跳过", flush=True)
+            return
+
+        text = self.transcribe(audio)
+        if not text:
+            print("⚠️  未识别到内容", flush=True)
+            return
+
+        print("🔊 流式朗读中...", flush=True)
+
+        # 使用队列实现流水线：TTS生成 -> 队列 -> 播放
+        audio_queue = asyncio.Queue()
+
+        async def generate_worker():
+            """生成音频并放入队列"""
+            async for sentence in self.ask_claude_stream(text):
+                if sentence:
+                    audio_file = await self.generate_audio(sentence)
+                    if audio_file:
+                        await audio_queue.put(audio_file)
+            await audio_queue.put(None)  # 结束信号
+
+        async def play_worker():
+            """从队列取出音频播放"""
+            while True:
+                audio_file = await audio_queue.get()
+                if audio_file is None:
+                    break
+                await self.play_audio(audio_file)
+
+        # 并行运行生成和播放
+        await asyncio.gather(generate_worker(), play_worker())
+
     async def run(self):
         print("=" * 50, flush=True)
         print("🎙️  语音助手已启动", flush=True)
@@ -242,6 +356,8 @@ class VoiceAssistant:
             print(f"   唤醒词: 'Hey Jarvis'", flush=True)
         else:
             print("   按回车开始录音，再按回车停止", flush=True)
+        if USE_STREAMING:
+            print("   模式: 流式输出（边生成边朗读）", flush=True)
         print("   Ctrl+C 退出", flush=True)
         print("=" * 50, flush=True)
 
@@ -258,7 +374,10 @@ class VoiceAssistant:
                 else:
                     self.wait_for_key()
 
-                await self.chat_once()
+                if USE_STREAMING:
+                    await self.chat_once_stream()
+                else:
+                    await self.chat_once()
 
         except KeyboardInterrupt:
             print("\n👋 再见!", flush=True)
