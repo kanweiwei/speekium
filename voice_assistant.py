@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import asyncio
 import sys
+import os
 import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write as write_wav
@@ -17,9 +18,18 @@ SAMPLE_RATE = 16000
 WHISPER_MODEL = "base"  # tiny/base/small/medium/large
 TTS_VOICE = "zh-CN-XiaoyiNeural"  # 小艺
 TTS_RATE = "-15%"  # 语速
-USE_WAKE_WORD = False  # 是否使用唤醒词（True=唤醒词，False=按回车）
+USE_WAKE_WORD = True  # 是否使用唤醒词（True=唤醒词，False=按回车）
 WAKE_WORD = "hey_jarvis"
 WAKE_THRESHOLD = 0.5
+SILENCE_DURATION = 2.5  # 静音多少秒后停止录音
+
+# Claude 系统提示词（优化语音输出）
+SYSTEM_PROMPT = """你是一个语音助手，请遵循以下规则：
+1. 用口语化的中文回答，适合朗读
+2. 不要使用 markdown 格式、代码块、列表符号
+3. 不要使用特殊符号如 *、#、`、- 等
+4. 数字用中文表达，如"三点五"而不是"3.5"
+5. 语气自然友好，像朋友聊天一样"""
 
 
 class VoiceAssistant:
@@ -49,6 +59,13 @@ class VoiceAssistant:
     def wait_for_wake_word(self):
         """等待唤醒词"""
         model = self.load_wake_model()
+
+        # 重置模型状态，清除之前的缓存
+        model.reset()
+
+        # 短暂延迟，避免之前的语音被误检测
+        sd.sleep(500)
+
         print(f"\n👂 等待唤醒词 'Hey Jarvis'...", flush=True)
 
         chunk_size = 1280
@@ -58,8 +75,10 @@ class VoiceAssistant:
             nonlocal detected
             if detected:
                 return
-            audio = indata[:, 0]
-            prediction = model.predict(audio)
+            # 转换为 int16 格式（openwakeword 需要）
+            audio_float = indata[:, 0]
+            audio_int16 = (audio_float * 32767).astype(np.int16)
+            prediction = model.predict(audio_int16)
             score = prediction[WAKE_WORD]
             if score > WAKE_THRESHOLD:
                 detected = True
@@ -72,7 +91,6 @@ class VoiceAssistant:
             while not detected:
                 sd.sleep(100)
 
-        model.reset()
         return True
 
     def wait_for_key(self):
@@ -106,7 +124,7 @@ class VoiceAssistant:
         print(f"✅ 录音完成 ({len(audio)/SAMPLE_RATE:.1f}秒)", flush=True)
         return audio
 
-    def record_audio_auto(self, max_duration=10, silence_threshold=0.01, silence_duration=1.5):
+    def record_audio_auto(self, max_duration=10, silence_threshold=0.01, silence_duration=SILENCE_DURATION):
         """录音 - 静音自动停止"""
         print("🎤 请说话... (静音自动停止)", flush=True)
 
@@ -147,12 +165,18 @@ class VoiceAssistant:
     def transcribe(self, audio):
         print("🔄 识别中...", flush=True)
         model = self.load_whisper()
+        tmp_file = None
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            audio_int16 = (audio * 32767).astype(np.int16)
-            write_wav(f.name, SAMPLE_RATE, audio_int16)
-            segments, info = model.transcribe(f.name, language="zh")
-            text = "".join([seg.text for seg in segments])
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                tmp_file = f.name
+                audio_int16 = (audio * 32767).astype(np.int16)
+                write_wav(tmp_file, SAMPLE_RATE, audio_int16)
+                segments, info = model.transcribe(tmp_file, language="zh")
+                text = "".join([seg.text for seg in segments])
+        finally:
+            if tmp_file and os.path.exists(tmp_file):
+                os.remove(tmp_file)
 
         print(f"📝 识别结果: {text}", flush=True)
         return text.strip()
@@ -161,11 +185,15 @@ class VoiceAssistant:
         print("🤖 Claude 思考中...", flush=True)
         try:
             result = subprocess.run(
-                ["claude", "-p", question],
-                capture_output=True, text=True, timeout=60
+                [
+                    "claude", "-p", question,
+                    "--dangerously-skip-permissions",
+                    "--system-prompt", SYSTEM_PROMPT
+                ],
+                capture_output=True, text=True, timeout=120
             )
             response = result.stdout.strip()
-            print(f"💬 Claude: {response[:200]}{'...' if len(response) > 200 else ''}", flush=True)
+            print(f"💬 Claude: {response}", flush=True)
             return response
         except subprocess.TimeoutExpired:
             return "抱歉，回复超时了"
@@ -175,10 +203,18 @@ class VoiceAssistant:
     async def speak(self, text):
         import edge_tts
         print("🔊 朗读中...", flush=True)
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-            communicate = edge_tts.Communicate(text, TTS_VOICE, rate=TTS_RATE)
-            await communicate.save(f.name)
-            subprocess.run(["afplay", f.name])
+        tmp_file = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                tmp_file = f.name
+                communicate = edge_tts.Communicate(text, TTS_VOICE, rate=TTS_RATE)
+                await communicate.save(tmp_file)
+                subprocess.run(["afplay", tmp_file])
+        except Exception as e:
+            print(f"⚠️ TTS 失败: {e}", flush=True)
+        finally:
+            if tmp_file and os.path.exists(tmp_file):
+                os.remove(tmp_file)
 
     async def chat_once(self):
         # 录音
