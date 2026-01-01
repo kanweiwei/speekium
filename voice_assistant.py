@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 语音助手 - 对接 Claude Code CLI
-流程: [唤醒词/按键] → 录音 → Whisper识别 → Claude流式回复 → 边生成边朗读
+流程: [唤醒词/按键] → 录音 → SenseVoice识别 → Claude流式回复 → 边生成边朗读
 """
 
 import subprocess
@@ -18,7 +18,7 @@ import edge_tts
 
 # 配置
 SAMPLE_RATE = 16000
-WHISPER_MODEL = "base"  # tiny/base/small/medium/large
+ASR_MODEL = "iic/SenseVoiceSmall"  # SenseVoice 模型
 TTS_VOICE = "zh-CN-XiaoyiNeural"  # 小艺
 TTS_RATE = "-15%"  # 语速
 USE_WAKE_WORD = True  # 是否使用唤醒词（True=唤醒词，False=按回车）
@@ -38,7 +38,7 @@ SYSTEM_PROMPT = """你是一个语音助手，请遵循以下规则：
 
 class VoiceAssistant:
     def __init__(self):
-        self.whisper_model = None
+        self.asr_model = None
         self.wake_model = None
         self.cached_audio = {}  # 缓存常用语音
 
@@ -51,13 +51,13 @@ class VoiceAssistant:
             self.cached_audio["我在"] = audio_file
         print("✅ TTS 预加载完成", flush=True)
 
-    def load_whisper(self):
-        if self.whisper_model is None:
-            print("🔄 加载 Whisper 模型...", flush=True)
-            from faster_whisper import WhisperModel
-            self.whisper_model = WhisperModel(WHISPER_MODEL, compute_type="int8")
-            print("✅ Whisper 模型加载完成", flush=True)
-        return self.whisper_model
+    def load_asr(self):
+        if self.asr_model is None:
+            print("🔄 加载 SenseVoice 模型...", flush=True)
+            from funasr import AutoModel
+            self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
+            print("✅ SenseVoice 模型加载完成", flush=True)
+        return self.asr_model
 
     def load_wake_model(self):
         if self.wake_model is None:
@@ -173,7 +173,7 @@ class VoiceAssistant:
 
     def transcribe(self, audio):
         print("🔄 识别中...", flush=True)
-        model = self.load_whisper()
+        model = self.load_asr()
         tmp_file = None
 
         try:
@@ -181,8 +181,8 @@ class VoiceAssistant:
                 tmp_file = f.name
                 audio_int16 = (audio * 32767).astype(np.int16)
                 write_wav(tmp_file, SAMPLE_RATE, audio_int16)
-                segments, info = model.transcribe(tmp_file, language="zh")
-                text = "".join([seg.text for seg in segments])
+                result = model.generate(input=tmp_file)
+                text = result[0]["text"] if result else ""
         finally:
             if tmp_file and os.path.exists(tmp_file):
                 os.remove(tmp_file)
@@ -380,7 +380,7 @@ class VoiceAssistant:
         # 预加载模型
         if USE_WAKE_WORD:
             self.load_wake_model()
-        self.load_whisper()
+        self.load_asr()
         await self.preload_tts()
 
         try:
