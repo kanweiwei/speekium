@@ -14,6 +14,7 @@ import re
 import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write as write_wav
+import edge_tts
 
 # 配置
 SAMPLE_RATE = 16000
@@ -39,6 +40,16 @@ class VoiceAssistant:
     def __init__(self):
         self.whisper_model = None
         self.wake_model = None
+        self.cached_audio = {}  # 缓存常用语音
+
+    async def preload_tts(self):
+        """预加载 TTS，生成常用语音缓存"""
+        print("🔄 预加载 TTS...", flush=True)
+        # 预生成"我在"的音频
+        audio_file = await self.generate_audio("我在")
+        if audio_file:
+            self.cached_audio["我在"] = audio_file
+        print("✅ TTS 预加载完成", flush=True)
 
     def load_whisper(self):
         if self.whisper_model is None:
@@ -264,7 +275,6 @@ class VoiceAssistant:
 
     async def generate_audio(self, text):
         """生成 TTS 音频文件，返回文件路径"""
-        import edge_tts
         try:
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_file = f.name
@@ -275,14 +285,20 @@ class VoiceAssistant:
             print(f"⚠️ TTS 生成失败: {e}", flush=True)
             return None
 
-    async def play_audio(self, tmp_file):
-        """播放音频文件并清理（异步）"""
+    async def play_audio(self, tmp_file, delete=True):
+        """播放音频文件（异步），可选是否删除"""
         if tmp_file and os.path.exists(tmp_file):
             try:
                 process = await asyncio.create_subprocess_exec("afplay", tmp_file)
                 await process.wait()
             finally:
-                os.remove(tmp_file)
+                if delete:
+                    os.remove(tmp_file)
+
+    async def play_cached(self, key):
+        """播放缓存的音频"""
+        if key in self.cached_audio:
+            await self.play_audio(self.cached_audio[key], delete=False)
 
     async def speak(self, text):
         """TTS 朗读（单句）"""
@@ -365,12 +381,13 @@ class VoiceAssistant:
         if USE_WAKE_WORD:
             self.load_wake_model()
         self.load_whisper()
+        await self.preload_tts()
 
         try:
             while True:
                 if USE_WAKE_WORD:
                     self.wait_for_wake_word()
-                    await self.speak("我在")
+                    await self.play_cached("我在")
                 else:
                     self.wait_for_key()
 
