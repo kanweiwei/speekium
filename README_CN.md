@@ -1,53 +1,74 @@
-# Speekium
+<p align="center">
+  <img src="https://img.icons8.com/fluency/96/microphone.png" width="80" height="80" alt="Speekium Logo">
+</p>
 
-智能语音助手，通过自然语音与大语言模型进行对话交互。
+<h1 align="center">Speekium</h1>
 
-## 特性
+<p align="center">
+  <strong>支持多种 LLM 后端的智能语音助手</strong>
+</p>
 
-- **VAD 语音检测** - 使用 Silero VAD 自动检测语音起止，无需手动按键
-- **高精度语音识别** - 基于阿里 SenseVoice 模型，支持中文、英文等多语言
-- **流式语音合成** - 边生成边朗读，响应更快速自然
-- **可插拔 LLM 后端** - 当前支持 Claude Code CLI，后续将支持 Ollama 等
-- **跨平台支持** - macOS、Linux、Windows
+<p align="center">
+  <a href="./README.md">English</a> •
+  <a href="#安装">安装</a> •
+  <a href="#使用">使用</a> •
+  <a href="#路线图">路线图</a>
+</p>
 
-## 工作流程
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform">
+  <img src="https://img.shields.io/github/license/kanweiwei/speekium" alt="License">
+  <img src="https://img.shields.io/github/stars/kanweiwei/speekium?style=social" alt="Stars">
+</p>
+
+---
+
+## ✨ 特性
+
+- 🎙️ **语音活动检测** — 使用 Silero VAD 自动检测语音起止，无需按键
+- 🗣️ **高精度语音识别** — 基于阿里 SenseVoice，支持中文、英文等多语言
+- ⚡ **流式语音合成** — 边生成边朗读，响应更快更自然
+- 🔌 **可插拔 LLM** — 轻松切换后端（Claude、Ollama、OpenAI...）
+- 🖥️ **跨平台** — 支持 macOS、Linux、Windows
+
+## 🔄 工作原理
 
 ```
-🎤 麦克风输入
-    ↓
-🔍 VAD 检测人声（Silero VAD）
-    ↓
-📝 语音识别（SenseVoice）
-    ↓
-🤖 LLM 流式回复
-    ↓
-🔊 TTS 语音合成（Edge TTS）
-    ↓
-🎧 音频播放
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   🎤 麦克风 ──▶ 🔍 VAD ──▶ 📝 ASR ──▶ 🤖 LLM               │
+│                 (Silero)   (SenseVoice)  (可插拔)           │
+│                                            │                │
+│                                            ▼                │
+│   🎧 扬声器 ◀── 🔊 播放器 ◀── 🗣️ TTS ◀──┘                 │
+│                              (Edge TTS)                     │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## 安装
+## 📦 安装
 
 ### 前置要求
 
 - Python 3.10+
-- [Claude Code CLI](https://github.com/anthropics/claude-code) 已安装并配置
-- 麦克风设备
+- [Claude Code CLI](https://github.com/anthropics/claude-code)（或其他 LLM 后端）
+- 麦克风
 
-### 安装步骤
+### 快速开始
 
 ```bash
-# 克隆仓库
-git clone https://github.com/user/speekium.git
+# 克隆
+git clone https://github.com/kanweiwei/speekium.git
 cd speekium
 
-# 创建虚拟环境
+# 安装
 python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows
-
-# 安装依赖
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# 运行
+python speekium.py
 ```
 
 ### Linux 额外依赖
@@ -60,83 +81,97 @@ sudo apt install portaudio19-dev ffmpeg
 sudo dnf install portaudio-devel ffmpeg
 ```
 
-## 使用
+## 🚀 使用
 
 ```bash
-# 激活虚拟环境
-source .venv/bin/activate
-
-# 启动
 python speekium.py
 ```
 
-启动后直接对着麦克风说话即可，无需按键。说完后会自动识别并回复。
+启动后直接对着麦克风说话即可：
+1. 自动检测语音开始
+2. 识别语音内容
+3. 获取 LLM 回复
+4. 朗读回复内容
 
-## 配置
+## ⚙️ 配置
 
-编辑 `speekium.py` 顶部的配置项：
+编辑 `speekium.py` 顶部配置：
 
 ```python
-# 语音识别模型
+# 语音识别
 ASR_MODEL = "iic/SenseVoiceSmall"
 
-# TTS 语音（Edge TTS）
-TTS_VOICE = "zh-CN-XiaoyiNeural"  # 可选: zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural 等
-TTS_RATE = "-15%"                 # 语速调整
+# 语音合成
+TTS_VOICE = "zh-CN-XiaoyiNeural"  # 可选: zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural
+TTS_RATE = "-15%"
 
 # 流式输出（边生成边朗读）
 USE_STREAMING = True
 
 # VAD 参数
-VAD_THRESHOLD = 0.5           # 语音检测阈值
-SILENCE_AFTER_SPEECH = 1.5    # 静音多久停止录音（秒）
-MAX_RECORDING_DURATION = 30   # 最大录音时长（秒）
+VAD_THRESHOLD = 0.5
+SILENCE_AFTER_SPEECH = 1.5  # 秒
+MAX_RECORDING_DURATION = 30  # 秒
 ```
 
-### 可用的中文语音
+查看可用语音：
+```bash
+python tts_test.py --list
+```
+
+### 推荐中文语音
 
 | 语音 | 说明 |
 |------|------|
 | `zh-CN-XiaoyiNeural` | 小艺（女声，活泼） |
 | `zh-CN-XiaoxiaoNeural` | 晓晓（女声，温柔） |
 | `zh-CN-YunxiNeural` | 云希（男声） |
-| `zh-CN-YunjianNeural` | 云健（男声，新闻播报风格） |
+| `zh-CN-YunjianNeural` | 云健（男声，播音风格） |
 
-查看所有可用语音：
-```bash
-python tts_test.py --list
-```
-
-## 技术栈
-
-| 组件 | 技术 |
-|------|------|
-| 语音活动检测 | [Silero VAD](https://github.com/snakers4/silero-vad) |
-| 语音识别 | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) (FunASR) |
-| 大语言模型 | 可插拔（Claude Code CLI、Ollama 等） |
-| 语音合成 | [Edge TTS](https://github.com/rany2/edge-tts) |
-| 音频处理 | sounddevice, scipy |
-
-### 支持的 LLM 后端
+## 🔌 支持的 LLM 后端
 
 | 后端 | 状态 |
 |------|------|
 | [Claude Code CLI](https://github.com/anthropics/claude-code) | ✅ 已支持 |
 | [Ollama](https://ollama.ai) | 🚧 计划中 |
 | OpenAI API | 🚧 计划中 |
+| 本地模型 | 🚧 计划中 |
 
-## 平台支持
+## 🛠️ 技术栈
 
-| 平台 | 音频播放 | 状态 |
-|------|----------|------|
-| macOS | afplay | ✅ |
-| Linux | ffplay | ✅ |
-| Windows | PowerShell SoundPlayer | ✅ |
+| 组件 | 技术 |
+|------|------|
+| 语音活动检测 | [Silero VAD](https://github.com/snakers4/silero-vad) |
+| 语音识别 | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) |
+| 语音合成 | [Edge TTS](https://github.com/rany2/edge-tts) |
+| 音频处理 | sounddevice, scipy, numpy |
 
-## License
+## 🗺️ 路线图
 
-MIT
+- [x] 基于 VAD 的语音检测
+- [x] SenseVoice 语音识别
+- [x] 流式 TTS 输出
+- [x] Claude Code CLI 后端
+- [ ] Ollama 后端支持
+- [ ] OpenAI API 后端
+- [ ] 唤醒词检测
+- [ ] 多轮对话上下文
+- [ ] Web 界面
 
-## 贡献
+## 🤝 贡献
 
-欢迎提交 Issue 和 Pull Request！
+欢迎贡献！你可以：
+
+- 🐛 报告 Bug
+- 💡 提出建议
+- 🔧 提交 PR
+
+## 📄 许可证
+
+[MIT](./LICENSE) © 2025 [kanweiwei](https://github.com/kanweiwei)
+
+---
+
+<p align="center">
+  如果觉得有帮助，请给个 ⭐ 支持一下
+</p>

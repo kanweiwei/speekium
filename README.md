@@ -1,58 +1,77 @@
-# Speekium
+<p align="center">
+  <img src="https://img.icons8.com/fluency/96/microphone.png" width="80" height="80" alt="Speekium Logo">
+</p>
 
-[中文文档](./README_CN.md)
+<h1 align="center">Speekium</h1>
 
-A smart voice assistant that enables natural voice conversations with LLMs.
+<p align="center">
+  <strong>A smart voice assistant with pluggable LLM backends</strong>
+</p>
 
-## Features
+<p align="center">
+  <a href="./README_CN.md">中文文档</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#roadmap">Roadmap</a>
+</p>
 
-- **Voice Activity Detection** - Auto-detects speech start/end using Silero VAD, no button press needed
-- **High-Accuracy ASR** - Powered by Alibaba's SenseVoice model, supports Chinese, English, and more
-- **Streaming TTS** - Speaks while generating, for faster and more natural responses
-- **Pluggable LLM Backend** - Currently supports Claude Code CLI, with Ollama and other backends planned
-- **Cross-Platform** - Works on macOS, Linux, and Windows
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform">
+  <img src="https://img.shields.io/github/license/kanweiwei/speekium" alt="License">
+  <img src="https://img.shields.io/github/stars/kanweiwei/speekium?style=social" alt="Stars">
+</p>
 
-## How It Works
+---
+
+## ✨ Features
+
+- 🎙️ **Voice Activity Detection** — Auto-detects speech start/end using Silero VAD, no button press needed
+- 🗣️ **High-Accuracy ASR** — Powered by Alibaba's SenseVoice, supports Chinese, English, and more
+- ⚡ **Streaming TTS** — Speaks while generating for faster, more natural responses
+- 🔌 **Pluggable LLM** — Swap backends easily (Claude, Ollama, OpenAI...)
+- 🖥️ **Cross-Platform** — Works on macOS, Linux, and Windows
+
+## 🔄 How It Works
 
 ```
-🎤 Microphone Input
-    ↓
-🔍 Voice Activity Detection (Silero VAD)
-    ↓
-📝 Speech Recognition (SenseVoice)
-    ↓
-🤖 LLM Streaming Response
-    ↓
-🔊 Text-to-Speech (Edge TTS)
-    ↓
-🎧 Audio Playback
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   🎤 Microphone ──▶ 🔍 VAD ──▶ 📝 ASR ──▶ 🤖 LLM           │
+│                      (Silero)    (SenseVoice)  (Pluggable)  │
+│                                                    │        │
+│                                                    ▼        │
+│   🎧 Speaker ◀── 🔊 Player ◀── 🗣️ TTS ◀─────────┘         │
+│                                 (Edge TTS)                  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Installation
+## 📦 Installation
 
 ### Prerequisites
 
 - Python 3.10+
-- [Claude Code CLI](https://github.com/anthropics/claude-code) installed and configured
+- [Claude Code CLI](https://github.com/anthropics/claude-code) (or other LLM backend)
 - Microphone
 
-### Setup
+### Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/user/speekium.git
+# Clone
+git clone https://github.com/kanweiwei/speekium.git
 cd speekium
 
-# Create virtual environment
+# Setup
 python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows
-
-# Install dependencies
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Run
+python speekium.py
 ```
 
-### Linux Additional Dependencies
+### Linux Dependencies
 
 ```bash
 # Ubuntu/Debian
@@ -62,76 +81,88 @@ sudo apt install portaudio19-dev ffmpeg
 sudo dnf install portaudio-devel ffmpeg
 ```
 
-## Usage
+## 🚀 Usage
 
 ```bash
-# Activate virtual environment
-source .venv/bin/activate
-
-# Run
 python speekium.py
 ```
 
-Just speak into your microphone after starting. The assistant will automatically detect when you finish speaking and respond.
+Just speak into your microphone. The assistant will:
+1. Detect when you start speaking
+2. Recognize your speech
+3. Get a response from the LLM
+4. Speak the response back to you
 
-## Configuration
+## ⚙️ Configuration
 
-Edit the configuration at the top of `speekium.py`:
+Edit the top of `speekium.py`:
 
 ```python
-# ASR Model
+# ASR
 ASR_MODEL = "iic/SenseVoiceSmall"
 
-# TTS Voice (Edge TTS)
-TTS_VOICE = "zh-CN-XiaoyiNeural"  # Options: zh-CN-XiaoxiaoNeural, en-US-JennyNeural, etc.
-TTS_RATE = "-15%"                 # Speech rate adjustment
+# TTS
+TTS_VOICE = "zh-CN-XiaoyiNeural"  # or: en-US-JennyNeural, etc.
+TTS_RATE = "-15%"
 
-# Streaming output (speak while generating)
+# Streaming (speak while generating)
 USE_STREAMING = True
 
-# VAD Parameters
-VAD_THRESHOLD = 0.5           # Voice detection threshold
-SILENCE_AFTER_SPEECH = 1.5    # Silence duration to stop recording (seconds)
-MAX_RECORDING_DURATION = 30   # Maximum recording duration (seconds)
+# VAD
+VAD_THRESHOLD = 0.5
+SILENCE_AFTER_SPEECH = 1.5  # seconds
+MAX_RECORDING_DURATION = 30  # seconds
 ```
 
-### Available Voices
-
-List all available voices:
+List available TTS voices:
 ```bash
 python tts_test.py --list
 ```
 
-## Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Voice Activity Detection | [Silero VAD](https://github.com/snakers4/silero-vad) |
-| Speech Recognition | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) (FunASR) |
-| Large Language Model | Pluggable (Claude Code CLI, Ollama, etc.) |
-| Text-to-Speech | [Edge TTS](https://github.com/rany2/edge-tts) |
-| Audio Processing | sounddevice, scipy |
-
-### Supported LLM Backends
+## 🔌 Supported LLM Backends
 
 | Backend | Status |
 |---------|--------|
 | [Claude Code CLI](https://github.com/anthropics/claude-code) | ✅ Supported |
 | [Ollama](https://ollama.ai) | 🚧 Planned |
 | OpenAI API | 🚧 Planned |
+| Local LLMs | 🚧 Planned |
 
-## Platform Support
+## 🛠️ Tech Stack
 
-| Platform | Audio Player | Status |
-|----------|--------------|--------|
-| macOS | afplay | ✅ |
-| Linux | ffplay | ✅ |
-| Windows | PowerShell SoundPlayer | ✅ |
+| Component | Technology |
+|-----------|------------|
+| Voice Activity Detection | [Silero VAD](https://github.com/snakers4/silero-vad) |
+| Speech Recognition | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) |
+| Text-to-Speech | [Edge TTS](https://github.com/rany2/edge-tts) |
+| Audio Processing | sounddevice, scipy, numpy |
 
-## License
+## 🗺️ Roadmap
 
-MIT
+- [x] VAD-based voice detection
+- [x] SenseVoice ASR integration
+- [x] Streaming TTS output
+- [x] Claude Code CLI backend
+- [ ] Ollama backend support
+- [ ] OpenAI API backend
+- [ ] Wake word detection
+- [ ] Multi-turn conversation context
+- [ ] Web UI
 
-## Contributing
+## 🤝 Contributing
 
-Issues and Pull Requests are welcome!
+Contributions are welcome! Feel free to:
+
+- 🐛 Report bugs
+- 💡 Suggest features
+- 🔧 Submit pull requests
+
+## 📄 License
+
+[MIT](./LICENSE) © 2025 [kanweiwei](https://github.com/kanweiwei)
+
+---
+
+<p align="center">
+  If you find this project helpful, please consider giving it a ⭐
+</p>
