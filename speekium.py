@@ -39,8 +39,8 @@ USE_STREAMING = True  # 是否使用流式输出（边生成边朗读）
 VAD_THRESHOLD = 0.5  # 语音检测阈值
 VAD_CONSECUTIVE_THRESHOLD = 3  # 连续检测到语音的次数才确认开始说话
 VAD_PRE_BUFFER = 0.3  # 预缓冲时长（秒），保留语音开始前的音频
-MIN_SPEECH_DURATION = 0.5  # 最短语音时长（秒）
-SILENCE_AFTER_SPEECH = 1.5  # 说完后静音多久停止录音（秒）
+MIN_SPEECH_DURATION = 0.2  # 最短语音时长（秒）
+SILENCE_AFTER_SPEECH = 0.8  # 说完后静音多久停止录音（秒）
 MAX_RECORDING_DURATION = 30  # 最大录音时长（秒）
 
 # ===== 系统提示词（优化语音输出）=====
