@@ -62,14 +62,23 @@
 git clone https://github.com/kanweiwei/speekium.git
 cd speekium
 
-# Setup
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+# Setup with uv (recommended)
+uv sync
 
 # Run
+uv run python speekium.py
+```
+
+<details>
+<summary>Alternative: pip install</summary>
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e .
 python speekium.py
 ```
+</details>
 
 ### Linux Dependencies
 
