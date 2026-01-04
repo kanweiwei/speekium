@@ -1,1 +1,6 @@
 edge-tts
+numpy
+sounddevice
+scipy
+torch
+funasr
