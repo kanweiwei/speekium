@@ -25,14 +25,14 @@ from backends import create_backend
 LLM_BACKEND = "claude"  # 可选: "claude", "ollama"
 
 # Ollama 配置 (仅当 LLM_BACKEND="ollama" 时生效)
-OLLAMA_MODEL = "qwen2.5:7b"  # Ollama 模型名称
+OLLAMA_MODEL = "qwen2.5:1.5b"  # Ollama 模型名称 (可选: qwen2.5:7b 更智能但更慢)
 OLLAMA_BASE_URL = "http://localhost:11434"  # Ollama 服务地址
 
 # ===== 基础配置 =====
 SAMPLE_RATE = 16000
 ASR_MODEL = "iic/SenseVoiceSmall"  # SenseVoice 模型
 TTS_VOICE = "zh-CN-XiaoyiNeural"  # 小艺
-TTS_RATE = "-15%"  # 语速
+TTS_RATE = "+0%"  # 语速 (负值减慢，正值加快，0%为正常)
 USE_STREAMING = True  # 是否使用流式输出（边生成边朗读）
 
 # ===== VAD 配置 =====
