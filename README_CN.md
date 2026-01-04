@@ -167,6 +167,42 @@ python tts_test.py --list
 - [ ] 多轮对话上下文
 - [ ] Web 界面
 
+## ❓ 常见问题
+
+<details>
+<summary><b>安装时 llvmlite 编译失败</b></summary>
+
+funasr 依赖 llvmlite，需要 LLVM 环境。解决方案：
+
+```bash
+# macOS
+brew install llvm
+
+# Ubuntu/Debian
+sudo apt install llvm-dev
+
+# 或使用 conda（推荐，适合复杂 ML 依赖）
+conda install -c conda-forge funasr
+```
+</details>
+
+<details>
+<summary><b>检测不到麦克风输入</b></summary>
+
+- 检查系统设置中的麦克风权限
+- 确认麦克风在其他应用中正常工作
+- 尝试降低 `VAD_THRESHOLD`（值越低越敏感）
+</details>
+
+<details>
+<summary><b>找不到 Claude CLI</b></summary>
+
+先安装 Claude Code CLI：
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+</details>
+
 ## 🤝 贡献
 
 欢迎贡献！你可以：

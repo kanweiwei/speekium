@@ -158,6 +158,42 @@ python tts_test.py --list
 - [ ] Multi-turn conversation context
 - [ ] Web UI
 
+## ❓ Troubleshooting
+
+<details>
+<summary><b>llvmlite build fails during installation</b></summary>
+
+funasr depends on llvmlite which requires LLVM. Solutions:
+
+```bash
+# macOS
+brew install llvm
+
+# Ubuntu/Debian
+sudo apt install llvm-dev
+
+# Or use conda (recommended for complex ML deps)
+conda install -c conda-forge funasr
+```
+</details>
+
+<details>
+<summary><b>No audio input detected</b></summary>
+
+- Check microphone permissions in System Settings
+- Verify microphone works in other apps
+- Try adjusting `VAD_THRESHOLD` (lower = more sensitive)
+</details>
+
+<details>
+<summary><b>Claude CLI not found</b></summary>
+
+Install Claude Code CLI first:
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+</details>
+
 ## 🤝 Contributing
 
 Contributions are welcome! Feel free to:
