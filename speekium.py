@@ -4,16 +4,12 @@ Speekium - 智能语音助手
 通过自然语音与大语言模型进行对话交互
 流程: [VAD检测人声] → 录音 → SenseVoice识别 → LLM流式回复 → 边生成边朗读
 
-当前后端: Claude Code CLI
-计划支持: Ollama, OpenAI API
+支持后端: Claude Code CLI, Ollama
 """
 
-import subprocess
 import tempfile
 import asyncio
-import sys
 import os
-import json
 import re
 import platform
 from collections import deque
@@ -23,14 +19,23 @@ from scipy.io.wavfile import write as write_wav
 import edge_tts
 import torch
 
-# 配置
+from backends import create_backend
+
+# ===== LLM 后端配置 =====
+LLM_BACKEND = "claude"  # 可选: "claude", "ollama"
+
+# Ollama 配置 (仅当 LLM_BACKEND="ollama" 时生效)
+OLLAMA_MODEL = "qwen2.5:7b"  # Ollama 模型名称
+OLLAMA_BASE_URL = "http://localhost:11434"  # Ollama 服务地址
+
+# ===== 基础配置 =====
 SAMPLE_RATE = 16000
 ASR_MODEL = "iic/SenseVoiceSmall"  # SenseVoice 模型
 TTS_VOICE = "zh-CN-XiaoyiNeural"  # 小艺
 TTS_RATE = "-15%"  # 语速
 USE_STREAMING = True  # 是否使用流式输出（边生成边朗读）
 
-# VAD 配置
+# ===== VAD 配置 =====
 VAD_THRESHOLD = 0.5  # 语音检测阈值
 VAD_CONSECUTIVE_THRESHOLD = 3  # 连续检测到语音的次数才确认开始说话
 VAD_PRE_BUFFER = 0.3  # 预缓冲时长（秒），保留语音开始前的音频
@@ -38,7 +43,7 @@ MIN_SPEECH_DURATION = 0.5  # 最短语音时长（秒）
 SILENCE_AFTER_SPEECH = 1.5  # 说完后静音多久停止录音（秒）
 MAX_RECORDING_DURATION = 30  # 最大录音时长（秒）
 
-# Claude 系统提示词（优化语音输出）
+# ===== 系统提示词（优化语音输出）=====
 SYSTEM_PROMPT = """你是 Speekium 智能语音助手，请遵循以下规则：
 1. 用口语化的中文回答，适合朗读
 2. 不要使用 markdown 格式、代码块、列表符号
@@ -51,6 +56,7 @@ class VoiceAssistant:
     def __init__(self):
         self.asr_model = None
         self.vad_model = None
+        self.llm_backend = None
 
     def load_asr(self):
         if self.asr_model is None:
@@ -71,6 +77,21 @@ class VoiceAssistant:
             )
             print("✅ VAD 模型加载完成", flush=True)
         return self.vad_model
+
+    def load_llm(self):
+        if self.llm_backend is None:
+            print(f"🔄 初始化 LLM 后端 ({LLM_BACKEND})...", flush=True)
+            if LLM_BACKEND == "ollama":
+                self.llm_backend = create_backend(
+                    LLM_BACKEND,
+                    SYSTEM_PROMPT,
+                    model=OLLAMA_MODEL,
+                    base_url=OLLAMA_BASE_URL
+                )
+            else:
+                self.llm_backend = create_backend(LLM_BACKEND, SYSTEM_PROMPT)
+            print(f"✅ LLM 后端初始化完成", flush=True)
+        return self.llm_backend
 
     def record_with_vad(self):
         """使用 VAD 检测语音，自动开始和停止录音"""
@@ -189,87 +210,6 @@ class VoiceAssistant:
         print(f"📝 识别结果: {text}", flush=True)
         return text
 
-    def ask_claude(self, question):
-        """非流式调用 Claude"""
-        print("🤖 Claude 思考中...", flush=True)
-        try:
-            result = subprocess.run(
-                [
-                    "claude", "-p", question,
-                    "--dangerously-skip-permissions",
-                    "--system-prompt", SYSTEM_PROMPT
-                ],
-                capture_output=True, text=True, timeout=120
-            )
-            response = result.stdout.strip()
-            print(f"💬 Claude: {response}", flush=True)
-            return response
-        except subprocess.TimeoutExpired:
-            return "抱歉，回复超时了"
-        except Exception as e:
-            return f"出错了: {e}"
-
-    async def ask_claude_stream(self, question):
-        """流式调用 Claude，返回句子生成器"""
-        print("🤖 Claude 思考中...", flush=True)
-
-        cmd = [
-            "claude", "-p", question,
-            "--dangerously-skip-permissions",
-            "--system-prompt", SYSTEM_PROMPT,
-            "--output-format", "stream-json",
-            "--include-partial-messages",
-            "--verbose"
-        ]
-
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
-        buffer = ""
-        sentence_endings = re.compile(r'([。！？\n])')
-
-        async for line in process.stdout:
-            try:
-                data = json.loads(line.decode('utf-8'))
-
-                # 提取流式文本片段
-                if data.get("type") == "stream_event":
-                    event = data.get("event", {})
-                    if event.get("type") == "content_block_delta":
-                        delta = event.get("delta", {})
-                        if delta.get("type") == "text_delta":
-                            text = delta.get("text", "")
-                            buffer += text
-
-                            # 检查是否有完整句子
-                            while True:
-                                match = sentence_endings.search(buffer)
-                                if match:
-                                    end_pos = match.end()
-                                    sentence = buffer[:end_pos].strip()
-                                    buffer = buffer[end_pos:]
-                                    if sentence:
-                                        print(f"🗣️  {sentence}", flush=True)
-                                        yield sentence
-                                else:
-                                    break
-
-            except json.JSONDecodeError:
-                continue
-            except Exception as e:
-                print(f"⚠️ 解析错误: {e}", flush=True)
-                continue
-
-        # 处理剩余内容
-        if buffer.strip():
-            print(f"🗣️  {buffer.strip()}", flush=True)
-            yield buffer.strip()
-
-        await process.wait()
-
     async def generate_audio(self, text):
         """生成 TTS 音频文件，返回文件路径"""
         try:
@@ -320,13 +260,15 @@ class VoiceAssistant:
             print("⚠️  未识别到内容", flush=True)
             return True
 
+        backend = self.load_llm()
+
         if USE_STREAMING:
             # 流式输出
             print("🔊 流式朗读中...", flush=True)
             audio_queue = asyncio.Queue()
 
             async def generate_worker():
-                async for sentence in self.ask_claude_stream(text):
+                async for sentence in backend.chat_stream(text):
                     if sentence:
                         audio_file = await self.generate_audio(sentence)
                         if audio_file:
@@ -343,7 +285,7 @@ class VoiceAssistant:
             await asyncio.gather(generate_worker(), play_worker())
         else:
             # 非流式输出
-            response = self.ask_claude(text)
+            response = backend.chat(text)
             await self.speak(response)
 
         return True
@@ -352,6 +294,10 @@ class VoiceAssistant:
         print("=" * 50, flush=True)
         print("🎙️  Speekium 已启动 (持续对话模式)", flush=True)
         print("   使用 VAD 自动检测语音", flush=True)
+        backend_info = LLM_BACKEND
+        if LLM_BACKEND == "ollama":
+            backend_info = f"ollama ({OLLAMA_MODEL})"
+        print(f"   LLM 后端: {backend_info}", flush=True)
         if USE_STREAMING:
             print("   模式: 流式输出（边生成边朗读）", flush=True)
         print("   Ctrl+C 退出", flush=True)
@@ -360,6 +306,7 @@ class VoiceAssistant:
         # 预加载模型
         self.load_vad()
         self.load_asr()
+        self.load_llm()
 
         print("\n🎧 准备就绪，请开始说话...\n", flush=True)
 

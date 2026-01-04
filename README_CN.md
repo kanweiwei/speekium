@@ -142,9 +142,23 @@ python tts_test.py --list
 | 后端 | 状态 |
 |------|------|
 | [Claude Code CLI](https://github.com/anthropics/claude-code) | ✅ 已支持 |
-| [Ollama](https://ollama.ai) | 🚧 计划中 |
+| [Ollama](https://ollama.ai) | ✅ 已支持 |
 | OpenAI API | 🚧 计划中 |
-| 本地模型 | 🚧 计划中 |
+
+### 使用 Ollama
+
+1. 安装并运行 [Ollama](https://ollama.ai)
+2. 拉取模型: `ollama pull qwen2.5:7b`
+3. 编辑 `speekium.py`:
+
+```python
+# 切换到 Ollama 后端
+LLM_BACKEND = "ollama"
+
+# 配置模型（可选）
+OLLAMA_MODEL = "qwen2.5:7b"
+OLLAMA_BASE_URL = "http://localhost:11434"
+```
 
 ## 🛠️ 技术栈
 
@@ -161,7 +175,7 @@ python tts_test.py --list
 - [x] SenseVoice 语音识别
 - [x] 流式 TTS 输出
 - [x] Claude Code CLI 后端
-- [ ] Ollama 后端支持
+- [x] Ollama 后端支持
 - [ ] OpenAI API 后端
 - [ ] 唤醒词检测
 - [ ] 多轮对话上下文

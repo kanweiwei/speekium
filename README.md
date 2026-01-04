@@ -133,9 +133,23 @@ python tts_test.py --list
 | Backend | Status |
 |---------|--------|
 | [Claude Code CLI](https://github.com/anthropics/claude-code) | ✅ Supported |
-| [Ollama](https://ollama.ai) | 🚧 Planned |
+| [Ollama](https://ollama.ai) | ✅ Supported |
 | OpenAI API | 🚧 Planned |
-| Local LLMs | 🚧 Planned |
+
+### Using Ollama
+
+1. Install and run [Ollama](https://ollama.ai)
+2. Pull a model: `ollama pull qwen2.5:7b`
+3. Edit `speekium.py`:
+
+```python
+# Switch to Ollama backend
+LLM_BACKEND = "ollama"
+
+# Configure model (optional)
+OLLAMA_MODEL = "qwen2.5:7b"
+OLLAMA_BASE_URL = "http://localhost:11434"
+```
 
 ## 🛠️ Tech Stack
 
@@ -152,7 +166,7 @@ python tts_test.py --list
 - [x] SenseVoice ASR integration
 - [x] Streaming TTS output
 - [x] Claude Code CLI backend
-- [ ] Ollama backend support
+- [x] Ollama backend support
 - [ ] OpenAI API backend
 - [ ] Wake word detection
 - [ ] Multi-turn conversation context

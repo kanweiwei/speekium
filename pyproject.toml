@@ -36,6 +36,8 @@ dependencies = [
     "scipy",
     "torch",
     "funasr",
+    "httpx",
+    "llvmlite>=0.42.0",  # Override old version for Python 3.12 support
 ]
 
 [project.urls]
