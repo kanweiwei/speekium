@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.icons8.com/fluency/96/microphone.png" width="80" height="80" alt="Speekium Logo">
+  <img src="./logo.svg" width="120" height="120" alt="Speekium Logo">
 </p>
 
 <h1 align="center">Speekium</h1>

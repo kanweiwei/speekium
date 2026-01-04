@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- 主渐变：蓝到紫 -->
+    <linearGradient id="mainGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0066FF"/>
+      <stop offset="100%" style="stop-color:#8B5CF6"/>
+    </linearGradient>
+
+    <!-- 高亮渐变 -->
+    <linearGradient id="highlightGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00D4FF"/>
+      <stop offset="50%" style="stop-color:#0066FF"/>
+      <stop offset="100%" style="stop-color:#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 外圆环 -->
+  <circle cx="100" cy="100" r="90" fill="none" stroke="url(#mainGradient)" stroke-width="4"/>
+
+  <!-- 内圆（背景） -->
+  <circle cx="100" cy="100" r="85" fill="#0A1628"/>
+
+  <!-- 声波线条 - 形成 S 形 -->
+  <!-- 第一条波（上） -->
+  <path d="M 45 70 Q 75 55, 100 70 T 155 70"
+        fill="none"
+        stroke="url(#highlightGradient)"
+        stroke-width="5"
+        stroke-linecap="round"/>
+
+  <!-- 第二条波（中） -->
+  <path d="M 40 100 Q 70 85, 100 100 T 160 100"
+        fill="none"
+        stroke="url(#mainGradient)"
+        stroke-width="6"
+        stroke-linecap="round"/>
+
+  <!-- 第三条波（下） -->
+  <path d="M 45 130 Q 75 145, 100 130 T 155 130"
+        fill="none"
+        stroke="url(#highlightGradient)"
+        stroke-width="5"
+        stroke-linecap="round"/>
+
+  <!-- 中心点（麦克风/声源象征） -->
+  <circle cx="100" cy="100" r="8" fill="url(#mainGradient)"/>
+
+</svg>
