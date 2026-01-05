@@ -39,6 +39,18 @@
 
 ## 快速开始
 
+**1. 安装 uv（Python 包管理器）：**
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**2. 运行 Speekium：**
+
 ```bash
 git clone https://github.com/kanweiwei/speekium.git
 cd speekium
@@ -48,7 +60,7 @@ uv run python speekium.py
 
 就这么简单，开始说话吧。
 
-> **注意**：需要 Python 3.10+ 和 [uv](https://github.com/astral-sh/uv)。首次运行会下载约 1GB 的模型。
+> **注意**：需要 Python 3.10+。首次运行会下载约 1GB 的模型。
 
 <details>
 <summary>📦 其他安装方式</summary>
@@ -131,16 +143,50 @@ OLLAMA_MODEL = "qwen2.5:7b"
 # LLM 后端
 LLM_BACKEND = "claude"  # 或 "ollama"
 
-# 语音设置
-TTS_VOICE = "zh-CN-XiaoyiNeural"  # 中文女声
-TTS_RATE = "+0%"  # 语速：-50% 到 +100%
+# TTS 后端
+TTS_BACKEND = "edge"  # "edge"（在线，高质量）或 "piper"（离线，快速）
 
 # 语音检测灵敏度
 VAD_THRESHOLD = 0.5  # 越低越敏感
 ```
 
+### TTS 选项
+
+| 后端 | 质量 | 速度 | 离线 | 适用场景 |
+|------|------|------|------|----------|
+| Edge TTS | 高 | 中等 | ❌ | 日常使用 |
+| Piper | 中等 | 快 | ✅ | 离线 / 树莓派 |
+
 <details>
-<summary>🗣️ 推荐中文语音</summary>
+<summary>🔊 使用 Piper TTS（离线）</summary>
+
+**1. 安装 piper-tts：**
+```bash
+pip install piper-tts
+```
+
+**2. 下载语音模型：**
+```bash
+# 创建模型目录
+mkdir -p ~/.local/share/piper-voices
+
+# 下载中文语音（从 Hugging Face）
+# https://huggingface.co/rhasspy/piper-voices/tree/main/zh/zh_CN/huayan/medium
+# 下载：zh_CN-huayan-medium.onnx 和 zh_CN-huayan-medium.onnx.json
+
+# 下载英文语音
+# https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/amy/medium
+# 下载：en_US-amy-medium.onnx 和 en_US-amy-medium.onnx.json
+```
+
+**3. 配置：**
+```python
+TTS_BACKEND = "piper"
+```
+</details>
+
+<details>
+<summary>🗣️ Edge TTS 推荐语音</summary>
 
 | 语音 | 说明 |
 |------|------|
@@ -149,7 +195,7 @@ VAD_THRESHOLD = 0.5  # 越低越敏感
 | `zh-CN-YunxiNeural` | 云希（男声） |
 | `zh-CN-YunjianNeural` | 云健（男声，播音风格） |
 
-查看所有语音：`python tts_test.py --list`
+查看所有语音：`edge-tts --list-voices`
 </details>
 
 ## 技术栈
@@ -158,7 +204,7 @@ VAD_THRESHOLD = 0.5  # 越低越敏感
 |------|------|
 | 语音活动检测 | [Silero VAD](https://github.com/snakers4/silero-vad) |
 | 语音识别 | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) |
-| 语音合成 | [Edge TTS](https://github.com/rany2/edge-tts) |
+| 语音合成 | [Edge TTS](https://github.com/rany2/edge-tts)（在线）/ [Piper](https://github.com/rhasspy/piper)（离线） |
 | 音频处理 | sounddevice, scipy, numpy |
 
 ## 路线图

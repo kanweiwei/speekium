@@ -41,6 +41,9 @@ dependencies = [
     "llvmlite>=0.42.0",  # Override old version for Python 3.12 support
 ]
 
+[project.optional-dependencies]
+piper = ["piper-tts"]  # Offline TTS support
+
 [project.urls]
 Homepage = "https://github.com/kanweiwei/speekium"
 Repository = "https://github.com/kanweiwei/speekium"

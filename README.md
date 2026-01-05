@@ -39,6 +39,18 @@
 
 ## Quick Start
 
+**1. Install uv (Python package manager):**
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**2. Run Speekium:**
+
 ```bash
 git clone https://github.com/kanweiwei/speekium.git
 cd speekium
@@ -48,7 +60,7 @@ uv run python speekium.py
 
 That's it. Start talking.
 
-> **Note**: Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv). First run downloads ~1GB of models.
+> **Note**: Requires Python 3.10+. First run downloads ~1GB of models.
 
 <details>
 <summary>📦 Alternative installation methods</summary>
@@ -131,16 +143,50 @@ Edit `speekium.py`:
 # LLM Backend
 LLM_BACKEND = "claude"  # or "ollama"
 
-# Voice settings
-TTS_VOICE = "zh-CN-XiaoyiNeural"  # Chinese female
-TTS_RATE = "+0%"  # Speed: -50% to +100%
+# TTS Backend
+TTS_BACKEND = "edge"  # "edge" (online, high quality) or "piper" (offline, fast)
 
 # Voice detection sensitivity
 VAD_THRESHOLD = 0.5  # Lower = more sensitive
 ```
 
+### TTS Options
+
+| Backend | Quality | Speed | Offline | Best For |
+|---------|---------|-------|---------|----------|
+| Edge TTS | High | Medium | ❌ | Normal use |
+| Piper | Medium | Fast | ✅ | Offline / Raspberry Pi |
+
 <details>
-<summary>🗣️ Available Chinese voices</summary>
+<summary>🔊 Using Piper TTS (Offline)</summary>
+
+**1. Install piper-tts:**
+```bash
+pip install piper-tts
+```
+
+**2. Download voice models:**
+```bash
+# Create model directory
+mkdir -p ~/.local/share/piper-voices
+
+# Download Chinese voice (from Hugging Face)
+# https://huggingface.co/rhasspy/piper-voices/tree/main/zh/zh_CN/huayan/medium
+# Download: zh_CN-huayan-medium.onnx and zh_CN-huayan-medium.onnx.json
+
+# Download English voice
+# https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/amy/medium
+# Download: en_US-amy-medium.onnx and en_US-amy-medium.onnx.json
+```
+
+**3. Configure:**
+```python
+TTS_BACKEND = "piper"
+```
+</details>
+
+<details>
+<summary>🗣️ Available Edge TTS voices</summary>
 
 | Voice | Description |
 |-------|-------------|
@@ -149,7 +195,7 @@ VAD_THRESHOLD = 0.5  # Lower = more sensitive
 | `zh-CN-YunxiNeural` | Yunxi (Male) |
 | `zh-CN-YunjianNeural` | Yunjian (Male, announcer) |
 
-List all voices: `python tts_test.py --list`
+List all voices: `edge-tts --list-voices`
 </details>
 
 ## Tech Stack
@@ -158,7 +204,7 @@ List all voices: `python tts_test.py --list`
 |-----------|------------|
 | Voice Detection | [Silero VAD](https://github.com/snakers4/silero-vad) |
 | Speech Recognition | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) |
-| Text-to-Speech | [Edge TTS](https://github.com/rany2/edge-tts) |
+| Text-to-Speech | [Edge TTS](https://github.com/rany2/edge-tts) (online) / [Piper](https://github.com/rhasspy/piper) (offline) |
 | Audio | sounddevice, scipy, numpy |
 
 ## Roadmap

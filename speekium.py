@@ -13,6 +13,7 @@ import os
 import re
 import platform
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write as write_wav
@@ -35,18 +36,30 @@ CLEAR_HISTORY_KEYWORDS = ["clear history", "start over", "forget everything", "�
 # ===== Basic Config =====
 SAMPLE_RATE = 16000
 ASR_MODEL = "iic/SenseVoiceSmall"  # SenseVoice model
-TTS_RATE = "+0%"  # Speed: negative=slower, positive=faster, 0%=normal
 USE_STREAMING = True  # Stream output (speak while generating)
 
-# ===== TTS Voices (auto-selected based on detected language) =====
+# ===== TTS Backend =====
+TTS_BACKEND = "edge"  # Options: "edge" (online, high quality), "piper" (offline, fast)
+TTS_RATE = "+0%"  # Speed for Edge TTS: negative=slower, positive=faster, 0%=normal
+
+# ===== Edge TTS Voices (online, auto-selected based on detected language) =====
 DEFAULT_LANGUAGE = "zh"
-TTS_VOICES = {
+EDGE_TTS_VOICES = {
     "zh": "zh-CN-XiaoyiNeural",    # Chinese female
     "en": "en-US-JennyNeural",     # English female
     "ja": "ja-JP-NanamiNeural",    # Japanese female
     "ko": "ko-KR-SunHiNeural",     # Korean female
     "yue": "zh-HK-HiuGaaiNeural",  # Cantonese female
 }
+
+# ===== Piper TTS Config (offline) =====
+# Models are stored in ~/.local/share/piper-voices/
+# Download from: https://huggingface.co/rhasspy/piper-voices/tree/main
+PIPER_VOICES = {
+    "zh": "zh_CN-huayan-medium",   # Chinese female
+    "en": "en_US-amy-medium",      # English female
+}
+PIPER_DATA_DIR = os.path.expanduser("~/.local/share/piper-voices")
 
 # ===== VAD Config =====
 VAD_THRESHOLD = 0.5  # Voice detection threshold
@@ -55,6 +68,7 @@ VAD_PRE_BUFFER = 0.3  # Pre-buffer duration (seconds) to capture speech start
 MIN_SPEECH_DURATION = 0.2  # Minimum speech duration (seconds)
 SILENCE_AFTER_SPEECH = 0.8  # Silence duration to stop recording (seconds)
 MAX_RECORDING_DURATION = 30  # Maximum recording duration (seconds)
+INTERRUPT_CHECK_DURATION = 1.5  # Duration to check for speech continuation after pause (seconds)
 
 # ===== System Prompt (optimized for voice output) =====
 SYSTEM_PROMPT = """You are Speekium, an intelligent voice assistant. Follow these rules:
@@ -73,6 +87,9 @@ class VoiceAssistant:
         self.asr_model = None
         self.vad_model = None
         self.llm_backend = None
+        self.piper_voices = {}  # Cache for loaded Piper voices
+        self.was_interrupted = False  # Track if last playback was interrupted
+        self.interrupt_audio_buffer = []  # Buffer to store audio captured during interrupt
 
     def load_asr(self):
         if self.asr_model is None:
@@ -114,8 +131,40 @@ class VoiceAssistant:
             print(f"✅ LLM backend initialized", flush=True)
         return self.llm_backend
 
-    def record_with_vad(self):
-        """Use VAD to detect speech, auto start and stop recording"""
+    def load_piper_voice(self, language):
+        """Load Piper voice model for specified language."""
+        if language in self.piper_voices:
+            return self.piper_voices[language]
+
+        voice_name = PIPER_VOICES.get(language, PIPER_VOICES.get("en"))
+        model_path = os.path.join(PIPER_DATA_DIR, f"{voice_name}.onnx")
+
+        if not os.path.exists(model_path):
+            print(f"⚠️ Piper model not found: {model_path}", flush=True)
+            print(f"   Download from: https://huggingface.co/rhasspy/piper-voices/tree/main", flush=True)
+            return None
+
+        try:
+            from piper.voice import PiperVoice
+            print(f"🔄 Loading Piper voice: {voice_name}...", flush=True)
+            voice = PiperVoice.load(model_path)
+            self.piper_voices[language] = voice
+            print(f"✅ Piper voice loaded", flush=True)
+            return voice
+        except ImportError:
+            print("⚠️ piper-tts not installed. Run: pip install piper-tts", flush=True)
+            return None
+        except Exception as e:
+            print(f"⚠️ Failed to load Piper voice: {e}", flush=True)
+            return None
+
+    def record_with_vad(self, speech_already_started=False):
+        """Use VAD to detect speech, auto start and stop recording.
+
+        Args:
+            speech_already_started: If True, skip waiting for speech to begin and start recording immediately.
+                                   Used when user interrupts TTS (barge-in).
+        """
         model = self.load_vad()
         model.reset_states()  # Reset VAD state
 
@@ -123,17 +172,27 @@ class VoiceAssistant:
         history_count = 0
         if self.llm_backend and hasattr(self.llm_backend, 'history'):
             history_count = len(self.llm_backend.history) // 2
-        if history_count > 0:
+
+        if speech_already_started:
+            print("\n🎤 Recording (interrupted)...", flush=True)
+        elif history_count > 0:
             print(f"\n👂 Listening... ({history_count} turns in memory)", flush=True)
         else:
             print("\n👂 Listening...", flush=True)
 
         chunk_size = 512  # Silero VAD requires 512 samples @ 16kHz
         frames = []
-        is_speaking = False
+
+        # Use captured audio from interrupt if available
+        if speech_already_started and self.interrupt_audio_buffer:
+            frames = self.interrupt_audio_buffer.copy()
+            self.interrupt_audio_buffer = []  # Clear the buffer
+            print(f"📦 Using {len(frames)} buffered audio chunks", flush=True)
+
+        is_speaking = speech_already_started  # Start in speaking mode if interrupted
         silence_chunks = 0
-        speech_chunks = 0
-        consecutive_speech = 0  # Consecutive speech detections
+        speech_chunks = len(frames)  # Count buffered frames as speech
+        consecutive_speech = VAD_CONSECUTIVE_THRESHOLD if speech_already_started else 0
         max_silence_chunks = int(SILENCE_AFTER_SPEECH * SAMPLE_RATE / chunk_size)
         min_speech_chunks = int(MIN_SPEECH_DURATION * SAMPLE_RATE / chunk_size)
         max_chunks = int(MAX_RECORDING_DURATION * SAMPLE_RATE / chunk_size)
@@ -240,9 +299,119 @@ class VoiceAssistant:
         # Clean all tags from text
         text = re.sub(r'<\|[^|]+\|>', '', raw_text).strip()
 
-        voice = TTS_VOICES.get(language, TTS_VOICES[DEFAULT_LANGUAGE])
         print(f"📝 [{language}] {text}", flush=True)
         return text, language
+
+    def detect_speech_start(self, timeout=1.5):
+        """Check if speech starts within timeout. Returns True if speech detected."""
+        model = self.load_vad()
+        model.reset_states()
+
+        chunk_size = 512
+        speech_detected = False
+        consecutive_speech = 0
+        check_done = False
+
+        def callback(indata, frame_count, time_info, status):
+            nonlocal speech_detected, consecutive_speech, check_done
+
+            if check_done:
+                return
+
+            try:
+                audio_chunk = indata[:, 0].copy()
+                audio_tensor = torch.from_numpy(audio_chunk).float()
+                speech_prob = model(audio_tensor, SAMPLE_RATE).item()
+
+                if speech_prob > VAD_THRESHOLD:
+                    consecutive_speech += 1
+                    if consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
+                        speech_detected = True
+                        check_done = True
+                else:
+                    consecutive_speech = 0
+            except Exception:
+                pass
+
+        timeout_ms = int(timeout * 1000)
+        with sd.InputStream(
+            samplerate=SAMPLE_RATE, channels=1, dtype=np.float32,
+            blocksize=chunk_size, callback=callback
+        ):
+            elapsed = 0
+            while not check_done and elapsed < timeout_ms:
+                sd.sleep(50)
+                elapsed += 50
+
+        return speech_detected
+
+    async def transcribe_async(self, audio):
+        """Async wrapper for transcribe using thread executor."""
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as executor:
+            result = await loop.run_in_executor(executor, self.transcribe, audio)
+        return result
+
+    async def record_with_interruption(self):
+        """Record with support for interruption - if user continues speaking, keep recording."""
+        all_segments = []
+
+        # Check if we're coming from a barge-in interrupt
+        speech_already_started = self.was_interrupted
+        self.was_interrupted = False  # Reset the flag
+
+        while True:
+            # Record a segment
+            segment = self.record_with_vad(speech_already_started=speech_already_started)
+            speech_already_started = False  # Only applies to first segment
+
+            if segment is None:
+                # No speech detected
+                if not all_segments:
+                    return None, None
+                break
+
+            all_segments.append(segment)
+
+            # Start ASR in background
+            combined_audio = np.concatenate(all_segments)
+            asr_task = asyncio.create_task(self.transcribe_async(combined_audio))
+
+            # Check if user wants to continue speaking
+            print("⏳ Waiting for more input...", flush=True)
+
+            # Run speech detection in executor (it's blocking)
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as executor:
+                has_more_speech = await loop.run_in_executor(
+                    executor,
+                    self.detect_speech_start,
+                    INTERRUPT_CHECK_DURATION
+                )
+
+            if has_more_speech:
+                # User is continuing, cancel ASR and keep recording
+                asr_task.cancel()
+                try:
+                    await asr_task
+                except asyncio.CancelledError:
+                    pass
+                print("🔄 Continuing recording...", flush=True)
+                continue
+            else:
+                # No more speech, wait for ASR result
+                try:
+                    text, language = await asr_task
+                    return text, language
+                except asyncio.CancelledError:
+                    break
+
+        # Final transcription if we have segments but exited loop
+        if all_segments:
+            combined_audio = np.concatenate(all_segments)
+            return self.transcribe(combined_audio)
+
+        return None, None
 
     def detect_text_language(self, text):
         """Detect language from text content using character analysis."""
@@ -288,18 +457,59 @@ class VoiceAssistant:
 
     async def generate_audio(self, text, language=None):
         """Generate TTS audio file, returns file path."""
+        # Auto-detect language from text content for better TTS matching
+        detected_lang = self.detect_text_language(text)
+
+        if TTS_BACKEND == "piper":
+            return await self._generate_audio_piper(text, detected_lang)
+        else:
+            return await self._generate_audio_edge(text, detected_lang)
+
+    async def _generate_audio_edge(self, text, language):
+        """Generate audio using Edge TTS (online)."""
         try:
-            # Auto-detect language from text content for better TTS matching
-            detected_lang = self.detect_text_language(text)
-            voice = TTS_VOICES.get(detected_lang, TTS_VOICES[DEFAULT_LANGUAGE])
+            voice = EDGE_TTS_VOICES.get(language, EDGE_TTS_VOICES[DEFAULT_LANGUAGE])
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_file = f.name
                 communicate = edge_tts.Communicate(text, voice, rate=TTS_RATE)
                 await communicate.save(tmp_file)
                 return tmp_file
         except Exception as e:
-            print(f"⚠️ TTS error: {e}", flush=True)
+            print(f"⚠️ Edge TTS error: {e}", flush=True)
             return None
+
+    async def _generate_audio_piper(self, text, language):
+        """Generate audio using Piper TTS (offline)."""
+        try:
+            import wave
+
+            voice = self.load_piper_voice(language)
+            if voice is None:
+                # Fallback to Edge TTS if Piper not available
+                print("⚠️ Falling back to Edge TTS", flush=True)
+                return await self._generate_audio_edge(text, language)
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                tmp_file = f.name
+
+            # Run Piper synthesis in executor (it's blocking)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                self._piper_synthesize,
+                voice, text, tmp_file
+            )
+            return tmp_file
+        except Exception as e:
+            print(f"⚠️ Piper TTS error: {e}", flush=True)
+            # Fallback to Edge TTS
+            return await self._generate_audio_edge(text, language)
+
+    def _piper_synthesize(self, voice, text, output_path):
+        """Synchronous Piper synthesis."""
+        import wave
+        with wave.open(output_path, "w") as wav_file:
+            voice.synthesize(text, wav_file)
 
     async def play_audio(self, tmp_file, delete=True):
         """Play audio file (async, cross-platform), optionally delete after."""
@@ -322,6 +532,96 @@ class VoiceAssistant:
                 if delete:
                     os.remove(tmp_file)
 
+    async def play_audio_with_barge_in(self, tmp_file, delete=True):
+        """Play audio with barge-in support - stops if user starts speaking.
+        Returns True if interrupted by user speech, False otherwise.
+        When interrupted, captures audio to self.interrupt_audio_buffer."""
+        if not tmp_file or not os.path.exists(tmp_file):
+            return False
+
+        system = platform.system()
+        if system == "Darwin":
+            cmd = ["afplay", tmp_file]
+        elif system == "Linux":
+            cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", tmp_file]
+        else:
+            # Windows or unsupported - fall back to regular playback
+            await self.play_audio(tmp_file, delete)
+            return False
+
+        interrupted = False
+        process = None
+        audio_buffer = []  # Buffer to capture audio when speech detected
+        capturing = False  # Start capturing once speech is detected
+
+        try:
+            process = await asyncio.create_subprocess_exec(*cmd)
+
+            # Monitor for speech while audio is playing
+            model = self.load_vad()
+            model.reset_states()
+            chunk_size = 512
+            consecutive_speech = 0
+            pre_buffer = deque(maxlen=int(VAD_PRE_BUFFER * SAMPLE_RATE / chunk_size))
+
+            def vad_callback(indata, frame_count, time_info, status):
+                nonlocal consecutive_speech, interrupted, capturing
+                if process.returncode is not None:
+                    return
+
+                try:
+                    audio_chunk = indata[:, 0].copy()
+
+                    # Always keep a pre-buffer
+                    if not capturing:
+                        pre_buffer.append(audio_chunk)
+
+                    audio_tensor = torch.from_numpy(audio_chunk).float()
+                    speech_prob = model(audio_tensor, SAMPLE_RATE).item()
+
+                    if speech_prob > VAD_THRESHOLD:
+                        consecutive_speech += 1
+                        if consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
+                            if not interrupted:
+                                interrupted = True
+                                capturing = True
+                                # Add pre-buffer to capture buffer
+                                audio_buffer.extend(pre_buffer)
+                            # Continue capturing audio after interrupt
+                            audio_buffer.append(audio_chunk)
+                    else:
+                        consecutive_speech = 0
+                        if capturing:
+                            # Still capture during brief pauses
+                            audio_buffer.append(audio_chunk)
+                except Exception:
+                    pass
+
+            with sd.InputStream(
+                samplerate=SAMPLE_RATE, channels=1, dtype=np.float32,
+                blocksize=chunk_size, callback=vad_callback
+            ):
+                while process.returncode is None and not interrupted:
+                    await asyncio.sleep(0.05)
+
+                if interrupted:
+                    # Keep capturing for a short time to get more of the utterance
+                    await asyncio.sleep(0.3)
+
+                    if process.returncode is None:
+                        process.terminate()
+                        await process.wait()
+
+                    # Save captured audio for next recording
+                    self.interrupt_audio_buffer = audio_buffer.copy()
+                    print("🛑 Interrupted by user", flush=True)
+
+        finally:
+            if delete and os.path.exists(tmp_file):
+                os.remove(tmp_file)
+
+        return interrupted
+
     async def speak(self, text, language=None):
         """TTS speak a single sentence."""
         tmp_file = await self.generate_audio(text, language)
@@ -329,12 +629,11 @@ class VoiceAssistant:
 
     async def chat_once(self):
         """Single conversation turn"""
-        audio = self.record_with_vad()
+        text, language = await self.record_with_interruption()
 
-        if audio is None:
+        if text is None:
             return False  # No valid speech detected
 
-        text, language = self.transcribe(audio)
         if not text:
             print("⚠️ No speech recognized", flush=True)
             return True
@@ -358,30 +657,66 @@ class VoiceAssistant:
                 return True
 
         if USE_STREAMING:
-            # Streaming output
+            # Streaming output with barge-in support
             print("🔊 Streaming...", flush=True)
             audio_queue = asyncio.Queue()
+            interrupted = False
+            generation_done = False
 
             async def generate_worker():
-                async for sentence in backend.chat_stream(text):
-                    if sentence:
-                        audio_file = await self.generate_audio(sentence, language)
-                        if audio_file:
-                            await audio_queue.put(audio_file)
-                await audio_queue.put(None)
+                nonlocal generation_done
+                try:
+                    async for sentence in backend.chat_stream(text):
+                        if interrupted:
+                            break
+                        if sentence:
+                            audio_file = await self.generate_audio(sentence, language)
+                            if audio_file:
+                                await audio_queue.put(audio_file)
+                finally:
+                    generation_done = True
+                    await audio_queue.put(None)
 
             async def play_worker():
+                nonlocal interrupted
                 while True:
                     audio_file = await audio_queue.get()
                     if audio_file is None:
                         break
-                    await self.play_audio(audio_file)
+                    if interrupted:
+                        # Clean up remaining audio files
+                        if os.path.exists(audio_file):
+                            os.remove(audio_file)
+                        continue
+                    # Play with barge-in detection
+                    was_interrupted = await self.play_audio_with_barge_in(audio_file)
+                    if was_interrupted:
+                        interrupted = True
+                        # Drain remaining queue
+                        while not audio_queue.empty():
+                            try:
+                                remaining = audio_queue.get_nowait()
+                                if remaining and os.path.exists(remaining):
+                                    os.remove(remaining)
+                            except asyncio.QueueEmpty:
+                                break
+                        break
 
             await asyncio.gather(generate_worker(), play_worker())
+
+            if interrupted:
+                # User interrupted, set flag for immediate recording
+                self.was_interrupted = True
+                return True
         else:
-            # Non-streaming output
+            # Non-streaming output with barge-in
             response = backend.chat(text)
-            await self.speak(response, language)
+            tmp_file = await self.generate_audio(response, language)
+            if tmp_file:
+                was_interrupted = await self.play_audio_with_barge_in(tmp_file)
+                if was_interrupted:
+                    self.was_interrupted = True
+                    return True
 
         return True
 
@@ -389,10 +724,16 @@ class VoiceAssistant:
         print("=" * 50, flush=True)
         print("🎙️  Speekium started (continuous conversation mode)", flush=True)
         print("   VAD auto voice detection enabled", flush=True)
-        backend_info = LLM_BACKEND
+        llm_info = LLM_BACKEND
         if LLM_BACKEND == "ollama":
-            backend_info = f"ollama ({OLLAMA_MODEL})"
-        print(f"   LLM backend: {backend_info}", flush=True)
+            llm_info = f"ollama ({OLLAMA_MODEL})"
+        print(f"   LLM backend: {llm_info}", flush=True)
+        tts_info = TTS_BACKEND
+        if TTS_BACKEND == "piper":
+            tts_info = "piper (offline)"
+        else:
+            tts_info = "edge (online)"
+        print(f"   TTS backend: {tts_info}", flush=True)
         if USE_STREAMING:
             print("   Mode: streaming (speak while generating)", flush=True)
         print(f"   Memory: last {MAX_HISTORY} turns", flush=True)
@@ -410,8 +751,9 @@ class VoiceAssistant:
         try:
             while True:
                 await self.chat_once()
-                # Brief delay before next round
-                await asyncio.sleep(0.5)
+                # Brief delay before next round (skip if interrupted for faster response)
+                if not self.was_interrupted:
+                    await asyncio.sleep(0.5)
 
         except KeyboardInterrupt:
             print("\n👋 Goodbye!", flush=True)
