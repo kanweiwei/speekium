@@ -5,13 +5,13 @@
 <h1 align="center">Speekium</h1>
 
 <p align="center">
-  <strong>A smart voice assistant with pluggable LLM backends</strong>
+  <strong>Talk to AI with your voice. Locally. Privately. Open Source.</strong>
 </p>
 
 <p align="center">
   <a href="./README_CN.md">中文文档</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#usage">Usage</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#why-speekium">Why Speekium</a> •
   <a href="#roadmap">Roadmap</a>
 </p>
 
@@ -24,64 +24,44 @@
 
 ---
 
-## ✨ Features
+## Why Speekium?
 
-- 🎙️ **Voice Activity Detection** — Auto-detects speech start/end using Silero VAD, no button press needed
-- 🗣️ **High-Accuracy ASR** — Powered by Alibaba's SenseVoice, supports Chinese, English, and more
-- ⚡ **Streaming TTS** — Speaks while generating for faster, more natural responses
-- 🔌 **Pluggable LLM** — Swap backends easily (Claude, Ollama, OpenAI...)
-- 🖥️ **Cross-Platform** — Works on macOS, Linux, and Windows
+| Feature | Speekium | Siri/Alexa | ChatGPT Voice |
+|---------|----------|------------|---------------|
+| Runs locally | ✅ | ❌ | ❌ |
+| Your data stays private | ✅ | ❌ | ❌ |
+| Choose your own LLM | ✅ | ❌ | ❌ |
+| Open source | ✅ | ❌ | ❌ |
+| No wake word needed | ✅ | ❌ | ✅ |
+| Works offline (with Ollama) | ✅ | ❌ | ❌ |
 
-## 🔄 How It Works
+**Speekium** is a voice assistant that respects your privacy. All speech processing happens on your machine. You choose which LLM to use — Claude, Ollama, or bring your own.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│   🎤 Microphone ──▶ 🔍 VAD ──▶ 📝 ASR ──▶ 🤖 LLM           │
-│                      (Silero)    (SenseVoice)  (Pluggable)  │
-│                                                    │        │
-│                                                    ▼        │
-│   🎧 Speaker ◀── 🔊 Player ◀── 🗣️ TTS ◀─────────┘         │
-│                                 (Edge TTS)                  │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 📦 Installation
-
-### Prerequisites
-
-- Python 3.10+
-- [Claude Code CLI](https://github.com/anthropics/claude-code) (or other LLM backend)
-- Microphone
-
-### Quick Start
+## Quick Start
 
 ```bash
-# Clone
 git clone https://github.com/kanweiwei/speekium.git
 cd speekium
-
-# Setup with uv (recommended)
 uv sync
-
-# Run
 uv run python speekium.py
 ```
 
-<details>
-<summary>Alternative: pip install</summary>
+That's it. Start talking.
 
+> **Note**: Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv). First run downloads ~1GB of models.
+
+<details>
+<summary>📦 Alternative installation methods</summary>
+
+**Using pip:**
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .
 python speekium.py
 ```
-</details>
 
-### Linux Dependencies
-
+**Linux dependencies:**
 ```bash
 # Ubuntu/Debian
 sudo apt install portaudio19-dev ffmpeg
@@ -89,95 +69,115 @@ sudo apt install portaudio19-dev ffmpeg
 # Fedora
 sudo dnf install portaudio-devel ffmpeg
 ```
+</details>
 
-## 🚀 Usage
+## How It Works
+
+```
+🎤 You speak
+    ↓
+🔍 VAD detects voice (Silero)
+    ↓
+📝 Speech → Text (SenseVoice)
+    ↓
+🤖 LLM generates response (Claude/Ollama/...)
+    ↓
+🔊 Text → Speech (Edge TTS)
+    ↓
+🎧 You hear the response
+```
+
+**Key features:**
+- **Auto voice detection** — No button press, no wake word
+- **Streaming response** — Starts speaking while still generating
+- **Pluggable LLM** — Use Claude API, local Ollama, or add your own
+- **Multi-language** — Chinese, English, and more
+
+## LLM Backends
+
+### Claude (Default)
+
+Requires [Claude Code CLI](https://github.com/anthropics/claude-code):
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### Ollama (Local & Private)
+
+Run AI completely offline:
 
 ```bash
-python speekium.py
+# Install Ollama
+brew install ollama  # macOS
+ollama pull qwen2.5:7b
+
+# Configure Speekium
+# Edit speekium.py:
+LLM_BACKEND = "ollama"
+OLLAMA_MODEL = "qwen2.5:7b"
 ```
-
-Just speak into your microphone. The assistant will:
-1. Detect when you start speaking
-2. Recognize your speech
-3. Get a response from the LLM
-4. Speak the response back to you
-
-## ⚙️ Configuration
-
-Edit the top of `speekium.py`:
-
-```python
-# ASR
-ASR_MODEL = "iic/SenseVoiceSmall"
-
-# TTS
-TTS_VOICE = "zh-CN-XiaoyiNeural"  # or: en-US-JennyNeural, etc.
-TTS_RATE = "-15%"
-
-# Streaming (speak while generating)
-USE_STREAMING = True
-
-# VAD
-VAD_THRESHOLD = 0.5
-SILENCE_AFTER_SPEECH = 1.5  # seconds
-MAX_RECORDING_DURATION = 30  # seconds
-```
-
-List available TTS voices:
-```bash
-python tts_test.py --list
-```
-
-## 🔌 Supported LLM Backends
 
 | Backend | Status |
 |---------|--------|
-| [Claude Code CLI](https://github.com/anthropics/claude-code) | ✅ Supported |
-| [Ollama](https://ollama.ai) | ✅ Supported |
+| Claude Code CLI | ✅ Supported |
+| Ollama | ✅ Supported |
 | OpenAI API | 🚧 Planned |
 
-### Using Ollama
+## Configuration
 
-1. Install and run [Ollama](https://ollama.ai)
-2. Pull a model: `ollama pull qwen2.5:7b`
-3. Edit `speekium.py`:
+Edit `speekium.py`:
 
 ```python
-# Switch to Ollama backend
-LLM_BACKEND = "ollama"
+# LLM Backend
+LLM_BACKEND = "claude"  # or "ollama"
 
-# Configure model (optional)
-OLLAMA_MODEL = "qwen2.5:7b"
-OLLAMA_BASE_URL = "http://localhost:11434"
+# Voice settings
+TTS_VOICE = "zh-CN-XiaoyiNeural"  # Chinese female
+TTS_RATE = "+0%"  # Speed: -50% to +100%
+
+# Voice detection sensitivity
+VAD_THRESHOLD = 0.5  # Lower = more sensitive
 ```
 
-## 🛠️ Tech Stack
+<details>
+<summary>🗣️ Available Chinese voices</summary>
+
+| Voice | Description |
+|-------|-------------|
+| `zh-CN-XiaoyiNeural` | Xiaoyi (Female, lively) |
+| `zh-CN-XiaoxiaoNeural` | Xiaoxiao (Female, gentle) |
+| `zh-CN-YunxiNeural` | Yunxi (Male) |
+| `zh-CN-YunjianNeural` | Yunjian (Male, announcer) |
+
+List all voices: `python tts_test.py --list`
+</details>
+
+## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
-| Voice Activity Detection | [Silero VAD](https://github.com/snakers4/silero-vad) |
+| Voice Detection | [Silero VAD](https://github.com/snakers4/silero-vad) |
 | Speech Recognition | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) |
 | Text-to-Speech | [Edge TTS](https://github.com/rany2/edge-tts) |
-| Audio Processing | sounddevice, scipy, numpy |
+| Audio | sounddevice, scipy, numpy |
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [x] VAD-based voice detection
-- [x] SenseVoice ASR integration
-- [x] Streaming TTS output
-- [x] Claude Code CLI backend
-- [x] Ollama backend support
+- [x] SenseVoice ASR
+- [x] Streaming TTS
+- [x] Claude backend
+- [x] Ollama backend
+- [x] Conversation memory
+- [x] Auto language detection
 - [ ] OpenAI API backend
 - [ ] Wake word detection
-- [ ] Multi-turn conversation context
 - [ ] Web UI
 
-## ❓ Troubleshooting
+## Troubleshooting
 
 <details>
-<summary><b>llvmlite build fails during installation</b></summary>
-
-funasr depends on llvmlite which requires LLVM. Solutions:
+<summary><b>llvmlite build fails</b></summary>
 
 ```bash
 # macOS
@@ -186,42 +186,40 @@ brew install llvm
 # Ubuntu/Debian
 sudo apt install llvm-dev
 
-# Or use conda (recommended for complex ML deps)
-conda install -c conda-forge funasr
+# Or use Python 3.10
+uv sync --python 3.10
 ```
 </details>
 
 <details>
-<summary><b>No audio input detected</b></summary>
+<summary><b>No audio input</b></summary>
 
-- Check microphone permissions in System Settings
-- Verify microphone works in other apps
-- Try adjusting `VAD_THRESHOLD` (lower = more sensitive)
+- Check microphone permissions
+- Lower `VAD_THRESHOLD` (e.g., 0.3)
 </details>
 
 <details>
 <summary><b>Claude CLI not found</b></summary>
 
-Install Claude Code CLI first:
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 </details>
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Feel free to:
+Contributions welcome!
 
-- 🐛 Report bugs
-- 💡 Suggest features
+- 🐛 [Report bugs](https://github.com/kanweiwei/speekium/issues)
+- 💡 [Suggest features](https://github.com/kanweiwei/speekium/issues)
 - 🔧 Submit pull requests
 
-## 📄 License
+## License
 
 [MIT](./LICENSE) © 2025 [kanweiwei](https://github.com/kanweiwei)
 
 ---
 
 <p align="center">
-  If you find this project helpful, please consider giving it a ⭐
+  <strong>If Speekium helps you, give it a ⭐</strong>
 </p>

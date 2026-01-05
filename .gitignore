@@ -23,6 +23,7 @@ build/
 .claude/
 .env
 *.local.*
+.notes/
 
 # OS
 .DS_Store

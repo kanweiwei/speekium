@@ -5,13 +5,13 @@
 <h1 align="center">Speekium</h1>
 
 <p align="center">
-  <strong>支持多种 LLM 后端的智能语音助手</strong>
+  <strong>用语音和 AI 对话。本地运行。隐私保护。开源免费。</strong>
 </p>
 
 <p align="center">
   <a href="./README.md">English</a> •
-  <a href="#安装">安装</a> •
-  <a href="#使用">使用</a> •
+  <a href="#快速开始">快速开始</a> •
+  <a href="#为什么选择-speekium">为什么选择</a> •
   <a href="#路线图">路线图</a>
 </p>
 
@@ -24,64 +24,44 @@
 
 ---
 
-## ✨ 特性
+## 为什么选择 Speekium？
 
-- 🎙️ **语音活动检测** — 使用 Silero VAD 自动检测语音起止，无需按键
-- 🗣️ **高精度语音识别** — 基于阿里 SenseVoice，支持中文、英文等多语言
-- ⚡ **流式语音合成** — 边生成边朗读，响应更快更自然
-- 🔌 **可插拔 LLM** — 轻松切换后端（Claude、Ollama、OpenAI...）
-- 🖥️ **跨平台** — 支持 macOS、Linux、Windows
+| 特性 | Speekium | Siri/小爱 | ChatGPT 语音 |
+|------|----------|-----------|--------------|
+| 本地运行 | ✅ | ❌ | ❌ |
+| 数据隐私保护 | ✅ | ❌ | ❌ |
+| 自选 LLM 模型 | ✅ | ❌ | ❌ |
+| 开源免费 | ✅ | ❌ | ❌ |
+| 无需唤醒词 | ✅ | ❌ | ✅ |
+| 离线使用 (Ollama) | ✅ | ❌ | ❌ |
 
-## 🔄 工作原理
+**Speekium** 是一个尊重隐私的语音助手。所有语音处理都在本地完成。你可以自由选择使用 Claude、Ollama 或其他 LLM。
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│   🎤 麦克风 ──▶ 🔍 VAD ──▶ 📝 ASR ──▶ 🤖 LLM               │
-│                 (Silero)   (SenseVoice)  (可插拔)           │
-│                                            │                │
-│                                            ▼                │
-│   🎧 扬声器 ◀── 🔊 播放器 ◀── 🗣️ TTS ◀──┘                 │
-│                              (Edge TTS)                     │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 📦 安装
-
-### 前置要求
-
-- Python 3.10+
-- [Claude Code CLI](https://github.com/anthropics/claude-code)（或其他 LLM 后端）
-- 麦克风
-
-### 快速开始
+## 快速开始
 
 ```bash
-# 克隆
 git clone https://github.com/kanweiwei/speekium.git
 cd speekium
-
-# 使用 uv 安装（推荐）
 uv sync
-
-# 运行
 uv run python speekium.py
 ```
 
-<details>
-<summary>备选：pip 安装</summary>
+就这么简单，开始说话吧。
 
+> **注意**：需要 Python 3.10+ 和 [uv](https://github.com/astral-sh/uv)。首次运行会下载约 1GB 的模型。
+
+<details>
+<summary>📦 其他安装方式</summary>
+
+**使用 pip：**
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .
 python speekium.py
 ```
-</details>
 
-### Linux 额外依赖
-
+**Linux 依赖：**
 ```bash
 # Ubuntu/Debian
 sudo apt install portaudio19-dev ffmpeg
@@ -89,46 +69,78 @@ sudo apt install portaudio19-dev ffmpeg
 # Fedora
 sudo dnf install portaudio-devel ffmpeg
 ```
+</details>
 
-## 🚀 使用
+## 工作原理
 
-```bash
-python speekium.py
+```
+🎤 你说话
+    ↓
+🔍 VAD 检测语音 (Silero)
+    ↓
+📝 语音 → 文字 (SenseVoice)
+    ↓
+🤖 LLM 生成回复 (Claude/Ollama/...)
+    ↓
+🔊 文字 → 语音 (Edge TTS)
+    ↓
+🎧 你听到回复
 ```
 
-启动后直接对着麦克风说话即可：
-1. 自动检测语音开始
-2. 识别语音内容
-3. 获取 LLM 回复
-4. 朗读回复内容
+**核心特性：**
+- **自动语音检测** — 无需按键，无需唤醒词
+- **流式响应** — 边生成边朗读，更快更自然
+- **可插拔 LLM** — Claude API、本地 Ollama，或自己扩展
+- **多语言支持** — 中文、英文等
 
-## ⚙️ 配置
+## LLM 后端
 
-编辑 `speekium.py` 顶部配置：
+### Claude（默认）
+
+需要安装 [Claude Code CLI](https://github.com/anthropics/claude-code)：
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### Ollama（本地 & 隐私）
+
+完全离线运行 AI：
+
+```bash
+# 安装 Ollama
+brew install ollama  # macOS
+ollama pull qwen2.5:7b
+
+# 配置 Speekium
+# 编辑 speekium.py：
+LLM_BACKEND = "ollama"
+OLLAMA_MODEL = "qwen2.5:7b"
+```
+
+| 后端 | 状态 |
+|------|------|
+| Claude Code CLI | ✅ 已支持 |
+| Ollama | ✅ 已支持 |
+| OpenAI API | 🚧 计划中 |
+
+## 配置
+
+编辑 `speekium.py`：
 
 ```python
-# 语音识别
-ASR_MODEL = "iic/SenseVoiceSmall"
+# LLM 后端
+LLM_BACKEND = "claude"  # 或 "ollama"
 
-# 语音合成
-TTS_VOICE = "zh-CN-XiaoyiNeural"  # 可选: zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural
-TTS_RATE = "-15%"
+# 语音设置
+TTS_VOICE = "zh-CN-XiaoyiNeural"  # 中文女声
+TTS_RATE = "+0%"  # 语速：-50% 到 +100%
 
-# 流式输出（边生成边朗读）
-USE_STREAMING = True
-
-# VAD 参数
-VAD_THRESHOLD = 0.5
-SILENCE_AFTER_SPEECH = 1.5  # 秒
-MAX_RECORDING_DURATION = 30  # 秒
+# 语音检测灵敏度
+VAD_THRESHOLD = 0.5  # 越低越敏感
 ```
 
-查看可用语音：
-```bash
-python tts_test.py --list
-```
-
-### 推荐中文语音
+<details>
+<summary>🗣️ 推荐中文语音</summary>
 
 | 语音 | 说明 |
 |------|------|
@@ -137,30 +149,10 @@ python tts_test.py --list
 | `zh-CN-YunxiNeural` | 云希（男声） |
 | `zh-CN-YunjianNeural` | 云健（男声，播音风格） |
 
-## 🔌 支持的 LLM 后端
+查看所有语音：`python tts_test.py --list`
+</details>
 
-| 后端 | 状态 |
-|------|------|
-| [Claude Code CLI](https://github.com/anthropics/claude-code) | ✅ 已支持 |
-| [Ollama](https://ollama.ai) | ✅ 已支持 |
-| OpenAI API | 🚧 计划中 |
-
-### 使用 Ollama
-
-1. 安装并运行 [Ollama](https://ollama.ai)
-2. 拉取模型: `ollama pull qwen2.5:7b`
-3. 编辑 `speekium.py`:
-
-```python
-# 切换到 Ollama 后端
-LLM_BACKEND = "ollama"
-
-# 配置模型（可选）
-OLLAMA_MODEL = "qwen2.5:7b"
-OLLAMA_BASE_URL = "http://localhost:11434"
-```
-
-## 🛠️ 技术栈
+## 技术栈
 
 | 组件 | 技术 |
 |------|------|
@@ -169,24 +161,23 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 | 语音合成 | [Edge TTS](https://github.com/rany2/edge-tts) |
 | 音频处理 | sounddevice, scipy, numpy |
 
-## 🗺️ 路线图
+## 路线图
 
 - [x] 基于 VAD 的语音检测
 - [x] SenseVoice 语音识别
 - [x] 流式 TTS 输出
-- [x] Claude Code CLI 后端
-- [x] Ollama 后端支持
+- [x] Claude 后端
+- [x] Ollama 后端
+- [x] 对话记忆
+- [x] 多语言自动识别
 - [ ] OpenAI API 后端
 - [ ] 唤醒词检测
-- [ ] 多轮对话上下文
 - [ ] Web 界面
 
-## ❓ 常见问题
+## 常见问题
 
 <details>
-<summary><b>安装时 llvmlite 编译失败</b></summary>
-
-funasr 依赖 llvmlite，需要 LLVM 环境。解决方案：
+<summary><b>llvmlite 编译失败</b></summary>
 
 ```bash
 # macOS
@@ -195,42 +186,40 @@ brew install llvm
 # Ubuntu/Debian
 sudo apt install llvm-dev
 
-# 或使用 conda（推荐，适合复杂 ML 依赖）
-conda install -c conda-forge funasr
+# 或使用 Python 3.10
+uv sync --python 3.10
 ```
 </details>
 
 <details>
-<summary><b>检测不到麦克风输入</b></summary>
+<summary><b>检测不到麦克风</b></summary>
 
-- 检查系统设置中的麦克风权限
-- 确认麦克风在其他应用中正常工作
-- 尝试降低 `VAD_THRESHOLD`（值越低越敏感）
+- 检查麦克风权限
+- 降低 `VAD_THRESHOLD`（如 0.3）
 </details>
 
 <details>
 <summary><b>找不到 Claude CLI</b></summary>
 
-先安装 Claude Code CLI：
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 </details>
 
-## 🤝 贡献
+## 贡献
 
-欢迎贡献！你可以：
+欢迎贡献！
 
-- 🐛 报告 Bug
-- 💡 提出建议
+- 🐛 [报告 Bug](https://github.com/kanweiwei/speekium/issues)
+- 💡 [提出建议](https://github.com/kanweiwei/speekium/issues)
 - 🔧 提交 PR
 
-## 📄 许可证
+## 许可证
 
 [MIT](./LICENSE) © 2025 [kanweiwei](https://github.com/kanweiwei)
 
 ---
 
 <p align="center">
-  如果觉得有帮助，请给个 ⭐ 支持一下
+  <strong>如果觉得有帮助，请给个 ⭐ 支持一下</strong>
 </p>

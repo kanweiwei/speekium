@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Speekium - 智能语音助手
-通过自然语音与大语言模型进行对话交互
-流程: [VAD检测人声] → 录音 → SenseVoice识别 → LLM流式回复 → 边生成边朗读
+Speekium - Intelligent Voice Assistant
+Natural voice conversation with large language models
+Flow: [VAD voice detection] → Record → SenseVoice ASR → LLM streaming → TTS playback
 
-支持后端: Claude Code CLI, Ollama
+Supported backends: Claude Code CLI, Ollama
 """
 
 import tempfile
@@ -21,35 +21,51 @@ import torch
 
 from backends import create_backend
 
-# ===== LLM 后端配置 =====
-LLM_BACKEND = "claude"  # 可选: "claude", "ollama"
+# ===== LLM Backend =====
+LLM_BACKEND = "claude"  # Options: "claude", "ollama"
 
-# Ollama 配置 (仅当 LLM_BACKEND="ollama" 时生效)
-OLLAMA_MODEL = "qwen2.5:1.5b"  # Ollama 模型名称 (可选: qwen2.5:7b 更智能但更慢)
-OLLAMA_BASE_URL = "http://localhost:11434"  # Ollama 服务地址
+# Ollama config (only used when LLM_BACKEND="ollama")
+OLLAMA_MODEL = "qwen2.5:1.5b"  # Ollama model (use qwen2.5:7b for smarter but slower)
+OLLAMA_BASE_URL = "http://localhost:11434"  # Ollama server URL
 
-# ===== 基础配置 =====
+# ===== Conversation Memory =====
+MAX_HISTORY = 10  # Max conversation turns to keep (each turn = user + assistant)
+CLEAR_HISTORY_KEYWORDS = ["clear history", "start over", "forget everything", "清空对话", "重新开始"]  # Keywords to trigger history clear
+
+# ===== Basic Config =====
 SAMPLE_RATE = 16000
-ASR_MODEL = "iic/SenseVoiceSmall"  # SenseVoice 模型
-TTS_VOICE = "zh-CN-XiaoyiNeural"  # 小艺
-TTS_RATE = "+0%"  # 语速 (负值减慢，正值加快，0%为正常)
-USE_STREAMING = True  # 是否使用流式输出（边生成边朗读）
+ASR_MODEL = "iic/SenseVoiceSmall"  # SenseVoice model
+TTS_RATE = "+0%"  # Speed: negative=slower, positive=faster, 0%=normal
+USE_STREAMING = True  # Stream output (speak while generating)
 
-# ===== VAD 配置 =====
-VAD_THRESHOLD = 0.5  # 语音检测阈值
-VAD_CONSECUTIVE_THRESHOLD = 3  # 连续检测到语音的次数才确认开始说话
-VAD_PRE_BUFFER = 0.3  # 预缓冲时长（秒），保留语音开始前的音频
-MIN_SPEECH_DURATION = 0.2  # 最短语音时长（秒）
-SILENCE_AFTER_SPEECH = 0.8  # 说完后静音多久停止录音（秒）
-MAX_RECORDING_DURATION = 30  # 最大录音时长（秒）
+# ===== TTS Voices (auto-selected based on detected language) =====
+DEFAULT_LANGUAGE = "zh"
+TTS_VOICES = {
+    "zh": "zh-CN-XiaoyiNeural",    # Chinese female
+    "en": "en-US-JennyNeural",     # English female
+    "ja": "ja-JP-NanamiNeural",    # Japanese female
+    "ko": "ko-KR-SunHiNeural",     # Korean female
+    "yue": "zh-HK-HiuGaaiNeural",  # Cantonese female
+}
 
-# ===== 系统提示词（优化语音输出）=====
-SYSTEM_PROMPT = """你是 Speekium 智能语音助手，请遵循以下规则：
-1. 用口语化的中文回答，适合朗读
-2. 不要使用 markdown 格式、代码块、列表符号
-3. 不要使用特殊符号如 *、#、`、- 等
-4. 数字用中文表达，如"三点五"而不是"3.5"
-5. 语气自然友好，像朋友聊天一样"""
+# ===== VAD Config =====
+VAD_THRESHOLD = 0.5  # Voice detection threshold
+VAD_CONSECUTIVE_THRESHOLD = 3  # Consecutive detections to confirm speech start
+VAD_PRE_BUFFER = 0.3  # Pre-buffer duration (seconds) to capture speech start
+MIN_SPEECH_DURATION = 0.2  # Minimum speech duration (seconds)
+SILENCE_AFTER_SPEECH = 0.8  # Silence duration to stop recording (seconds)
+MAX_RECORDING_DURATION = 30  # Maximum recording duration (seconds)
+
+# ===== System Prompt (optimized for voice output) =====
+SYSTEM_PROMPT = """You are Speekium, an intelligent voice assistant. Follow these rules:
+1. Detect the user's language and respond in the same language
+2. ONLY answer the current question - do not repeat or re-answer previous topics
+3. Keep responses concise - 1-2 sentences unless more detail is requested
+4. Use natural conversational style suitable for speech output
+5. Never use markdown formatting, code blocks, or list symbols
+6. Avoid special symbols like *, #, `, - etc.
+7. Express numbers naturally (e.g., "three point five" instead of "3.5")
+8. Be friendly, like chatting with a friend"""
 
 
 class VoiceAssistant:
@@ -60,57 +76,69 @@ class VoiceAssistant:
 
     def load_asr(self):
         if self.asr_model is None:
-            print("🔄 加载 SenseVoice 模型...", flush=True)
+            print("🔄 Loading SenseVoice model...", flush=True)
             from funasr import AutoModel
             self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
-            print("✅ SenseVoice 模型加载完成", flush=True)
+            print("✅ SenseVoice model loaded", flush=True)
         return self.asr_model
 
     def load_vad(self):
         if self.vad_model is None:
-            print("🔄 加载 VAD 模型...", flush=True)
+            print("🔄 Loading VAD model...", flush=True)
             self.vad_model, _ = torch.hub.load(
                 repo_or_dir='snakers4/silero-vad',
                 model='silero_vad',
                 force_reload=False,
                 trust_repo=True
             )
-            print("✅ VAD 模型加载完成", flush=True)
+            print("✅ VAD model loaded", flush=True)
         return self.vad_model
 
     def load_llm(self):
         if self.llm_backend is None:
-            print(f"🔄 初始化 LLM 后端 ({LLM_BACKEND})...", flush=True)
+            print(f"🔄 Initializing LLM backend ({LLM_BACKEND})...", flush=True)
             if LLM_BACKEND == "ollama":
                 self.llm_backend = create_backend(
                     LLM_BACKEND,
                     SYSTEM_PROMPT,
                     model=OLLAMA_MODEL,
-                    base_url=OLLAMA_BASE_URL
+                    base_url=OLLAMA_BASE_URL,
+                    max_history=MAX_HISTORY
                 )
             else:
-                self.llm_backend = create_backend(LLM_BACKEND, SYSTEM_PROMPT)
-            print(f"✅ LLM 后端初始化完成", flush=True)
+                self.llm_backend = create_backend(
+                    LLM_BACKEND,
+                    SYSTEM_PROMPT,
+                    max_history=MAX_HISTORY
+                )
+            print(f"✅ LLM backend initialized", flush=True)
         return self.llm_backend
 
     def record_with_vad(self):
-        """使用 VAD 检测语音，自动开始和停止录音"""
+        """Use VAD to detect speech, auto start and stop recording"""
         model = self.load_vad()
-        model.reset_states()  # 重置 VAD 状态
+        model.reset_states()  # Reset VAD state
 
-        print("\n👂 正在聆听...", flush=True)
+        # Show history count
+        history_count = 0
+        if self.llm_backend and hasattr(self.llm_backend, 'history'):
+            history_count = len(self.llm_backend.history) // 2
+        if history_count > 0:
+            print(f"\n👂 Listening... ({history_count} turns in memory)", flush=True)
+        else:
+            print("\n👂 Listening...", flush=True)
 
-        chunk_size = 512  # Silero VAD 需要 512 samples @ 16kHz
+        chunk_size = 512  # Silero VAD requires 512 samples @ 16kHz
         frames = []
         is_speaking = False
         silence_chunks = 0
         speech_chunks = 0
-        consecutive_speech = 0  # 连续检测到语音的次数
+        consecutive_speech = 0  # Consecutive speech detections
         max_silence_chunks = int(SILENCE_AFTER_SPEECH * SAMPLE_RATE / chunk_size)
         min_speech_chunks = int(MIN_SPEECH_DURATION * SAMPLE_RATE / chunk_size)
         max_chunks = int(MAX_RECORDING_DURATION * SAMPLE_RATE / chunk_size)
 
-        # 预缓冲：保留语音开始前的音频，避免丢失开头
+        # Pre-buffer: keep audio before speech starts to avoid clipping
         pre_buffer_size = int(VAD_PRE_BUFFER * SAMPLE_RATE / chunk_size)
         pre_buffer = deque(maxlen=pre_buffer_size)
 
@@ -125,53 +153,53 @@ class VoiceAssistant:
             try:
                 audio_chunk = indata[:, 0].copy()
 
-                # VAD 检测
+                # VAD detection
                 audio_tensor = torch.from_numpy(audio_chunk).float()
                 speech_prob = model(audio_tensor, SAMPLE_RATE).item()
 
                 if speech_prob > VAD_THRESHOLD:
-                    # 检测到语音
+                    # Speech detected
                     consecutive_speech += 1
 
                     if not is_speaking and consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
                         is_speaking = True
-                        # 将预缓冲的音频添加到 frames，避免丢失语音开头
+                        # Add pre-buffer to frames to avoid clipping speech start
                         frames.extend(pre_buffer)
                         pre_buffer.clear()
-                        print(f"🎤 检测到语音，开始录音...", flush=True)
+                        print(f"🎤 Speech detected, recording...", flush=True)
 
                     if is_speaking:
-                        # 只有连续检测到语音才重置静音计数
+                        # Only reset silence count on consecutive speech
                         if consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
                             silence_chunks = 0
                         speech_chunks += 1
                         frames.append(audio_chunk)
                     else:
-                        # 还未确认开始说话，继续填充预缓冲
+                        # Not confirmed speaking yet, fill pre-buffer
                         pre_buffer.append(audio_chunk)
                 else:
-                    # 静音
-                    consecutive_speech = 0  # 重置连续语音计数
+                    # Silence
+                    consecutive_speech = 0  # Reset consecutive speech count
 
                     if is_speaking:
                         frames.append(audio_chunk)
                         silence_chunks += 1
 
-                        # 说完后静音足够长，停止录音
+                        # Stop recording after enough silence
                         if silence_chunks >= max_silence_chunks and speech_chunks >= min_speech_chunks:
                             recording_done = True
-                            print("🔇 语音结束", flush=True)
+                            print("🔇 Speech ended", flush=True)
                     else:
-                        # 还未开始说话，继续填充预缓冲
+                        # Not speaking yet, fill pre-buffer
                         pre_buffer.append(audio_chunk)
 
-                # 超过最大时长
+                # Max duration reached
                 if len(frames) >= max_chunks:
                     recording_done = True
-                    print("⏱️ 达到最大录音时长", flush=True)
+                    print("⏱️ Max recording duration reached", flush=True)
 
             except Exception as e:
-                print(f"⚠️ VAD 处理错误: {e}", flush=True)
+                print(f"⚠️ VAD error: {e}", flush=True)
                 recording_done = True
 
         with sd.InputStream(
@@ -185,11 +213,12 @@ class VoiceAssistant:
             return None
 
         audio = np.concatenate(frames)
-        print(f"✅ 录音完成 ({len(audio)/SAMPLE_RATE:.1f}秒)", flush=True)
+        print(f"✅ Recording complete ({len(audio)/SAMPLE_RATE:.1f}s)", flush=True)
         return audio
 
     def transcribe(self, audio):
-        print("🔄 识别中...", flush=True)
+        """Transcribe audio and detect language. Returns (text, language)."""
+        print("🔄 Recognizing...", flush=True)
         model = self.load_asr()
         tmp_file = None
 
@@ -199,31 +228,81 @@ class VoiceAssistant:
                 audio_int16 = (audio * 32767).astype(np.int16)
                 write_wav(tmp_file, SAMPLE_RATE, audio_int16)
                 result = model.generate(input=tmp_file)
-                text = result[0]["text"] if result else ""
+                raw_text = result[0]["text"] if result else ""
         finally:
             if tmp_file and os.path.exists(tmp_file):
                 os.remove(tmp_file)
 
-        # 清理 SenseVoice 输出的标签，如 <|yue|><|EMO_UNKNOWN|><|Speech|>
-        text = re.sub(r'<\|[^|]+\|>', '', text).strip()
+        # Extract language from SenseVoice tags like <|zh|>, <|en|>, <|yue|>
+        lang_match = re.search(r'<\|(zh|en|ja|ko|yue)\|>', raw_text)
+        language = lang_match.group(1) if lang_match else DEFAULT_LANGUAGE
 
-        print(f"📝 识别结果: {text}", flush=True)
-        return text
+        # Clean all tags from text
+        text = re.sub(r'<\|[^|]+\|>', '', raw_text).strip()
 
-    async def generate_audio(self, text):
-        """生成 TTS 音频文件，返回文件路径"""
+        voice = TTS_VOICES.get(language, TTS_VOICES[DEFAULT_LANGUAGE])
+        print(f"📝 [{language}] {text}", flush=True)
+        return text, language
+
+    def detect_text_language(self, text):
+        """Detect language from text content using character analysis."""
+        # Count character types
+        cjk_count = 0
+        ja_specific = 0
+        ko_specific = 0
+        latin_count = 0
+
+        for char in text:
+            code = ord(char)
+            # CJK Unified Ideographs (Chinese/Japanese/Korean shared)
+            if 0x4E00 <= code <= 0x9FFF:
+                cjk_count += 1
+            # Hiragana/Katakana (Japanese specific)
+            elif 0x3040 <= code <= 0x30FF:
+                ja_specific += 1
+            # Hangul (Korean specific)
+            elif 0xAC00 <= code <= 0xD7AF or 0x1100 <= code <= 0x11FF:
+                ko_specific += 1
+            # Basic Latin letters
+            elif 0x0041 <= code <= 0x007A:
+                latin_count += 1
+
+        total = len(text.replace(" ", ""))
+        if total == 0:
+            return DEFAULT_LANGUAGE
+
+        # Japanese has hiragana/katakana
+        if ja_specific > 0:
+            return "ja"
+        # Korean has hangul
+        if ko_specific > 0:
+            return "ko"
+        # Chinese if mostly CJK
+        if cjk_count > latin_count:
+            return "zh"
+        # Default to English for Latin text
+        if latin_count > 0:
+            return "en"
+
+        return DEFAULT_LANGUAGE
+
+    async def generate_audio(self, text, language=None):
+        """Generate TTS audio file, returns file path."""
         try:
+            # Auto-detect language from text content for better TTS matching
+            detected_lang = self.detect_text_language(text)
+            voice = TTS_VOICES.get(detected_lang, TTS_VOICES[DEFAULT_LANGUAGE])
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_file = f.name
-                communicate = edge_tts.Communicate(text, TTS_VOICE, rate=TTS_RATE)
+                communicate = edge_tts.Communicate(text, voice, rate=TTS_RATE)
                 await communicate.save(tmp_file)
                 return tmp_file
         except Exception as e:
-            print(f"⚠️ TTS 生成失败: {e}", flush=True)
+            print(f"⚠️ TTS error: {e}", flush=True)
             return None
 
     async def play_audio(self, tmp_file, delete=True):
-        """播放音频文件（异步，跨平台），可选是否删除"""
+        """Play audio file (async, cross-platform), optionally delete after."""
         if tmp_file and os.path.exists(tmp_file):
             try:
                 system = platform.system()
@@ -234,7 +313,7 @@ class VoiceAssistant:
                 elif system == "Windows":
                     cmd = ["powershell", "-c", f"(New-Object Media.SoundPlayer '{tmp_file}').PlaySync()"]
                 else:
-                    print(f"⚠️ 不支持的平台: {system}", flush=True)
+                    print(f"⚠️ Unsupported platform: {system}", flush=True)
                     return
 
                 process = await asyncio.create_subprocess_exec(*cmd)
@@ -243,34 +322,50 @@ class VoiceAssistant:
                 if delete:
                     os.remove(tmp_file)
 
-    async def speak(self, text):
-        """TTS 朗读（单句）"""
-        tmp_file = await self.generate_audio(text)
+    async def speak(self, text, language=None):
+        """TTS speak a single sentence."""
+        tmp_file = await self.generate_audio(text, language)
         await self.play_audio(tmp_file)
 
     async def chat_once(self):
-        """单次对话"""
+        """Single conversation turn"""
         audio = self.record_with_vad()
 
         if audio is None:
-            return False  # 没有检测到有效语音
+            return False  # No valid speech detected
 
-        text = self.transcribe(audio)
+        text, language = self.transcribe(audio)
         if not text:
-            print("⚠️  未识别到内容", flush=True)
+            print("⚠️ No speech recognized", flush=True)
             return True
 
         backend = self.load_llm()
 
+        # Check if user wants to clear history
+        for keyword in CLEAR_HISTORY_KEYWORDS:
+            if keyword in text:
+                backend.clear_history()
+                # Respond in detected language
+                clear_messages = {
+                    "zh": "好的，已清空对话记录，重新开始。",
+                    "en": "OK, conversation cleared. Let's start fresh.",
+                    "ja": "会話履歴をクリアしました。",
+                    "ko": "대화 기록을 지웠습니다.",
+                    "yue": "好，已清空對話記錄。",
+                }
+                msg = clear_messages.get(language, clear_messages["en"])
+                await self.speak(msg, language)
+                return True
+
         if USE_STREAMING:
-            # 流式输出
-            print("🔊 流式朗读中...", flush=True)
+            # Streaming output
+            print("🔊 Streaming...", flush=True)
             audio_queue = asyncio.Queue()
 
             async def generate_worker():
                 async for sentence in backend.chat_stream(text):
                     if sentence:
-                        audio_file = await self.generate_audio(sentence)
+                        audio_file = await self.generate_audio(sentence, language)
                         if audio_file:
                             await audio_queue.put(audio_file)
                 await audio_queue.put(None)
@@ -284,40 +379,42 @@ class VoiceAssistant:
 
             await asyncio.gather(generate_worker(), play_worker())
         else:
-            # 非流式输出
+            # Non-streaming output
             response = backend.chat(text)
-            await self.speak(response)
+            await self.speak(response, language)
 
         return True
 
     async def run(self):
         print("=" * 50, flush=True)
-        print("🎙️  Speekium 已启动 (持续对话模式)", flush=True)
-        print("   使用 VAD 自动检测语音", flush=True)
+        print("🎙️  Speekium started (continuous conversation mode)", flush=True)
+        print("   VAD auto voice detection enabled", flush=True)
         backend_info = LLM_BACKEND
         if LLM_BACKEND == "ollama":
             backend_info = f"ollama ({OLLAMA_MODEL})"
-        print(f"   LLM 后端: {backend_info}", flush=True)
+        print(f"   LLM backend: {backend_info}", flush=True)
         if USE_STREAMING:
-            print("   模式: 流式输出（边生成边朗读）", flush=True)
-        print("   Ctrl+C 退出", flush=True)
+            print("   Mode: streaming (speak while generating)", flush=True)
+        print(f"   Memory: last {MAX_HISTORY} turns", flush=True)
+        print("   Say 'clear history' to reset memory", flush=True)
+        print("   Ctrl+C to exit", flush=True)
         print("=" * 50, flush=True)
 
-        # 预加载模型
+        # Preload models
         self.load_vad()
         self.load_asr()
         self.load_llm()
 
-        print("\n🎧 准备就绪，请开始说话...\n", flush=True)
+        print("\n🎧 Ready, start speaking...\n", flush=True)
 
         try:
             while True:
                 await self.chat_once()
-                # 短暂延迟，避免立即开始下一轮
+                # Brief delay before next round
                 await asyncio.sleep(0.5)
 
         except KeyboardInterrupt:
-            print("\n👋 再见!", flush=True)
+            print("\n👋 Goodbye!", flush=True)
 
 
 async def main():
