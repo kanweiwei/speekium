@@ -12,6 +12,7 @@ import asyncio
 import os
 import re
 import platform
+import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
@@ -23,7 +24,7 @@ import torch
 from backends import create_backend
 
 # ===== LLM Backend =====
-LLM_BACKEND = "claude"  # Options: "claude", "ollama"
+LLM_BACKEND = "ollama"  # Options: "claude", "ollama"
 
 # Ollama config (only used when LLM_BACKEND="ollama")
 OLLAMA_MODEL = "qwen2.5:1.5b"  # Ollama model (use qwen2.5:7b for smarter but slower)
@@ -31,7 +32,13 @@ OLLAMA_BASE_URL = "http://localhost:11434"  # Ollama server URL
 
 # ===== Conversation Memory =====
 MAX_HISTORY = 10  # Max conversation turns to keep (each turn = user + assistant)
-CLEAR_HISTORY_KEYWORDS = ["clear history", "start over", "forget everything", "清空对话", "重新开始"]  # Keywords to trigger history clear
+CLEAR_HISTORY_KEYWORDS = [
+    "clear history",
+    "start over",
+    "forget everything",
+    "清空对话",
+    "重新开始",
+]  # Keywords to trigger history clear
 
 # ===== Basic Config =====
 SAMPLE_RATE = 16000
@@ -45,10 +52,10 @@ TTS_RATE = "+0%"  # Speed for Edge TTS: negative=slower, positive=faster, 0%=nor
 # ===== Edge TTS Voices (online, auto-selected based on detected language) =====
 DEFAULT_LANGUAGE = "zh"
 EDGE_TTS_VOICES = {
-    "zh": "zh-CN-XiaoyiNeural",    # Chinese female
-    "en": "en-US-JennyNeural",     # English female
-    "ja": "ja-JP-NanamiNeural",    # Japanese female
-    "ko": "ko-KR-SunHiNeural",     # Korean female
+    "zh": "zh-CN-XiaoyiNeural",  # Chinese female
+    "en": "en-US-JennyNeural",  # English female
+    "ja": "ja-JP-NanamiNeural",  # Japanese female
+    "ko": "ko-KR-SunHiNeural",  # Korean female
     "yue": "zh-HK-HiuGaaiNeural",  # Cantonese female
 }
 
@@ -56,19 +63,23 @@ EDGE_TTS_VOICES = {
 # Models are stored in ~/.local/share/piper-voices/
 # Download from: https://huggingface.co/rhasspy/piper-voices/tree/main
 PIPER_VOICES = {
-    "zh": "zh_CN-huayan-medium",   # Chinese female
-    "en": "en_US-amy-medium",      # English female
+    "zh": "zh_CN-huayan-medium",  # Chinese female
+    "en": "en_US-amy-medium",  # English female
 }
 PIPER_DATA_DIR = os.path.expanduser("~/.local/share/piper-voices")
 
 # ===== VAD Config =====
-VAD_THRESHOLD = 0.5  # Voice detection threshold
-VAD_CONSECUTIVE_THRESHOLD = 3  # Consecutive detections to confirm speech start
+VAD_THRESHOLD = 0.7  # Voice detection threshold - increased to avoid echo detection
+VAD_CONSECUTIVE_THRESHOLD = (
+    8  # Consecutive detections to confirm speech start - increased for robustness
+)
 VAD_PRE_BUFFER = 0.3  # Pre-buffer duration (seconds) to capture speech start
-MIN_SPEECH_DURATION = 0.2  # Minimum speech duration (seconds)
+MIN_SPEECH_DURATION = 0.4  # Minimum speech duration (seconds) - increased
 SILENCE_AFTER_SPEECH = 0.8  # Silence duration to stop recording (seconds)
 MAX_RECORDING_DURATION = 30  # Maximum recording duration (seconds)
-INTERRUPT_CHECK_DURATION = 1.5  # Duration to check for speech continuation after pause (seconds)
+INTERRUPT_CHECK_DURATION = (
+    1.5  # Duration to check for speech continuation after pause (seconds)
+)
 
 # ===== System Prompt (optimized for voice output) =====
 SYSTEM_PROMPT = """You are Speekium, an intelligent voice assistant. Follow these rules:
@@ -89,12 +100,12 @@ class VoiceAssistant:
         self.llm_backend = None
         self.piper_voices = {}  # Cache for loaded Piper voices
         self.was_interrupted = False  # Track if last playback was interrupted
-        self.interrupt_audio_buffer = []  # Buffer to store audio captured during interrupt
 
     def load_asr(self):
         if self.asr_model is None:
             print("🔄 Loading SenseVoice model...", flush=True)
             from funasr import AutoModel
+
             self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
             print("✅ SenseVoice model loaded", flush=True)
         return self.asr_model
@@ -103,10 +114,10 @@ class VoiceAssistant:
         if self.vad_model is None:
             print("🔄 Loading VAD model...", flush=True)
             self.vad_model, _ = torch.hub.load(
-                repo_or_dir='snakers4/silero-vad',
-                model='silero_vad',
+                repo_or_dir="snakers4/silero-vad",
+                model="silero_vad",
                 force_reload=False,
-                trust_repo=True
+                trust_repo=True,
             )
             print("✅ VAD model loaded", flush=True)
         return self.vad_model
@@ -120,13 +131,11 @@ class VoiceAssistant:
                     SYSTEM_PROMPT,
                     model=OLLAMA_MODEL,
                     base_url=OLLAMA_BASE_URL,
-                    max_history=MAX_HISTORY
+                    max_history=MAX_HISTORY,
                 )
             else:
                 self.llm_backend = create_backend(
-                    LLM_BACKEND,
-                    SYSTEM_PROMPT,
-                    max_history=MAX_HISTORY
+                    LLM_BACKEND, SYSTEM_PROMPT, max_history=MAX_HISTORY
                 )
             print(f"✅ LLM backend initialized", flush=True)
         return self.llm_backend
@@ -141,11 +150,15 @@ class VoiceAssistant:
 
         if not os.path.exists(model_path):
             print(f"⚠️ Piper model not found: {model_path}", flush=True)
-            print(f"   Download from: https://huggingface.co/rhasspy/piper-voices/tree/main", flush=True)
+            print(
+                f"   Download from: https://huggingface.co/rhasspy/piper-voices/tree/main",
+                flush=True,
+            )
             return None
 
         try:
             from piper.voice import PiperVoice
+
             print(f"🔄 Loading Piper voice: {voice_name}...", flush=True)
             voice = PiperVoice.load(model_path)
             self.piper_voices[language] = voice
@@ -170,7 +183,7 @@ class VoiceAssistant:
 
         # Show history count
         history_count = 0
-        if self.llm_backend and hasattr(self.llm_backend, 'history'):
+        if self.llm_backend and hasattr(self.llm_backend, "history"):
             history_count = len(self.llm_backend.history) // 2
 
         if speech_already_started:
@@ -204,7 +217,12 @@ class VoiceAssistant:
         recording_done = False
 
         def callback(indata, frame_count, time_info, status):
-            nonlocal is_speaking, silence_chunks, speech_chunks, consecutive_speech, recording_done
+            nonlocal \
+                is_speaking, \
+                silence_chunks, \
+                speech_chunks, \
+                consecutive_speech, \
+                recording_done
 
             if recording_done:
                 return
@@ -220,7 +238,10 @@ class VoiceAssistant:
                     # Speech detected
                     consecutive_speech += 1
 
-                    if not is_speaking and consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
+                    if (
+                        not is_speaking
+                        and consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD
+                    ):
                         is_speaking = True
                         # Add pre-buffer to frames to avoid clipping speech start
                         frames.extend(pre_buffer)
@@ -245,7 +266,10 @@ class VoiceAssistant:
                         silence_chunks += 1
 
                         # Stop recording after enough silence
-                        if silence_chunks >= max_silence_chunks and speech_chunks >= min_speech_chunks:
+                        if (
+                            silence_chunks >= max_silence_chunks
+                            and speech_chunks >= min_speech_chunks
+                        ):
                             recording_done = True
                             print("🔇 Speech ended", flush=True)
                     else:
@@ -262,8 +286,11 @@ class VoiceAssistant:
                 recording_done = True
 
         with sd.InputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype=np.float32,
-            blocksize=chunk_size, callback=callback
+            samplerate=SAMPLE_RATE,
+            channels=1,
+            dtype=np.float32,
+            blocksize=chunk_size,
+            callback=callback,
         ):
             while not recording_done:
                 sd.sleep(50)
@@ -272,7 +299,7 @@ class VoiceAssistant:
             return None
 
         audio = np.concatenate(frames)
-        print(f"✅ Recording complete ({len(audio)/SAMPLE_RATE:.1f}s)", flush=True)
+        print(f"✅ Recording complete ({len(audio) / SAMPLE_RATE:.1f}s)", flush=True)
         return audio
 
     def transcribe(self, audio):
@@ -293,11 +320,11 @@ class VoiceAssistant:
                 os.remove(tmp_file)
 
         # Extract language from SenseVoice tags like <|zh|>, <|en|>, <|yue|>
-        lang_match = re.search(r'<\|(zh|en|ja|ko|yue)\|>', raw_text)
+        lang_match = re.search(r"<\|(zh|en|ja|ko|yue)\|>", raw_text)
         language = lang_match.group(1) if lang_match else DEFAULT_LANGUAGE
 
         # Clean all tags from text
-        text = re.sub(r'<\|[^|]+\|>', '', raw_text).strip()
+        text = re.sub(r"<\|[^|]+\|>", "", raw_text).strip()
 
         print(f"📝 [{language}] {text}", flush=True)
         return text, language
@@ -335,8 +362,11 @@ class VoiceAssistant:
 
         timeout_ms = int(timeout * 1000)
         with sd.InputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype=np.float32,
-            blocksize=chunk_size, callback=callback
+            samplerate=SAMPLE_RATE,
+            channels=1,
+            dtype=np.float32,
+            blocksize=chunk_size,
+            callback=callback,
         ):
             elapsed = 0
             while not check_done and elapsed < timeout_ms:
@@ -362,7 +392,9 @@ class VoiceAssistant:
 
         while True:
             # Record a segment
-            segment = self.record_with_vad(speech_already_started=speech_already_started)
+            segment = self.record_with_vad(
+                speech_already_started=speech_already_started
+            )
             speech_already_started = False  # Only applies to first segment
 
             if segment is None:
@@ -384,9 +416,7 @@ class VoiceAssistant:
             loop = asyncio.get_event_loop()
             with ThreadPoolExecutor() as executor:
                 has_more_speech = await loop.run_in_executor(
-                    executor,
-                    self.detect_speech_start,
-                    INTERRUPT_CHECK_DURATION
+                    executor, self.detect_speech_start, INTERRUPT_CHECK_DURATION
                 )
 
             if has_more_speech:
@@ -495,9 +525,7 @@ class VoiceAssistant:
             # Run Piper synthesis in executor (it's blocking)
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
-                None,
-                self._piper_synthesize,
-                voice, text, tmp_file
+                None, self._piper_synthesize, voice, text, tmp_file
             )
             return tmp_file
         except Exception as e:
@@ -508,6 +536,7 @@ class VoiceAssistant:
     def _piper_synthesize(self, voice, text, output_path):
         """Synchronous Piper synthesis."""
         import wave
+
         with wave.open(output_path, "w") as wav_file:
             voice.synthesize(text, wav_file)
 
@@ -519,9 +548,20 @@ class VoiceAssistant:
                 if system == "Darwin":  # macOS
                     cmd = ["afplay", tmp_file]
                 elif system == "Linux":
-                    cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", tmp_file]
+                    cmd = [
+                        "ffplay",
+                        "-nodisp",
+                        "-autoexit",
+                        "-loglevel",
+                        "quiet",
+                        tmp_file,
+                    ]
                 elif system == "Windows":
-                    cmd = ["powershell", "-c", f"(New-Object Media.SoundPlayer '{tmp_file}').PlaySync()"]
+                    cmd = [
+                        "powershell",
+                        "-c",
+                        f"(New-Object Media.SoundPlayer '{tmp_file}').PlaySync()",
+                    ]
                 else:
                     print(f"⚠️ Unsupported platform: {system}", flush=True)
                     return
@@ -532,95 +572,71 @@ class VoiceAssistant:
                 if delete:
                     os.remove(tmp_file)
 
+    def load_audio_file(self, file_path):
+        """Load audio file and return numpy array at SAMPLE_RATE.
+        Supports WAV and MP3 formats.
+        """
+        from scipy.io.wavfile import read as read_wav
+        import subprocess
+
+        if file_path.endswith(".wav"):
+            sr, audio = read_wav(file_path)
+            # Convert to float32
+            if audio.dtype == np.int16:
+                audio = audio.astype(np.float32) / 32768.0
+            elif audio.dtype == np.int32:
+                audio = audio.astype(np.float32) / 2147483648.0
+        else:
+            # Use ffmpeg to convert MP3 to WAV
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                tmp_wav = f.name
+            try:
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        file_path,
+                        "-ar",
+                        str(SAMPLE_RATE),
+                        "-ac",
+                        "1",
+                        "-f",
+                        "wav",
+                        tmp_wav,
+                    ],
+                    capture_output=True,
+                    check=True,
+                )
+                sr, audio = read_wav(tmp_wav)
+                if audio.dtype == np.int16:
+                    audio = audio.astype(np.float32) / 32768.0
+            finally:
+                if os.path.exists(tmp_wav):
+                    os.remove(tmp_wav)
+
+        # Resample if needed
+        if sr != SAMPLE_RATE:
+            from scipy import signal
+
+            audio = signal.resample(audio, int(len(audio) * SAMPLE_RATE / sr))
+
+        return audio.astype(np.float32)
+
     async def play_audio_with_barge_in(self, tmp_file, delete=True):
-        """Play audio with barge-in support - stops if user starts speaking.
-        Returns True if interrupted by user speech, False otherwise.
-        When interrupted, captures audio to self.interrupt_audio_buffer."""
+        """Play audio with barge-in support (placeholder for future implementation).
+
+        TODO: Implement key-based interruption (e.g., SPACE key)
+        Currently plays audio without interruption support.
+        """
         if not tmp_file or not os.path.exists(tmp_file):
             return False
 
-        system = platform.system()
-        if system == "Darwin":
-            cmd = ["afplay", tmp_file]
-        elif system == "Linux":
-            cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", tmp_file]
-        else:
-            # Windows or unsupported - fall back to regular playback
-            await self.play_audio(tmp_file, delete)
-            return False
+        # Simple playback without interruption for now
+        # TODO: Add async interruption via keyboard listener
+        await self.play_audio(tmp_file, delete)
 
-        interrupted = False
-        process = None
-        audio_buffer = []  # Buffer to capture audio when speech detected
-        capturing = False  # Start capturing once speech is detected
-
-        try:
-            process = await asyncio.create_subprocess_exec(*cmd)
-
-            # Monitor for speech while audio is playing
-            model = self.load_vad()
-            model.reset_states()
-            chunk_size = 512
-            consecutive_speech = 0
-            pre_buffer = deque(maxlen=int(VAD_PRE_BUFFER * SAMPLE_RATE / chunk_size))
-
-            def vad_callback(indata, frame_count, time_info, status):
-                nonlocal consecutive_speech, interrupted, capturing
-                if process.returncode is not None:
-                    return
-
-                try:
-                    audio_chunk = indata[:, 0].copy()
-
-                    # Always keep a pre-buffer
-                    if not capturing:
-                        pre_buffer.append(audio_chunk)
-
-                    audio_tensor = torch.from_numpy(audio_chunk).float()
-                    speech_prob = model(audio_tensor, SAMPLE_RATE).item()
-
-                    if speech_prob > VAD_THRESHOLD:
-                        consecutive_speech += 1
-                        if consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
-                            if not interrupted:
-                                interrupted = True
-                                capturing = True
-                                # Add pre-buffer to capture buffer
-                                audio_buffer.extend(pre_buffer)
-                            # Continue capturing audio after interrupt
-                            audio_buffer.append(audio_chunk)
-                    else:
-                        consecutive_speech = 0
-                        if capturing:
-                            # Still capture during brief pauses
-                            audio_buffer.append(audio_chunk)
-                except Exception:
-                    pass
-
-            with sd.InputStream(
-                samplerate=SAMPLE_RATE, channels=1, dtype=np.float32,
-                blocksize=chunk_size, callback=vad_callback
-            ):
-                while process.returncode is None and not interrupted:
-                    await asyncio.sleep(0.05)
-
-                if interrupted:
-                    # Keep capturing for a short time to get more of the utterance
-                    await asyncio.sleep(0.3)
-
-                    if process.returncode is None:
-                        process.terminate()
-                        await process.wait()
-
-                    # Save captured audio for next recording
-                    self.interrupt_audio_buffer = audio_buffer.copy()
-                    print("🛑 Interrupted by user", flush=True)
-
-        finally:
-            if delete and os.path.exists(tmp_file):
-                os.remove(tmp_file)
-
-        return interrupted
+        return False  # Never interrupted in current implementation
 
     async def speak(self, text, language=None):
         """TTS speak a single sentence."""
@@ -688,7 +704,7 @@ class VoiceAssistant:
                         if os.path.exists(audio_file):
                             os.remove(audio_file)
                         continue
-                    # Play with barge-in detection
+                    # Play audio without interruption
                     was_interrupted = await self.play_audio_with_barge_in(audio_file)
                     if was_interrupted:
                         interrupted = True
@@ -709,7 +725,7 @@ class VoiceAssistant:
                 self.was_interrupted = True
                 return True
         else:
-            # Non-streaming output with barge-in
+            # Non-streaming output (without barge-in)
             response = backend.chat(text)
             tmp_file = await self.generate_audio(response, language)
             if tmp_file:
