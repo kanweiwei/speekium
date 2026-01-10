@@ -8,10 +8,9 @@ VAD (Voice Activity Detection) 单元测试
 4. 录音控制流程
 """
 
-import asyncio
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -20,7 +19,6 @@ import torch
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import speekium
 from speekium import (
     MAX_RECORDING_DURATION,
     MIN_SPEECH_DURATION,

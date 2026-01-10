@@ -26,7 +26,7 @@ import traceback
 
 import sounddevice as sd
 
-from logger import configure_logging, get_logger, new_request, set_component
+from logger import configure_logging, get_logger
 
 # Configure logging for daemon (JSON format)
 configure_logging(level="INFO", format="json", colored=False)

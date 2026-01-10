@@ -10,11 +10,10 @@ ASR (Automatic Speech Recognition) 单元测试
 6. 错误处理机制
 """
 
-import asyncio
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, call, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -22,7 +21,6 @@ import pytest
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import speekium
 from speekium import (
     ASR_MODEL,
     DEFAULT_LANGUAGE,

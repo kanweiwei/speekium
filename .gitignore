@@ -48,3 +48,4 @@ safety-report.json
 # Test files in root (use tests/ directory instead)
 /test_*.py
 /tts_test.py
+/dist/

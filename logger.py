@@ -17,7 +17,6 @@ from typing import Any
 import structlog
 from structlog.types import EventDict, Processor
 
-
 # ===== Sensitive Data Masking =====
 
 SENSITIVE_KEYS = {

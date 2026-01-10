@@ -8,7 +8,6 @@ Tests:
 4. Log level configuration
 """
 
-import os
 import sys
 from pathlib import Path
 

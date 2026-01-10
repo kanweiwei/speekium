@@ -40,15 +40,6 @@ class Api:
         """根据配置初始化助手"""
         self.assistant = VoiceAssistant()
 
-        # 设置全局配置
-        llm_backend = self.config.get("llm_backend", "ollama")
-        ollama_model = self.config.get("ollama_model", "qwen2.5:1.5b")
-        ollama_base_url = self.config.get("ollama_base_url", "http://localhost:11434")
-        tts_backend = self.config.get("tts_backend", "edge")
-        tts_rate = self.config.get("tts_rate", "+0%")
-        vad_threshold = self.config.get("vad_threshold", 0.7)
-        max_history = self.config.get("max_history", 10)
-
         print("Loading models...")
         try:
             self.assistant.load_vad()
@@ -175,7 +166,6 @@ class Api:
         if backend is None:
             return [{"type": "error", "content": "LLM backend not loaded"}]
 
-        response_text = ""
         try:
 
             def run_async_stream():

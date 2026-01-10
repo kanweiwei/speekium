@@ -24,7 +24,7 @@ import torch
 from scipy.io.wavfile import write as write_wav
 
 from backends import create_backend
-from logger import get_logger, new_request, new_session, set_component
+from logger import get_logger, set_component
 from mode_manager import ModeManager, RecordingMode
 
 # Initialize logger

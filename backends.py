@@ -9,7 +9,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
-from logger import get_logger, set_component
+from logger import get_logger
 
 # Initialize logger for backends
 logger = get_logger(__name__)
