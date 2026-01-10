@@ -590,7 +590,6 @@ class VoiceAssistant:
     async def _generate_audio_piper(self, text, language):
         """Generate audio using Piper TTS (offline)."""
         try:
-
             voice = self.load_piper_voice(language)
             if voice is None:
                 # Fallback to Edge TTS if Piper not available
