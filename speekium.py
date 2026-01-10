@@ -22,6 +22,7 @@ import edge_tts
 import torch
 
 from backends import create_backend
+from mode_manager import ModeManager, RecordingMode
 
 # ===== LLM Backend =====
 LLM_BACKEND = "ollama"  # Options: "claude", "ollama"
@@ -100,6 +101,8 @@ class VoiceAssistant:
         self.llm_backend = None
         self.piper_voices = {}  # Cache for loaded Piper voices
         self.was_interrupted = False  # Track if last playback was interrupted
+        self.mode_manager = ModeManager(RecordingMode.CONTINUOUS)  # 默认自由对话模式
+        self.interrupt_audio_buffer = []  # Buffer for interrupt audio
 
     def load_asr(self):
         if self.asr_model is None:
@@ -300,6 +303,47 @@ class VoiceAssistant:
 
         audio = np.concatenate(frames)
         print(f"✅ Recording complete ({len(audio) / SAMPLE_RATE:.1f}s)", flush=True)
+        return audio
+
+    def record_push_to_talk(self):
+        """
+        按键录音模式：手动控制录音开始和结束
+        通过 mode_manager.start_recording() 和 stop_recording() 控制
+        """
+        print("\n🎤 按键录音模式已激活，等待按键...")
+
+        chunk_size = 512
+        frames = []
+
+        def callback(indata, frame_count, time_info, status):
+            # 只有在录音状态时才记录音频
+            if self.mode_manager.is_recording:
+                audio_chunk = indata[:, 0].copy()
+                frames.append(audio_chunk)
+
+        # 启动音频流
+        with sd.InputStream(
+            samplerate=SAMPLE_RATE,
+            channels=1,
+            dtype="float32",
+            blocksize=chunk_size,
+            callback=callback,
+        ):
+            # 等待开始录音
+            while not self.mode_manager.is_recording:
+                sd.sleep(50)
+
+            # 录音中
+            while self.mode_manager.is_recording:
+                sd.sleep(50)
+
+        # 检查是否有录音数据
+        if not frames:
+            print("⚠️ 未检测到录音数据")
+            return None
+
+        audio = np.concatenate(frames)
+        print(f"✅ 按键录音完成 ({len(audio) / SAMPLE_RATE:.1f}s)", flush=True)
         return audio
 
     def transcribe(self, audio):

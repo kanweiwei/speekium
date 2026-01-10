@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""
+Speekium Backend - Simple HTTP Server for Tauri Integration
+Run this separately: python backend_server.py
+
+API Endpoints:
+- POST /api/record - Start voice recording
+- POST /api/chat - Generate LLM response
+- POST /api/tts - Generate TTS audio
+- GET /api/config - Get configuration
+"""
+
+import asyncio
+import json
+import os
+import sys
+from typing import Optional
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from speekium import VoiceAssistant
+from config_manager import ConfigManager
+
+
+class SpeekiumBackend:
+    def __init__(self):
+        self.assistant: Optional[VoiceAssistant] = None
+        self.config = ConfigManager.load()
+        self.server: Optional[HTTPServer] = None
+
+    def get_assistant(self) -> VoiceAssistant:
+        """Get or create VoiceAssistant instance"""
+        if self.assistant is None:
+            self.assistant = VoiceAssistant()
+        return self.assistant
+
+    def record(self, mode: str = "push-to-talk", duration: float = 3.0) -> dict:
+        """Record audio and transcribe"""
+        try:
+            assistant = self.get_assistant()
+
+            if mode == "continuous":
+                audio = assistant.record_with_vad()
+            elif mode == "push-to-talk":
+                # 简单的固定时长录音（不依赖mode_manager）
+                import sounddevice as sd
+                import numpy as np
+
+                print(f"🎤 开始录音 ({duration}秒)...", flush=True)
+                audio = sd.rec(
+                    int(duration * 16000),  # SAMPLE_RATE = 16000
+                    samplerate=16000,
+                    channels=1,
+                    dtype='float32'
+                )
+                sd.wait()  # 等待录音完成
+                audio = audio[:, 0]  # 转为1D数组
+                print(f"✅ 录音完成 ({len(audio) / 16000:.1f}s)", flush=True)
+            else:
+                return {"success": False, "error": f"Unknown mode: {mode}"}
+
+            if audio is None or len(audio) == 0:
+                return {"success": False, "error": "No speech detected"}
+
+            text, language = assistant.transcribe(audio)
+            return {"success": True, "text": text, "language": language}
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}
+
+    def chat(self, text: str) -> list:
+        """Generate LLM response"""
+        try:
+            backend = self.get_assistant().load_llm()
+
+            response = backend.chat(text)
+
+            return [{"type": "text", "content": response}]
+        except Exception as e:
+            return [{"type": "error", "error": str(e)}]
+
+    async def tts(self, text: str) -> dict:
+        """Generate TTS audio"""
+        try:
+            assistant = self.get_assistant()
+            audio_path = await assistant.generate_audio(text)
+
+            if audio_path is None:
+                return {"success": False, "error": "Failed to generate audio"}
+
+            # Read audio file and encode as base64
+            with open(audio_path, "rb") as f:
+                audio_data = f.read()
+            audio_base64 = audio_data.hex()
+
+            # Clean up
+            try:
+                os.remove(audio_path)
+            except:
+                pass
+
+            return {"success": True, "audio_base64": audio_base64, "format": "wav"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_config(self) -> dict:
+        """Get current configuration"""
+        return {"success": True, "config": self.config}
+
+    def start_server(self, port: int = 8008):
+        """Start HTTP server"""
+        backend = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, format, *args):
+                pass  # Suppress logging
+
+            def do_POST(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.end_headers()
+
+                if self.path == "/api/record":
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body) if body else {}
+
+                    result = backend.record(data.get("mode", "push-to-talk"))
+                    self.wfile.write(json.dumps(result).encode())
+
+                elif self.path == "/api/chat":
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body) if body else {}
+
+                    result = backend.chat(data.get("text", ""))
+                    self.wfile.write(json.dumps(result).encode())
+
+                elif self.path == "/api/tts":
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body) if body else {}
+
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    result = loop.run_until_complete(backend.tts(data.get("text", "")))
+                    loop.close()
+
+                    self.wfile.write(json.dumps(result).encode())
+
+                else:
+                    self.wfile.write(json.dumps({"error": "Not found"}).encode())
+
+            def do_OPTIONS(self):
+                """Handle CORS preflight requests"""
+                self.send_response(200)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.end_headers()
+
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.end_headers()
+
+                if self.path == "/api/config":
+                    result = backend.get_config()
+                    self.wfile.write(json.dumps(result).encode())
+
+                elif self.path == "/health":
+                    self.send_header("Content-Type", "text/plain")
+                    self.wfile.write(b"OK")
+
+                else:
+                    self.wfile.write(json.dumps({"error": "Not found"}).encode())
+
+        self.server = HTTPServer(("127.0.0.1", port), Handler)
+        print(f"🚀 Speekium Backend Server running on http://127.0.0.1:{port}")
+        print(f"   API Endpoints:")
+        print(f"   - POST /api/record - Voice recording")
+        print(f"   - POST /api/chat - LLM chat")
+        print(f"   - POST /api/tts - TTS audio")
+        print(f"   - GET /api/config - Get config")
+        print(f"   - GET /health - Health check")
+        print(f"\nPress Ctrl+C to stop\n")
+
+        try:
+            self.server.serve_forever()
+        except KeyboardInterrupt:
+            print("\n🛑 Server stopped")
+            self.server.shutdown()
+
+
+def main():
+    port = int(os.environ.get("SPEEKIUM_PORT", 8008))
+    backend = SpeekiumBackend()
+    backend.start_server(port)
+
+
+if __name__ == "__main__":
+    main()

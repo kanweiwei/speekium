@@ -38,10 +38,15 @@ dependencies = [
     "torchaudio",
     "funasr",
     "httpx",
-    "llvmlite>=0.42.0",  # Override old version for Python 3.12 support
+    "llvmlite>=0.42.0",
+    "pywebview>=6.0",
+    "pynput>=1.7.6",  # Global hotkey support
+    "pystray>=0.19.5",  # System tray support
+    "Pillow>=10.2.0",  # Image support for tray icon
 ]
 
 [project.optional-dependencies]
+gui = ["pywebview"]
 piper = ["piper-tts"]  # Offline TTS support
 
 [project.urls]
