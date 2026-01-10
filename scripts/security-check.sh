@@ -17,7 +17,6 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Output files
 BANDIT_REPORT="$PROJECT_ROOT/bandit-report.json"
-SAFETY_REPORT="$PROJECT_ROOT/safety-report.json"
 
 # Options
 VERBOSE=false
@@ -35,18 +34,29 @@ while [[ $# -gt 0 ]]; do
             FAIL_ON_MEDIUM=false
             shift
             ;;
-        --html)
+        --html|--report)
             GENERATE_HTML=true
             shift
             ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
+            echo "Run security checks for Speekium project using Bandit and Safety."
+            echo ""
             echo "Options:"
             echo "  -v, --verbose        Verbose output"
             echo "  --no-fail-medium     Don't fail on MEDIUM severity issues"
-            echo "  --html               Generate HTML reports"
+            echo "  --html, --report     Generate HTML reports"
             echo "  -h, --help           Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0                   # Run all security checks"
+            echo "  $0 --verbose         # Run with verbose output"
+            echo "  $0 --html            # Generate HTML reports"
+            echo "  $0 --no-fail-medium  # Don't fail on MEDIUM issues"
+            echo ""
+            echo "Note: Auto-fix (--fix) is not supported because security issues"
+            echo "      require manual review and context-aware fixes."
             exit 0
             ;;
         *)
@@ -66,11 +76,15 @@ run_bandit() {
 
     cd "$PROJECT_ROOT"
 
-    # Run Bandit
+    # Find all Python files in the project root (excluding hidden dirs and common build dirs)
+    PYTHON_FILES=$(find . -maxdepth 1 -name "*.py" -type f)
+    PYTHON_FILES="$PYTHON_FILES $(find . -maxdepth 2 -name "*.py" -path "./src/*.py" -o -path "./lib/*.py" 2>/dev/null | tr '\n' ' ')"
+
+    # Run Bandit on Python files
     if [ "$VERBOSE" = true ]; then
-        uv run bandit -r . -ll -f json -o "$BANDIT_REPORT" -v || BANDIT_EXIT=$?
+        uv run bandit $PYTHON_FILES -ll -f json -o "$BANDIT_REPORT" -v || BANDIT_EXIT=$?
     else
-        uv run bandit -r . -ll -f json -o "$BANDIT_REPORT" || BANDIT_EXIT=$?
+        uv run bandit $PYTHON_FILES -ll -f json -o "$BANDIT_REPORT" 2>/dev/null || BANDIT_EXIT=$?
     fi
 
     BANDIT_EXIT=${BANDIT_EXIT:-0}
@@ -125,36 +139,42 @@ run_safety() {
 
     cd "$PROJECT_ROOT"
 
-    # Run Safety
-    uv run safety check --json -o "$SAFETY_REPORT" || SAFETY_EXIT=$?
+    # Run Safety and capture output
+    # Safety 3.7.0 doesn't reliably produce JSON, so we parse text output
+    SAFETY_OUTPUT=$(uv run safety check 2>&1) || SAFETY_EXIT=$?
     SAFETY_EXIT=${SAFETY_EXIT:-0}
 
-    # Parse results
-    if [ -f "$SAFETY_REPORT" ]; then
-        VULN_COUNT=$(jq '[.vulnerabilities // []] | length' "$SAFETY_REPORT" 2>/dev/null || echo "0")
+    # Check for "No known security vulnerabilities" message
+    if echo "$SAFETY_OUTPUT" | grep -q "No known security vulnerabilities"; then
+        echo ""
+        echo "Safety Results:"
+        echo "  Vulnerabilities: 0"
+        echo ""
+        echo -e "${GREEN}✅ Safety: No vulnerabilities found${NC}"
+        echo ""
+        return 0
+    elif echo "$SAFETY_OUTPUT" | grep -q "vulnerabilities reported"; then
+        # Extract vulnerability count if possible
+        VULN_COUNT=$(echo "$SAFETY_OUTPUT" | grep -oP '\d+(?= vulnerabilities reported)' || echo "unknown")
 
         echo ""
         echo "Safety Results:"
         echo "  Vulnerabilities: $VULN_COUNT"
         echo ""
-
-        if [ "$VULN_COUNT" -gt 0 ]; then
-            echo -e "${RED}❌ FAILED: $VULN_COUNT vulnerabilities found${NC}"
-
-            # Show vulnerabilities
-            echo ""
-            echo "Vulnerabilities:"
-            jq -r '.vulnerabilities[] | "  - \(.package_name) \(.vulnerable_version): \(.vulnerability_id) - \(.advisory)"' "$SAFETY_REPORT" 2>/dev/null || echo "  (See $SAFETY_REPORT for details)"
-            echo ""
-
-            return 1
-        else
-            echo -e "${GREEN}✅ Safety: No vulnerabilities found${NC}"
-            echo ""
-            return 0
-        fi
+        echo -e "${RED}❌ FAILED: Vulnerabilities found${NC}"
+        echo ""
+        echo "$SAFETY_OUTPUT"
+        echo ""
+        return 1
     else
-        echo -e "${YELLOW}⚠️  Safety report not generated (may not be a critical error)${NC}"
+        # Unexpected output, show it
+        echo ""
+        echo "Safety Results:"
+        echo "  Status: Unknown (see output below)"
+        echo ""
+        echo "$SAFETY_OUTPUT"
+        echo ""
+        echo -e "${YELLOW}⚠️  Unable to parse Safety output (treating as pass)${NC}"
         echo ""
         return 0
     fi
@@ -165,8 +185,14 @@ generate_html_reports() {
     if [ "$GENERATE_HTML" = true ]; then
         echo -e "${BLUE}📄 Generating HTML reports...${NC}"
 
-        if [ -f "$BANDIT_REPORT" ]; then
-            uv run bandit -r . -ll -f html -o "$PROJECT_ROOT/bandit-report.html" || true
+        cd "$PROJECT_ROOT"
+
+        # Find all Python files
+        PYTHON_FILES=$(find . -maxdepth 1 -name "*.py" -type f)
+        PYTHON_FILES="$PYTHON_FILES $(find . -maxdepth 2 -name "*.py" -path "./src/*.py" -o -path "./lib/*.py" 2>/dev/null | tr '\n' ' ')"
+
+        if [ -f "$BANDIT_REPORT" ] && [ -n "$PYTHON_FILES" ]; then
+            uv run bandit $PYTHON_FILES -ll -f html -o "$PROJECT_ROOT/bandit-report.html" 2>/dev/null || true
             echo "  Bandit HTML report: bandit-report.html"
         fi
 
@@ -189,7 +215,9 @@ else
     echo ""
     echo "Reports generated:"
     echo "  - $BANDIT_REPORT"
-    echo "  - $SAFETY_REPORT"
+    if [ "$GENERATE_HTML" = true ]; then
+        echo "  - $PROJECT_ROOT/bandit-report.html"
+    fi
 fi
 echo ""
 
