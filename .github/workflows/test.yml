@@ -15,7 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ['3.10', '3.11', '3.12']
+        # 暂时只测试 Python 3.10，因为 funasr 依赖的 numba 0.47.0 不兼容 3.11+
+        # TODO: 升级或替换 funasr 后再添加 3.11 和 3.12
+        python-version: ['3.10']
 
     steps:
     - name: Checkout code
@@ -45,7 +47,7 @@ jobs:
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
-      if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
+      if: matrix.python-version == '3.10' && matrix.os == 'ubuntu-latest'
       with:
         file: ./coverage.xml
         flags: unittests
