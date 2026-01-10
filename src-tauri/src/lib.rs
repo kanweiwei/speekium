@@ -2,7 +2,7 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{TrayIconBuilder, TrayIconEvent},
-    Manager, Runtime,
+    Emitter, Manager, Runtime,
 };
 use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout};
 use std::io::{BufReader, BufWriter, Write, BufRead};
@@ -572,7 +572,7 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|app_handle, event| {
+        .run(|_app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 // 应用退出时清理守护进程
                 cleanup_daemon();
