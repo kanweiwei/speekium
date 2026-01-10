@@ -166,9 +166,7 @@ class TestDetectSpeechStart:
 
     @patch("sounddevice.InputStream")
     @patch.object(VoiceAssistant, "load_vad")
-    def test_detect_speech_start_consecutive_threshold(
-        self, mock_load_vad, mock_input_stream
-    ):
+    def test_detect_speech_start_consecutive_threshold(self, mock_load_vad, mock_input_stream):
         """测试连续检测阈值要求"""
         mock_vad = MagicMock()
         # Simulate sporadic speech detection (not consecutive)
@@ -218,9 +216,7 @@ class TestRecordWithVAD:
 
     @patch("sounddevice.InputStream")
     @patch.object(VoiceAssistant, "load_vad")
-    def test_record_with_vad_speech_already_started(
-        self, mock_load_vad, mock_input_stream
-    ):
+    def test_record_with_vad_speech_already_started(self, mock_load_vad, mock_input_stream):
         """测试语音已开始情况（打断场景）"""
         mock_vad = MagicMock()
         mock_vad.reset_states = MagicMock()

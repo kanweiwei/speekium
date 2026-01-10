@@ -425,9 +425,7 @@ class TestASRErrorHandling:
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
     @patch("speekium.write_wav")
-    def test_transcribe_write_failure(
-        self, mock_write_wav, mock_temp_file, mock_automodel
-    ):
+    def test_transcribe_write_failure(self, mock_write_wav, mock_temp_file, mock_automodel):
         """测试写入临时文件失败"""
         mock_model = MagicMock()
         mock_automodel.return_value = mock_model
