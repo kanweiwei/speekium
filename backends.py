@@ -302,12 +302,15 @@ class OllamaBackend(LLMBackend):
             full_response = ""
             sentence_endings = re.compile(r"([。！？\n])")
 
-            async with httpx.AsyncClient() as client, client.stream(
-                "POST",
-                f"{self.base_url}/api/chat",
-                json={"model": self.model, "messages": messages, "stream": True},
-                timeout=120,
-            ) as response:
+            async with (
+                httpx.AsyncClient() as client,
+                client.stream(
+                    "POST",
+                    f"{self.base_url}/api/chat",
+                    json={"model": self.model, "messages": messages, "stream": True},
+                    timeout=120,
+                ) as response,
+            ):
                 async for line in response.aiter_lines():
                     if not line:
                         continue
