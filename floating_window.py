@@ -3,17 +3,17 @@ Speekium 悬浮窗管理器
 管理独立的录音状态悬浮窗口
 """
 
-import webview
 import os
-from typing import Optional, Callable
 import threading
+
+import webview
 
 
 class FloatingWindowManager:
     """悬浮窗管理器 - 管理录音状态的小悬浮窗"""
 
     def __init__(self):
-        self.window: Optional[webview.Window] = None
+        self.window: webview.Window | None = None
         self.is_visible = False
         self._lock = threading.Lock()
         self.api = None
@@ -113,10 +113,10 @@ class FloatingWindowManager:
             width=240,
             height=100,
             frameless=True,  # 无边框
-            on_top=True,     # 置顶
+            on_top=True,  # 置顶
             resizable=False,
             minimized=False,
-            hidden=True,     # 初始隐藏
+            hidden=True,  # 初始隐藏
         )
 
         print("✅ 悬浮窗已创建")
@@ -181,6 +181,4 @@ class FloatingWindowApi:
 
     def get_status(self) -> dict:
         """获取悬浮窗状态"""
-        return {
-            "is_visible": self.manager.is_visible
-        }
+        return {"is_visible": self.manager.is_visible}

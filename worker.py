@@ -10,10 +10,11 @@ Usage:
     python3 worker.py tts '{"text":"hello"}'
 """
 
-import sys
 import json
+import sys
+
 import sounddevice as sd
-import numpy as np
+
 from speekium import VoiceAssistant
 
 
@@ -35,19 +36,14 @@ def record_audio(mode="push-to-talk", duration=3.0):
         if mode == "continuous":
             audio = assistant.record_with_vad()
         else:  # push-to-talk
-            audio = sd.rec(
-                int(duration * 16000),
-                samplerate=16000,
-                channels=1,
-                dtype='float32'
-            )
+            audio = sd.rec(int(duration * 16000), samplerate=16000, channels=1, dtype="float32")
             sd.wait()
             audio = audio[:, 0]  # 转为 1D 数组
 
         if audio is None or len(audio) == 0:
             return {"success": False, "error": "No audio recorded"}
 
-        print(f"🔄 识别中...", file=sys.stderr, flush=True)
+        print("🔄 识别中...", file=sys.stderr, flush=True)
         text, language = assistant.transcribe(audio)
         print(f"✅ 识别完成: '{text}' ({language})", file=sys.stderr, flush=True)
 
@@ -55,6 +51,7 @@ def record_audio(mode="push-to-talk", duration=3.0):
 
     except Exception as e:
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         return {"success": False, "error": str(e)}
 
@@ -81,6 +78,7 @@ def chat_llm(text):
 
     except Exception as e:
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         return {"success": False, "error": str(e)}
 
@@ -113,6 +111,7 @@ def generate_tts(text):
 
     except Exception as e:
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         return {"success": False, "error": str(e)}
 
@@ -125,11 +124,13 @@ def get_config():
     """
     try:
         from config_manager import ConfigManager
+
         config = ConfigManager.load()
         return {"success": True, "config": config}
 
     except Exception as e:
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         return {"success": False, "error": str(e)}
 
@@ -145,8 +146,7 @@ if __name__ == "__main__":
     # 路由到相应的函数
     if command == "record":
         result = record_audio(
-            mode=args.get("mode", "push-to-talk"),
-            duration=args.get("duration", 3.0)
+            mode=args.get("mode", "push-to-talk"), duration=args.get("duration", 3.0)
         )
     elif command == "chat":
         result = chat_llm(args.get("text", ""))

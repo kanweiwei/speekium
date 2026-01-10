@@ -1,27 +1,20 @@
-import webview
+import argparse
 import asyncio
-import sys
 import base64
 import os
-import argparse
-import threading
+import sys
+
+import webview
 
 sys.path.append(".")
 
+from config_manager import ConfigManager
+from floating_window import FloatingWindowManager
+from hotkey_manager import HotkeyManager
+from mode_manager import RecordingMode
 from speekium import (
     VoiceAssistant,
-    LLM_BACKEND,
-    OLLAMA_MODEL,
-    OLLAMA_BASE_URL,
-    TTS_BACKEND,
-    TTS_RATE,
-    VAD_THRESHOLD,
-    MAX_HISTORY,
 )
-from config_manager import ConfigManager
-from mode_manager import ModeManager, RecordingMode
-from hotkey_manager import HotkeyManager
-from floating_window import FloatingWindowManager
 from tray_manager import TrayManager
 
 
@@ -144,7 +137,9 @@ class Api:
 
     def set_mode(self, mode: str) -> None:
         """设置录音模式 (push_to_talk 或 continuous)"""
-        new_mode = RecordingMode.PUSH_TO_TALK if mode == "push_to_talk" else RecordingMode.CONTINUOUS
+        new_mode = (
+            RecordingMode.PUSH_TO_TALK if mode == "push_to_talk" else RecordingMode.CONTINUOUS
+        )
         self.assistant.mode_manager.set_mode(new_mode)
         self.tray_manager.update_mode(mode)
 
@@ -221,7 +216,7 @@ class Api:
                 if audio_file and os.path.exists(audio_file):
                     # 读取音频文件并转换为base64
                     with open(audio_file, "rb") as f:
-                        audio_data = base64.b64encode(f.read()).decode('utf-8')
+                        audio_data = base64.b64encode(f.read()).decode("utf-8")
 
                     # 删除临时文件
                     os.unlink(audio_file)
@@ -229,12 +224,14 @@ class Api:
                     # 确定音频格式
                     audio_format = "audio/mpeg" if audio_file.endswith(".mp3") else "audio/wav"
 
-                    result.append({
-                        "type": "complete",
-                        "content": response_text,
-                        "audio": audio_data,
-                        "audioFormat": audio_format
-                    })
+                    result.append(
+                        {
+                            "type": "complete",
+                            "content": response_text,
+                            "audio": audio_data,
+                            "audioFormat": audio_format,
+                        }
+                    )
                 else:
                     result.append({"type": "complete", "content": response_text})
             except Exception as e:
@@ -273,10 +270,10 @@ def main():
     if args.dev:
         url = f"http://localhost:{args.port}"
         print(f"🔧 开发模式: 连接到 Vite 开发服务器 {url}")
-        print(f"⚠️  请确保已运行: cd web && npm run dev")
+        print("⚠️  请确保已运行: cd web && npm run dev")
     else:
         url = "dist/index.html"
-        print(f"📦 生产模式: 使用编译后的静态文件")
+        print("📦 生产模式: 使用编译后的静态文件")
 
     # 窗口事件处理
     def on_closing():
@@ -326,10 +323,7 @@ def main():
             # TODO: 触发录音处理流程
 
     # 启动快捷键监听
-    api.hotkey_manager.start(
-        on_press=on_hotkey_press,
-        on_release=on_hotkey_release
-    )
+    api.hotkey_manager.start(on_press=on_hotkey_press, on_release=on_hotkey_release)
 
     # 设置托盘回调
     def show_main_window():
@@ -360,10 +354,10 @@ def main():
     print("⚠️  系统托盘暂时禁用（macOS兼容性问题）")
 
     # 启动webview
-    print(f"🚀 准备启动webview...")
+    print("🚀 准备启动webview...")
     print(f"   主窗口URL: {url}")
     print(f"   主窗口hidden状态: {not args.show}")
-    print(f"   如果窗口未显示，请检查系统托盘图标（右上角蓝色麦克风）")
+    print("   如果窗口未显示，请检查系统托盘图标（右上角蓝色麦克风）")
     webview.start(debug=True)
 
 

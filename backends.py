@@ -2,21 +2,20 @@
 LLM Backend implementations for Speekium
 """
 
-import subprocess
 import asyncio
 import json
 import re
+import subprocess
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, List, Dict
-
+from collections.abc import AsyncIterator
 
 # Security: Input validation constants
 MAX_INPUT_LENGTH = 10000  # Maximum characters per message
 MAX_SYSTEM_PROMPT_LENGTH = 5000
 BLOCKED_PATTERNS = [
-    r'<script',  # XSS prevention
-    r'javascript:',  # URL injection
-    r'\x00',  # Null byte injection
+    r"<script",  # XSS prevention
+    r"javascript:",  # URL injection
+    r"\x00",  # Null byte injection
 ]
 
 
@@ -49,7 +48,7 @@ def validate_input(text: str, max_length: int = MAX_INPUT_LENGTH) -> str:
             raise ValueError(f"Input contains blocked pattern: {pattern}")
 
     # Remove null bytes and other control characters
-    text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+    text = "".join(char for char in text if ord(char) >= 32 or char in "\n\r\t")
 
     return text
 
@@ -60,7 +59,7 @@ class LLMBackend(ABC):
     def __init__(self, system_prompt: str, max_history: int = 10):
         self.system_prompt = system_prompt
         self.max_history = max_history  # Max conversation turns to keep
-        self.history: List[Dict[str, str]] = []
+        self.history: list[dict[str, str]] = []
 
     def add_message(self, role: str, content: str):
         """Add a message to history"""
@@ -121,11 +120,17 @@ class ClaudeBackend(LLMBackend):
         try:
             result = subprocess.run(
                 [
-                    "claude", "-p", full_message,
+                    "claude",
+                    "-p",
+                    full_message,
                     "--no-session-persistence",
-                    "--system-prompt", self.system_prompt
+                    "--system-prompt",
+                    self.system_prompt,
                 ],
-                capture_output=True, text=True, timeout=120, check=True
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=True,
             )
             response = result.stdout.strip()
             print(f"💬 Claude: {response}", flush=True)
@@ -151,28 +156,30 @@ class ClaudeBackend(LLMBackend):
             full_message = message
 
         cmd = [
-            "claude", "-p", full_message,
+            "claude",
+            "-p",
+            full_message,
             "--dangerously-skip-permissions",
             "--no-session-persistence",
-            "--system-prompt", self.system_prompt,
-            "--output-format", "stream-json",
+            "--system-prompt",
+            self.system_prompt,
+            "--output-format",
+            "stream-json",
             "--include-partial-messages",
-            "--verbose"
+            "--verbose",
         ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         buffer = ""
         full_response = ""
-        sentence_endings = re.compile(r'([。！？\n])')
+        sentence_endings = re.compile(r"([。！？\n])")
 
         async for line in process.stdout:
             try:
-                data = json.loads(line.decode('utf-8'))
+                data = json.loads(line.decode("utf-8"))
 
                 if data.get("type") == "stream_event":
                     event = data.get("event", {})
@@ -215,12 +222,18 @@ class ClaudeBackend(LLMBackend):
 class OllamaBackend(LLMBackend):
     """Ollama backend for local LLMs"""
 
-    def __init__(self, system_prompt: str, model: str = "qwen2.5:7b", base_url: str = "http://localhost:11434", max_history: int = 10):
+    def __init__(
+        self,
+        system_prompt: str,
+        model: str = "qwen2.5:7b",
+        base_url: str = "http://localhost:11434",
+        max_history: int = 10,
+    ):
         super().__init__(system_prompt, max_history)
         self.model = model
         self.base_url = base_url
 
-    def _build_messages(self, message: str) -> List[Dict[str, str]]:
+    def _build_messages(self, message: str) -> list[dict[str, str]]:
         """Build message list with history"""
         messages = [{"role": "system", "content": self.system_prompt}]
         messages.extend(self.history)
@@ -247,19 +260,14 @@ class OllamaBackend(LLMBackend):
             for i, msg in enumerate(messages):
                 print(f"[DEBUG] Message {i}: {msg}", flush=True)
 
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "stream": False
-            }
+            payload = {"model": self.model, "messages": messages, "stream": False}
 
-            print(f"[DEBUG] Full payload: {json.dumps(payload, ensure_ascii=False, indent=2)}", flush=True)
-
-            response = httpx.post(
-                f"{self.base_url}/api/chat",
-                json=payload,
-                timeout=120
+            print(
+                f"[DEBUG] Full payload: {json.dumps(payload, ensure_ascii=False, indent=2)}",
+                flush=True,
             )
+
+            response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=120)
 
             # Debug: Print response details
             print(f"[DEBUG] Response status: {response.status_code}", flush=True)
@@ -279,6 +287,7 @@ class OllamaBackend(LLMBackend):
         except Exception as e:
             print(f"[ERROR] Ollama API error: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             return f"Error: {e}"
 
@@ -291,42 +300,37 @@ class OllamaBackend(LLMBackend):
             messages = self._build_messages(message)
             buffer = ""
             full_response = ""
-            sentence_endings = re.compile(r'([。！？\n])')
+            sentence_endings = re.compile(r"([。！？\n])")
 
-            async with httpx.AsyncClient() as client:
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/api/chat",
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "stream": True
-                    },
-                    timeout=120
-                ) as response:
-                    async for line in response.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            data = json.loads(line)
-                            content = data.get("message", {}).get("content", "")
-                            if content:
-                                buffer += content
-                                full_response += content
+            async with httpx.AsyncClient() as client, client.stream(
+                "POST",
+                f"{self.base_url}/api/chat",
+                json={"model": self.model, "messages": messages, "stream": True},
+                timeout=120,
+            ) as response:
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        content = data.get("message", {}).get("content", "")
+                        if content:
+                            buffer += content
+                            full_response += content
 
-                                while True:
-                                    match = sentence_endings.search(buffer)
-                                    if match:
-                                        end_pos = match.end()
-                                        sentence = buffer[:end_pos].strip()
-                                        buffer = buffer[end_pos:]
-                                        if sentence:
-                                            print(f"🗣️  {sentence}", flush=True)
-                                            yield sentence
-                                    else:
-                                        break
-                        except json.JSONDecodeError:
-                            continue
+                            while True:
+                                match = sentence_endings.search(buffer)
+                                if match:
+                                    end_pos = match.end()
+                                    sentence = buffer[:end_pos].strip()
+                                    buffer = buffer[end_pos:]
+                                    if sentence:
+                                        print(f"🗣️  {sentence}", flush=True)
+                                        yield sentence
+                                else:
+                                    break
+                    except json.JSONDecodeError:
+                        continue
 
             if buffer.strip():
                 print(f"🗣️  {buffer.strip()}", flush=True)

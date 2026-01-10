@@ -7,29 +7,27 @@ Flow: [VAD voice detection] → Record → SenseVoice ASR → LLM streaming → 
 Supported backends: Claude Code CLI, Ollama
 """
 
-import tempfile
 import asyncio
-import os
-import re
-import platform
-import time
-import stat
 import atexit
+import os
+import platform
+import re
+import stat
+import tempfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
+
+import edge_tts
 import numpy as np
 import sounddevice as sd
-from scipy.io.wavfile import write as write_wav
-import edge_tts
 import torch
+from scipy.io.wavfile import write as write_wav
 
 from backends import create_backend
 from mode_manager import ModeManager, RecordingMode
 
-
 # ===== Security: Temporary File Management =====
-_temp_files: List[str] = []
+_temp_files: list[str] = []
 
 
 def create_secure_temp_file(suffix: str = ".tmp") -> str:
@@ -127,9 +125,7 @@ VAD_PRE_BUFFER = 0.3  # Pre-buffer duration (seconds) to capture speech start
 MIN_SPEECH_DURATION = 0.4  # Minimum speech duration (seconds) - increased
 SILENCE_AFTER_SPEECH = 0.8  # Silence duration to stop recording (seconds)
 MAX_RECORDING_DURATION = 30  # Maximum recording duration (seconds)
-INTERRUPT_CHECK_DURATION = (
-    1.5  # Duration to check for speech continuation after pause (seconds)
-)
+INTERRUPT_CHECK_DURATION = 1.5  # Duration to check for speech continuation after pause (seconds)
 
 # ===== System Prompt (optimized for voice output) =====
 SYSTEM_PROMPT = """You are Speekium, an intelligent voice assistant. Follow these rules:
@@ -189,7 +185,7 @@ class VoiceAssistant:
                 self.llm_backend = create_backend(
                     LLM_BACKEND, SYSTEM_PROMPT, max_history=MAX_HISTORY
                 )
-            print(f"✅ LLM backend initialized", flush=True)
+            print("✅ LLM backend initialized", flush=True)
         return self.llm_backend
 
     def load_piper_voice(self, language):
@@ -203,7 +199,7 @@ class VoiceAssistant:
         if not os.path.exists(model_path):
             print(f"⚠️ Piper model not found: {model_path}", flush=True)
             print(
-                f"   Download from: https://huggingface.co/rhasspy/piper-voices/tree/main",
+                "   Download from: https://huggingface.co/rhasspy/piper-voices/tree/main",
                 flush=True,
             )
             return None
@@ -214,7 +210,7 @@ class VoiceAssistant:
             print(f"🔄 Loading Piper voice: {voice_name}...", flush=True)
             voice = PiperVoice.load(model_path)
             self.piper_voices[language] = voice
-            print(f"✅ Piper voice loaded", flush=True)
+            print("✅ Piper voice loaded", flush=True)
             return voice
         except ImportError:
             print("⚠️ piper-tts not installed. Run: pip install piper-tts", flush=True)
@@ -269,12 +265,7 @@ class VoiceAssistant:
         recording_done = False
 
         def callback(indata, frame_count, time_info, status):
-            nonlocal \
-                is_speaking, \
-                silence_chunks, \
-                speech_chunks, \
-                consecutive_speech, \
-                recording_done
+            nonlocal is_speaking, silence_chunks, speech_chunks, consecutive_speech, recording_done
 
             if recording_done:
                 return
@@ -290,15 +281,12 @@ class VoiceAssistant:
                     # Speech detected
                     consecutive_speech += 1
 
-                    if (
-                        not is_speaking
-                        and consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD
-                    ):
+                    if not is_speaking and consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
                         is_speaking = True
                         # Add pre-buffer to frames to avoid clipping speech start
                         frames.extend(pre_buffer)
                         pre_buffer.clear()
-                        print(f"🎤 Speech detected, recording...", flush=True)
+                        print("🎤 Speech detected, recording...", flush=True)
 
                     if is_speaking:
                         # Only reset silence count on consecutive speech
@@ -485,9 +473,7 @@ class VoiceAssistant:
 
         while True:
             # Record a segment
-            segment = self.record_with_vad(
-                speech_already_started=speech_already_started
-            )
+            segment = self.record_with_vad(speech_already_started=speech_already_started)
             speech_already_started = False  # Only applies to first segment
 
             if segment is None:
@@ -604,7 +590,6 @@ class VoiceAssistant:
     async def _generate_audio_piper(self, text, language):
         """Generate audio using Piper TTS (offline)."""
         try:
-            import wave
 
             voice = self.load_piper_voice(language)
             if voice is None:
@@ -617,9 +602,7 @@ class VoiceAssistant:
 
             # Run Piper synthesis in executor (it's blocking)
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None, self._piper_synthesize, voice, text, tmp_file
-            )
+            await loop.run_in_executor(None, self._piper_synthesize, voice, text, tmp_file)
             return tmp_file
         except Exception as e:
             print(f"⚠️ Piper TTS error: {e}", flush=True)
@@ -669,8 +652,9 @@ class VoiceAssistant:
         """Load audio file and return numpy array at SAMPLE_RATE.
         Supports WAV and MP3 formats.
         """
-        from scipy.io.wavfile import read as read_wav
         import subprocess
+
+        from scipy.io.wavfile import read as read_wav
 
         if file_path.endswith(".wav"):
             sr, audio = read_wav(file_path)
