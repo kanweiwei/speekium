@@ -107,8 +107,14 @@ ignore = [
     "I001",  # Import sorting (isort will handle this)
     "UP035", # Deprecated typing imports (will upgrade in P2)
     "UP045", # Type annotation style (will upgrade in P2)
+    "UP006", # Type annotation style (will upgrade in P2)
+    "UP015", # Unnecessary mode argument (will clean up in P2)
+    "B007",  # Loop variable not used (intentional in some cases)
     "B018",  # Useless expression (will fix in test refactoring)
     "E402",  # Module level import not at top (intentional in tests)
+    "SIM105", # Use contextlib.suppress (will refactor in P2)
+    "SIM108", # Use ternary operator (will refactor in P2)
+    "SIM117", # Use single with statement (will refactor in P2)
 ]
 
 # Allow autofix for all enabled rules
