@@ -414,10 +414,10 @@ class TestASRErrorHandling:
     def test_asr_load_failure(self, mock_automodel):
         """测试 ASR 模型加载失败"""
         # Simulate model loading failure
-        mock_automodel.side_effect = Exception("Model load failed")
+        mock_automodel.side_effect = RuntimeError("Model load failed")
 
         assistant = VoiceAssistant()
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(RuntimeError) as exc_info:
             assistant.load_asr()
 
         assert "Model load failed" in str(exc_info.value)
@@ -432,12 +432,12 @@ class TestASRErrorHandling:
         mock_model = MagicMock()
         mock_automodel.return_value = mock_model
         mock_temp_file.return_value = "/tmp/test.wav"
-        mock_write_wav.side_effect = IOError("Write failed")
+        mock_write_wav.side_effect = OSError("Write failed")
 
         audio = np.random.randn(16000).astype(np.float32)
 
         assistant = VoiceAssistant()
-        with pytest.raises(IOError):
+        with pytest.raises(OSError):
             assistant.transcribe(audio)
 
     @patch("funasr.AutoModel")
@@ -450,7 +450,7 @@ class TestASRErrorHandling:
     ):
         """测试 ASR 生成失败"""
         mock_model = MagicMock()
-        mock_model.generate.side_effect = Exception("Generation failed")
+        mock_model.generate.side_effect = RuntimeError("Generation failed")
         mock_automodel.return_value = mock_model
         mock_temp_file.return_value = "/tmp/test.wav"
         mock_exists.return_value = True
@@ -458,7 +458,7 @@ class TestASRErrorHandling:
         audio = np.random.randn(16000).astype(np.float32)
 
         assistant = VoiceAssistant()
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             assistant.transcribe(audio)
 
         # Temp file should still be cleaned up
