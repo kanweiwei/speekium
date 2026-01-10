@@ -32,7 +32,7 @@
 >
 > **⚡ One-Click Start**: `./start-tauri.sh` (Recommended!)
 >
-> Or manual: `cd tauri-prototype && npm run tauri dev`
+> Or manual: `npm run tauri dev`
 >
 > ### 🚀 Performance Highlights
 > - **18x faster** response time (3.5s → 0.2s after first call)

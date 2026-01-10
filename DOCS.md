@@ -34,6 +34,6 @@ Quick links to all documentation.
 
 ## 🏗️ Tauri App
 
-- **[tauri-prototype/README.md](./tauri-prototype/README.md)** - Tauri overview
-- **[tauri-prototype/QUICKSTART.md](./tauri-prototype/QUICKSTART.md)** - Quick start
-- **[tauri-prototype/BUILD_QUICKSTART.md](./tauri-prototype/BUILD_QUICKSTART.md)** - Build guide
+- **[QUICK_START.md](./QUICK_START.md)** - Quick start guide
+- **[HOW_TO_START.md](./HOW_TO_START.md)** - Detailed setup guide
+- **[DAEMON_MODE.md](./DAEMON_MODE.md)** - Daemon mode (18x faster)
