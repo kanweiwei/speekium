@@ -1,0 +1,123 @@
+name: Security Checks
+
+on:
+  push:
+    branches:
+      - main
+      - security-*
+  pull_request:
+    branches:
+      - main
+  # Allow manual workflow runs
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: |
+          uv sync --all-extras
+
+      - name: Run Bandit security scanner
+        id: bandit
+        continue-on-error: true
+        run: |
+          echo "🔍 Running Bandit security scanner..."
+          uv run bandit -r . -ll -f json -o bandit-report.json
+          BANDIT_EXIT=$?
+
+          if [ -f bandit-report.json ]; then
+            HIGH_COUNT=$(jq '[.results[] | select(.issue_severity == "HIGH")] | length' bandit-report.json)
+            MEDIUM_COUNT=$(jq '[.results[] | select(.issue_severity == "MEDIUM")] | length' bandit-report.json)
+            LOW_COUNT=$(jq '[.results[] | select(.issue_severity == "LOW")] | length' bandit-report.json)
+
+            echo "📊 Bandit Results:"
+            echo "  - HIGH: $HIGH_COUNT"
+            echo "  - MEDIUM: $MEDIUM_COUNT"
+            echo "  - LOW: $LOW_COUNT"
+
+            # Export for later steps
+            echo "bandit_high=$HIGH_COUNT" >> $GITHUB_OUTPUT
+            echo "bandit_medium=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+            echo "bandit_low=$LOW_COUNT" >> $GITHUB_OUTPUT
+
+            if [ "$HIGH_COUNT" -gt 0 ] || [ "$MEDIUM_COUNT" -gt 0 ]; then
+              echo "❌ Security issues found!"
+              exit 1
+            fi
+          fi
+
+          exit $BANDIT_EXIT
+
+      - name: Run Safety dependency checker
+        id: safety
+        continue-on-error: true
+        run: |
+          echo "🔍 Running Safety dependency checker..."
+          uv run safety check --json -o safety-report.json 2>/dev/null || true
+
+          # Safety 3.7.0 may not output proper JSON, check exit code and output
+          if uv run safety check 2>&1 | grep -q "No known security vulnerabilities found"; then
+            echo "✅ No vulnerabilities found"
+            echo "safety_vulnerabilities=0" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "⚠️  Vulnerabilities detected, check safety-report.json"
+            echo "safety_vulnerabilities=1" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+          retention-days: 30
+
+      - name: Upload Safety report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-security-report
+          path: safety-report.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Check security results
+        if: always()
+        run: |
+          echo "📊 Security Scan Summary:"
+          echo ""
+          echo "Bandit Results:"
+          echo "  - HIGH: ${{ steps.bandit.outputs.bandit_high || 'N/A' }}"
+          echo "  - MEDIUM: ${{ steps.bandit.outputs.bandit_medium || 'N/A' }}"
+          echo "  - LOW: ${{ steps.bandit.outputs.bandit_low || 'N/A' }}"
+          echo ""
+          echo "Safety Results:"
+          echo "  - Vulnerabilities: ${{ steps.safety.outputs.safety_vulnerabilities || 'N/A' }}"
+          echo ""
+
+          # Fail the workflow if either check failed
+          if [ "${{ steps.bandit.outcome }}" != "success" ] || [ "${{ steps.safety.outcome }}" != "success" ]; then
+            echo "❌ Security checks failed!"
+            exit 1
+          else
+            echo "✅ All security checks passed!"
+          fi
