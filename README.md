@@ -12,13 +12,15 @@
   <a href="./README_CN.md">中文文档</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#why-speekium">Why Speekium</a> •
-  <a href="#roadmap">Roadmap</a>
+  <a href="#roadmap">Roadmap</a> •
+  <a href="./docs/ci_cd_security.md">Security</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform">
   <img src="https://img.shields.io/github/license/kanweiwei/speekium" alt="License">
+  <img src="https://img.shields.io/badge/security-0%20vulnerabilities-brightgreen.svg" alt="Security">
   <img src="https://img.shields.io/github/stars/kanweiwei/speekium?style=social" alt="Stars">
 </p>
 
