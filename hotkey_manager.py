@@ -3,9 +3,9 @@ Speekium 全局快捷键管理器
 支持跨平台全局快捷键监听
 """
 
-import threading
-from typing import Callable, Optional
 import platform
+import threading
+from collections.abc import Callable
 
 
 class HotkeyManager:
@@ -29,7 +29,7 @@ class HotkeyManager:
         # 检测操作系统
         self.is_macos = platform.system() == "Darwin"
 
-    def start(self, on_press: Optional[Callable] = None, on_release: Optional[Callable] = None):
+    def start(self, on_press: Callable | None = None, on_release: Callable | None = None):
         """
         启动全局快捷键监听
 
@@ -84,10 +84,7 @@ class HotkeyManager:
                     print(f"⚠️ 按键释放处理错误: {e}")
 
             # 创建监听器
-            self.listener = keyboard.Listener(
-                on_press=on_key_press,
-                on_release=on_key_release
-            )
+            self.listener = keyboard.Listener(on_press=on_key_press, on_release=on_key_release)
 
             # 启动监听器
             self.listener.start()
@@ -118,9 +115,8 @@ class HotkeyManager:
         # macOS: Cmd + Alt
         # Windows/Linux: Ctrl + Alt
         is_hotkey_active = (
-            (self.cmd_pressed if self.is_macos else self.ctrl_pressed) and
-            self.alt_pressed
-        )
+            self.cmd_pressed if self.is_macos else self.ctrl_pressed
+        ) and self.alt_pressed
 
         if is_hotkey_active and not self.was_triggered and self.on_hotkey_press:
             try:
@@ -141,7 +137,4 @@ class HotkeyManager:
 
     def is_hotkey_active(self) -> bool:
         """检查快捷键是否当前激活"""
-        return (
-            (self.cmd_pressed if self.is_macos else self.ctrl_pressed) and
-            self.alt_pressed
-        )
+        return (self.cmd_pressed if self.is_macos else self.ctrl_pressed) and self.alt_pressed

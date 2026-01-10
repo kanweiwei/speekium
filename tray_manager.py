@@ -3,9 +3,9 @@ Speekium 系统托盘管理器
 管理系统托盘图标和菜单
 """
 
-import os
 import threading
-from typing import Callable, Optional
+from collections.abc import Callable
+
 from PIL import Image, ImageDraw
 
 
@@ -18,19 +18,19 @@ class TrayManager:
         self._lock = threading.Lock()
 
         # 回调函数
-        self.on_show_window: Optional[Callable] = None
-        self.on_toggle_mode: Optional[Callable] = None
-        self.on_start_listening: Optional[Callable] = None
-        self.on_stop_listening: Optional[Callable] = None
-        self.on_clear_history: Optional[Callable] = None
-        self.on_open_settings: Optional[Callable] = None
-        self.on_quit: Optional[Callable] = None
+        self.on_show_window: Callable | None = None
+        self.on_toggle_mode: Callable | None = None
+        self.on_start_listening: Callable | None = None
+        self.on_stop_listening: Callable | None = None
+        self.on_clear_history: Callable | None = None
+        self.on_open_settings: Callable | None = None
+        self.on_quit: Callable | None = None
 
         # 状态
         self.current_mode = "continuous"  # "push_to_talk" or "continuous"
         self.is_listening = False
 
-    def create_icon_image(self, color='blue', with_indicator=False):
+    def create_icon_image(self, color="blue", with_indicator=False):
         """
         创建托盘图标图像
 
@@ -40,12 +40,12 @@ class TrayManager:
         """
         # 创建64x64的图标
         size = 64
-        image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
 
         # 绘制麦克风图标
         # 主体
-        mic_color = (59, 130, 246, 255) if color == 'blue' else (96, 165, 250, 255)
+        mic_color = (59, 130, 246, 255) if color == "blue" else (96, 165, 250, 255)
         draw.ellipse([20, 15, 44, 40], fill=mic_color)  # 麦克风头部
         draw.rectangle([28, 35, 36, 48], fill=mic_color)  # 麦克风杆
 
@@ -60,13 +60,13 @@ class TrayManager:
 
     def start(
         self,
-        on_show_window: Optional[Callable] = None,
-        on_toggle_mode: Optional[Callable] = None,
-        on_start_listening: Optional[Callable] = None,
-        on_stop_listening: Optional[Callable] = None,
-        on_clear_history: Optional[Callable] = None,
-        on_open_settings: Optional[Callable] = None,
-        on_quit: Optional[Callable] = None,
+        on_show_window: Callable | None = None,
+        on_toggle_mode: Callable | None = None,
+        on_start_listening: Callable | None = None,
+        on_stop_listening: Callable | None = None,
+        on_clear_history: Callable | None = None,
+        on_open_settings: Callable | None = None,
+        on_quit: Callable | None = None,
     ):
         """
         启动系统托盘
@@ -102,47 +102,44 @@ class TrayManager:
             # 创建菜单
             menu = Menu(
                 MenuItem(
-                    '📱 显示主窗口',
+                    "📱 显示主窗口",
                     self._handle_show_window,
-                    default=True  # 左键默认动作
+                    default=True,  # 左键默认动作
                 ),
                 Menu.SEPARATOR,
                 MenuItem(
-                    '🎤 按键录音模式',
+                    "🎤 按键录音模式",
                     self._handle_push_to_talk_mode,
-                    checked=lambda item: self.current_mode == 'push_to_talk',
-                    radio=True
+                    checked=lambda item: self.current_mode == "push_to_talk",
+                    radio=True,
                 ),
                 MenuItem(
-                    '💬 自由对话模式',
+                    "💬 自由对话模式",
                     self._handle_continuous_mode,
-                    checked=lambda item: self.current_mode == 'continuous',
-                    radio=True
+                    checked=lambda item: self.current_mode == "continuous",
+                    radio=True,
                 ),
                 Menu.SEPARATOR,
                 MenuItem(
-                    '▶️ 开始监听',
+                    "▶️ 开始监听",
                     self._handle_start_listening,
-                    enabled=lambda item: not self.is_listening
+                    enabled=lambda item: not self.is_listening,
                 ),
                 MenuItem(
-                    '⏸️ 停止监听',
+                    "⏸️ 停止监听",
                     self._handle_stop_listening,
-                    enabled=lambda item: self.is_listening
+                    enabled=lambda item: self.is_listening,
                 ),
                 Menu.SEPARATOR,
-                MenuItem('🗑️ 清空对话历史', self._handle_clear_history),
-                MenuItem('⚙️ 设置', self._handle_open_settings),
+                MenuItem("🗑️ 清空对话历史", self._handle_clear_history),
+                MenuItem("⚙️ 设置", self._handle_open_settings),
                 Menu.SEPARATOR,
-                MenuItem('❌ 退出应用', self._handle_quit),
+                MenuItem("❌ 退出应用", self._handle_quit),
             )
 
             # 创建托盘图标
             self.icon = Icon(
-                name='Speekium',
-                icon=icon_image,
-                title='Speekium - 智能语音助手',
-                menu=menu
+                name="Speekium", icon=icon_image, title="Speekium - 智能语音助手", menu=menu
             )
 
             # 在新线程中运行（非daemon，保持应用运行）
@@ -199,15 +196,15 @@ class TrayManager:
 
     def _handle_push_to_talk_mode(self, icon, item):
         """切换到按键录音模式"""
-        self.current_mode = 'push_to_talk'
+        self.current_mode = "push_to_talk"
         if self.on_toggle_mode:
-            self.on_toggle_mode('push_to_talk')
+            self.on_toggle_mode("push_to_talk")
 
     def _handle_continuous_mode(self, icon, item):
         """切换到自由对话模式"""
-        self.current_mode = 'continuous'
+        self.current_mode = "continuous"
         if self.on_toggle_mode:
-            self.on_toggle_mode('continuous')
+            self.on_toggle_mode("continuous")
 
     def _handle_start_listening(self, icon, item):
         """开始监听"""

@@ -2,8 +2,6 @@
 """测试脚本：验证各部分是否正常工作"""
 
 import sys
-import asyncio
-from typing import AsyncGenerator
 
 sys.path.append(".")
 
@@ -14,8 +12,8 @@ print("=" * 50)
 # 测试 1：导入模块
 print("\n[1/5] 测试模块导入...")
 try:
-    from speekium import VoiceAssistant
     from config_manager import ConfigManager
+    from speekium import VoiceAssistant
 
     print("✅ speekium 和 config_manager 导入成功")
 except Exception as e:
@@ -26,7 +24,7 @@ except Exception as e:
 print("\n[2/5] 测试配置加载...")
 try:
     config = ConfigManager.load()
-    print(f"✅ 配置加载成功")
+    print("✅ 配置加载成功")
     print(f"   LLM Backend: {config.get('llm_backend', 'ollama')}")
     print(f"   TTS Backend: {config.get('tts_backend', 'edge')}")
 except Exception as e:

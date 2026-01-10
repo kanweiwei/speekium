@@ -2,7 +2,6 @@
 """逐步测试各个模块"""
 
 import sys
-import asyncio
 
 print("=" * 60)
 print("逐步测试 Speekium 各个模块")
@@ -30,7 +29,7 @@ except Exception as e:
 print("\n[2/6] 测试配置加载...")
 try:
     config = ConfigManager.load()
-    print(f"✅ 配置加载成功")
+    print("✅ 配置加载成功")
     print(f"   LLM Backend: {config.get('llm_backend', 'ollama')}")
     print(f"   TTS Backend: {config.get('tts_backend', 'edge')}")
 except Exception as e:

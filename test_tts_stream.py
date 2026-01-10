@@ -4,10 +4,11 @@
 直接测试守护进程的 chat_tts_stream 命令
 """
 
-import subprocess
 import json
+import subprocess
 import sys
 import time
+
 
 def test_tts_stream():
     """测试 TTS 流式对话"""
@@ -23,7 +24,7 @@ def test_tts_stream():
         stdout=subprocess.PIPE,
         stderr=sys.stderr,  # 将 stderr 输出到控制台
         text=True,
-        bufsize=1
+        bufsize=1,
     )
 
     # 等待初始化
@@ -52,10 +53,7 @@ def test_tts_stream():
 
     request = {
         "command": "chat_tts_stream",
-        "args": {
-            "text": "用三句话介绍一下量子计算",
-            "auto_play": True
-        }
+        "args": {"text": "用三句话介绍一下量子计算", "auto_play": True},
     }
 
     daemon.stdin.write(json.dumps(request) + "\n")
@@ -109,6 +107,7 @@ def test_tts_stream():
     # 验证音频文件
     print("\n4️⃣ 验证音频文件...")
     import os
+
     for i, audio in enumerate(audio_chunks, 1):
         if os.path.exists(audio["path"]):
             size = os.path.getsize(audio["path"])
@@ -139,5 +138,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\n❌ 测试失败: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

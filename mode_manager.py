@@ -5,15 +5,16 @@ Speekium 录音模式管理器
 2. 自由对话模式 (Continuous): 自动VAD检测，持续监听
 """
 
-from enum import Enum
-from typing import Optional, Callable
 import threading
+from collections.abc import Callable
+from enum import Enum
 
 
 class RecordingMode(Enum):
     """录音模式枚举"""
-    PUSH_TO_TALK = "push_to_talk"      # 按键录音模式
-    CONTINUOUS = "continuous"           # 自由对话模式
+
+    PUSH_TO_TALK = "push_to_talk"  # 按键录音模式
+    CONTINUOUS = "continuous"  # 自由对话模式
 
 
 class ModeManager:
@@ -110,5 +111,5 @@ class ModeManager:
         return {
             "mode": self.current_mode.value,
             "is_recording": self.is_recording if self.is_push_to_talk() else False,
-            "mode_name": "按键录音" if self.is_push_to_talk() else "自由对话"
+            "mode_name": "按键录音" if self.is_push_to_talk() else "自由对话",
         }

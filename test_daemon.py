@@ -9,20 +9,18 @@
 4. 性能测试
 """
 
-import subprocess
 import json
-import time
+import subprocess
 import sys
+import time
+
 
 def send_command(process, command, args):
     """向守护进程发送命令并接收响应"""
-    request = {
-        "command": command,
-        "args": args
-    }
+    request = {"command": command, "args": args}
 
     # 发送命令
-    process.stdin.write(json.dumps(request) + '\n')
+    process.stdin.write(json.dumps(request) + "\n")
     process.stdin.flush()
 
     # 读取响应
@@ -41,12 +39,12 @@ def test_daemon():
     # 启动守护进程
     print("\n1️⃣ 启动守护进程...")
     process = subprocess.Popen(
-        ['python3', 'worker_daemon.py', 'daemon'],
+        ["python3", "worker_daemon.py", "daemon"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        bufsize=1
+        bufsize=1,
     )
 
     # 等待初始化完成
@@ -57,8 +55,8 @@ def test_daemon():
         # 测试 1: 健康检查
         print("\n2️⃣ 测试健康检查...")
         result = send_command(process, "health", {})
-        if result and result['success']:
-            print(f"   ✅ 健康检查通过")
+        if result and result["success"]:
+            print("   ✅ 健康检查通过")
             print(f"   📊 状态: {result.get('status')}")
             print(f"   📈 命令计数: {result.get('command_count')}")
             print(f"   🎯 模型状态: {result.get('models_loaded')}")
@@ -72,9 +70,9 @@ def test_daemon():
         result = send_command(process, "config", {})
         elapsed = time.time() - start_time
 
-        if result and result['success']:
-            print(f"   ✅ 配置加载成功 ({elapsed*1000:.1f}ms)")
-            config = result.get('config', {})
+        if result and result["success"]:
+            print(f"   ✅ 配置加载成功 ({elapsed * 1000:.1f}ms)")
+            config = result.get("config", {})
             print(f"   📦 LLM 后端: {config.get('llm_backend')}")
             print(f"   📦 TTS 后端: {config.get('tts_backend')}")
         else:
@@ -83,13 +81,11 @@ def test_daemon():
         # 测试 3: TTS 生成
         print("\n4️⃣ 测试 TTS 生成...")
         start_time = time.time()
-        result = send_command(process, "tts", {
-            "text": "你好，这是守护进程测试"
-        })
+        result = send_command(process, "tts", {"text": "你好，这是守护进程测试"})
         elapsed = time.time() - start_time
 
-        if result and result['success']:
-            print(f"   ✅ TTS 生成成功 ({elapsed*1000:.1f}ms)")
+        if result and result["success"]:
+            print(f"   ✅ TTS 生成成功 ({elapsed * 1000:.1f}ms)")
             print(f"   🔊 音频文件: {result.get('audio_path')}")
         else:
             print(f"   ❌ TTS 失败: {result}")
@@ -97,14 +93,12 @@ def test_daemon():
         # 测试 4: LLM 对话（可选，需要 Ollama 运行）
         print("\n5️⃣ 测试 LLM 对话...")
         start_time = time.time()
-        result = send_command(process, "chat", {
-            "text": "你好"
-        })
+        result = send_command(process, "chat", {"text": "你好"})
         elapsed = time.time() - start_time
 
-        if result and result['success']:
+        if result and result["success"]:
             print(f"   ✅ LLM 响应成功 ({elapsed:.2f}s)")
-            response = result.get('content', '')
+            response = result.get("content", "")
             print(f"   💬 响应: {response[:50]}...")
         else:
             print(f"   ⚠️ LLM 失败（可能 Ollama 未启动）: {result.get('error')}")
@@ -127,21 +121,21 @@ def test_daemon():
         print(f"   🐌 最慢: {max_time:.1f}ms")
 
         if avg_time < 100:
-            print(f"   ✅ 性能优秀！（目标 <100ms）")
+            print("   ✅ 性能优秀！（目标 <100ms）")
         elif avg_time < 500:
-            print(f"   ⚠️ 性能一般（目标 <100ms）")
+            print("   ⚠️ 性能一般（目标 <100ms）")
         else:
-            print(f"   ❌ 性能较差（目标 <100ms）")
+            print("   ❌ 性能较差（目标 <100ms）")
 
         # 测试 6: 退出命令
         print("\n7️⃣ 测试退出命令...")
         result = send_command(process, "exit", {})
-        if result and result['success']:
-            print(f"   ✅ 退出命令发送成功")
+        if result and result["success"]:
+            print("   ✅ 退出命令发送成功")
 
         # 等待进程退出
         process.wait(timeout=5)
-        print(f"   ✅ 守护进程已正常退出")
+        print("   ✅ 守护进程已正常退出")
 
         print("\n" + "=" * 60)
         print("✅ 所有测试通过！")
@@ -152,6 +146,7 @@ def test_daemon():
     except Exception as e:
         print(f"\n❌ 测试失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

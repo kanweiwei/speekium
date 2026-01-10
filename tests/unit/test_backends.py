@@ -7,15 +7,16 @@ LLM Backend 单元测试
 3. 对话历史管理
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+
 from backends import (
-    validate_input,
-    create_backend,
+    MAX_INPUT_LENGTH,
     ClaudeBackend,
     OllamaBackend,
-    MAX_INPUT_LENGTH,
-    BLOCKED_PATTERNS,
+    create_backend,
+    validate_input,
 )
 
 
@@ -71,38 +72,38 @@ class TestInputValidation:
 
     def test_reject_javascript_url(self):
         """测试拒绝 JavaScript URL"""
-        text = 'javascript:alert(1)'
+        text = "javascript:alert(1)"
         with pytest.raises(ValueError, match="blocked pattern"):
             validate_input(text)
 
     def test_reject_javascript_url_uppercase(self):
         """测试拒绝大写 JavaScript URL"""
-        text = 'JAVASCRIPT:alert(1)'
+        text = "JAVASCRIPT:alert(1)"
         with pytest.raises(ValueError, match="blocked pattern"):
             validate_input(text)
 
     def test_reject_null_byte(self):
         """测试拒绝空字节注入"""
-        text = 'test\x00injection'
+        text = "test\x00injection"
         with pytest.raises(ValueError, match="blocked pattern"):
             validate_input(text)
 
     def test_filter_control_characters(self):
         """测试过滤控制字符"""
-        text = 'hello\x01\x02\x03world'
+        text = "hello\x01\x02\x03world"
         result = validate_input(text)
         # 控制字符应该被移除
-        assert '\x01' not in result
-        assert '\x02' not in result
-        assert '\x03' not in result
-        assert result == 'helloworld'
+        assert "\x01" not in result
+        assert "\x02" not in result
+        assert "\x03" not in result
+        assert result == "helloworld"
 
     def test_preserve_allowed_control_characters(self):
         """测试保留允许的控制字符（换行、制表符）"""
-        text = 'line1\nline2\ttab'
+        text = "line1\nline2\ttab"
         result = validate_input(text)
-        assert '\n' in result
-        assert '\t' in result
+        assert "\n" in result
+        assert "\t" in result
 
     def test_reject_non_string_input(self):
         """测试拒绝非字符串输入"""
@@ -171,16 +172,13 @@ class TestClaudeBackend:
         backend = ClaudeBackend(system_prompt=custom_prompt)
         assert backend.system_prompt == custom_prompt
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_claude_chat_validates_input(self, mock_run):
         """测试 Claude chat 方法调用输入验证"""
         backend = ClaudeBackend("You are a helpful assistant")
 
         # 模拟成功的 subprocess 调用
-        mock_run.return_value = MagicMock(
-            stdout="Test response",
-            returncode=0
-        )
+        mock_run.return_value = MagicMock(stdout="Test response", returncode=0)
 
         # 测试正常输入
         result = backend.chat("Hello")
@@ -190,7 +188,7 @@ class TestClaudeBackend:
         result = backend.chat("   ")
         assert "Error" in result or "validation" in result.lower()
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_claude_chat_handles_xss(self, mock_run):
         """测试 Claude chat 拒绝 XSS 输入"""
         backend = ClaudeBackend("You are a helpful assistant")
@@ -225,16 +223,14 @@ class TestOllamaBackend:
         backend = OllamaBackend("You are a helpful assistant", model="custom-model")
         assert backend.model == "custom-model"
 
-    @patch('httpx.post')
+    @patch("httpx.post")
     def test_ollama_chat_validates_input(self, mock_post):
         """测试 Ollama chat 方法调用输入验证"""
         backend = OllamaBackend("You are a helpful assistant")
 
         # 模拟成功的 HTTP 响应
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "message": {"content": "Test response"}
-        }
+        mock_response.json.return_value = {"message": {"content": "Test response"}}
         mock_post.return_value = mock_response
 
         # 测试正常输入
@@ -245,7 +241,7 @@ class TestOllamaBackend:
         result = backend.chat("   ")
         assert "Error" in result or "validation" in result.lower()
 
-    @patch('httpx.post')
+    @patch("httpx.post")
     def test_ollama_chat_handles_xss(self, mock_post):
         """测试 Ollama chat 拒绝 XSS 输入"""
         backend = OllamaBackend("You are a helpful assistant")
@@ -265,17 +261,17 @@ class TestOllamaBackend:
 class TestSecurityIntegration:
     """集成安全测试 - 验证 P0 修复在实际使用中生效"""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_claude_end_to_end_security(self, mock_run):
         """端到端测试 Claude 后端的安全性"""
         backend = ClaudeBackend("You are a helpful assistant")
 
         # 测试各种攻击向量
         attack_vectors = [
-            '<script>alert(1)</script>',
-            'javascript:alert(1)',
-            'test\x00injection',
-            'a' * 10001,  # 过长输入
+            "<script>alert(1)</script>",
+            "javascript:alert(1)",
+            "test\x00injection",
+            "a" * 10001,  # 过长输入
         ]
 
         for attack in attack_vectors:
@@ -284,17 +280,17 @@ class TestSecurityIntegration:
             # 确保没有调用实际的后端
             assert not mock_run.called, f"Backend was called with: {attack}"
 
-    @patch('httpx.post')
+    @patch("httpx.post")
     def test_ollama_end_to_end_security(self, mock_post):
         """端到端测试 Ollama 后端的安全性"""
         backend = OllamaBackend("You are a helpful assistant")
 
         # 测试各种攻击向量
         attack_vectors = [
-            '<script>alert(1)</script>',
-            'javascript:alert(1)',
-            'test\x00injection',
-            'a' * 10001,  # 过长输入
+            "<script>alert(1)</script>",
+            "javascript:alert(1)",
+            "test\x00injection",
+            "a" * 10001,  # 过长输入
         ]
 
         for attack in attack_vectors:

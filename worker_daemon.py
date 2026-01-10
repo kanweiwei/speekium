@@ -17,19 +17,19 @@ Speekium Daemon Worker - 守护进程模式
   {"command": "exit", "args": {}}
 """
 
-import sys
-import json
 import asyncio
-import traceback
-from typing import Optional
-import sounddevice as sd
-import numpy as np
+import json
 import resource  # NEW: For resource limits
 import signal  # NEW: For signal handling
+import sys
+import traceback
+
+import sounddevice as sd
 
 # 确保输出立即刷新
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
+
 
 # ===== Security: Resource Limits =====
 def set_resource_limits():
@@ -44,37 +44,27 @@ def set_resource_limits():
     """
     try:
         # Memory limit: 2GB soft, 4GB hard
-        resource.setrlimit(
-            resource.RLIMIT_AS,
-            (2 * 1024 * 1024 * 1024, 4 * 1024 * 1024 * 1024)
-        )
+        resource.setrlimit(resource.RLIMIT_AS, (2 * 1024 * 1024 * 1024, 4 * 1024 * 1024 * 1024))
 
         # CPU time limit: 600 seconds (10 minutes)
-        resource.setrlimit(
-            resource.RLIMIT_CPU,
-            (600, 600)
-        )
+        resource.setrlimit(resource.RLIMIT_CPU, (600, 600))
 
         # File size limit: 1GB
-        resource.setrlimit(
-            resource.RLIMIT_FSIZE,
-            (1024 * 1024 * 1024, 1024 * 1024 * 1024)
-        )
+        resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024 * 1024, 1024 * 1024 * 1024))
 
         # File descriptor limit: 1024
-        resource.setrlimit(
-            resource.RLIMIT_NOFILE,
-            (1024, 1024)
-        )
+        resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
 
         print("[Security] ✅ Resource limits set", file=sys.stderr, flush=True)
     except Exception as e:
         print(f"[Security] ⚠️ Failed to set resource limits: {e}", file=sys.stderr, flush=True)
 
+
 def handle_timeout(signum, frame):
     """Handle CPU timeout signal"""
     print("[Security] ❌ CPU time limit exceeded, shutting down", file=sys.stderr, flush=True)
     sys.exit(1)
+
 
 # Set up signal handler for CPU timeout
 signal.signal(signal.SIGXCPU, handle_timeout)
@@ -133,12 +123,7 @@ class SpeekiumDaemon:
                 audio = self.assistant.record_with_vad()
             else:
                 # 按键录音模式
-                audio = sd.rec(
-                    int(duration * 16000),
-                    samplerate=16000,
-                    channels=1,
-                    dtype='float32'
-                )
+                audio = sd.rec(int(duration * 16000), samplerate=16000, channels=1, dtype="float32")
                 sd.wait()
                 audio = audio[:, 0]  # 转为 1D 数组
 
@@ -150,11 +135,7 @@ class SpeekiumDaemon:
 
             self._log(f"✅ 识别完成: '{text}' ({language})")
 
-            return {
-                "success": True,
-                "text": text,
-                "language": language
-            }
+            return {"success": True, "text": text, "language": language}
 
         except Exception as e:
             self._log(f"❌ 录音失败: {e}")
@@ -171,10 +152,7 @@ class SpeekiumDaemon:
 
             self._log(f"✅ LLM 响应: {response[:50]}...")
 
-            return {
-                "success": True,
-                "content": response
-            }
+            return {"success": True, "content": response}
 
         except Exception as e:
             self._log(f"❌ LLM 对话失败: {e}")
@@ -195,13 +173,10 @@ class SpeekiumDaemon:
             backend = self.assistant.load_llm()
 
             # 检查是否支持流式
-            if not hasattr(backend, 'chat_stream'):
+            if not hasattr(backend, "chat_stream"):
                 # 不支持流式，返回完整响应
                 response = backend.chat(text)
-                print(json.dumps({
-                    "type": "chunk",
-                    "content": response
-                }), flush=True)
+                print(json.dumps({"type": "chunk", "content": response}), flush=True)
                 print(json.dumps({"type": "done"}), flush=True)
                 return
 
@@ -209,10 +184,7 @@ class SpeekiumDaemon:
             async for sentence in backend.chat_stream(text):
                 if sentence:
                     self._log(f"📤 流式输出: {sentence[:30]}...")
-                    print(json.dumps({
-                        "type": "chunk",
-                        "content": sentence
-                    }), flush=True)
+                    print(json.dumps({"type": "chunk", "content": sentence}), flush=True)
 
             # 发送完成标记
             print(json.dumps({"type": "done"}), flush=True)
@@ -221,10 +193,7 @@ class SpeekiumDaemon:
         except Exception as e:
             self._log(f"❌ 流式对话失败: {e}")
             traceback.print_exc(file=sys.stderr)
-            print(json.dumps({
-                "type": "error",
-                "error": str(e)
-            }), flush=True)
+            print(json.dumps({"type": "error", "error": str(e)}), flush=True)
 
     async def handle_chat_tts_stream(self, text: str, auto_play: bool = True) -> None:
         """处理 LLM 流式对话 + TTS 流式生成命令
@@ -241,22 +210,20 @@ class SpeekiumDaemon:
             backend = self.assistant.load_llm()
 
             # 检查是否支持流式
-            if not hasattr(backend, 'chat_stream'):
+            if not hasattr(backend, "chat_stream"):
                 # 不支持流式，降级处理
                 response = backend.chat(text)
-                print(json.dumps({
-                    "type": "text_chunk",
-                    "content": response
-                }), flush=True)
+                print(json.dumps({"type": "text_chunk", "content": response}), flush=True)
 
                 # 生成 TTS
                 audio_path = await self.assistant.generate_audio(response)
                 if audio_path:
-                    print(json.dumps({
-                        "type": "audio_chunk",
-                        "audio_path": audio_path,
-                        "text": response
-                    }), flush=True)
+                    print(
+                        json.dumps(
+                            {"type": "audio_chunk", "audio_path": audio_path, "text": response}
+                        ),
+                        flush=True,
+                    )
 
                 print(json.dumps({"type": "done"}), flush=True)
                 return
@@ -267,21 +234,23 @@ class SpeekiumDaemon:
                     self._log(f"📤 流式输出: {sentence[:30]}...")
 
                     # 发送文本片段
-                    print(json.dumps({
-                        "type": "text_chunk",
-                        "content": sentence
-                    }), flush=True)
+                    print(json.dumps({"type": "text_chunk", "content": sentence}), flush=True)
 
                     # 立即生成 TTS
                     try:
                         audio_path = await self.assistant.generate_audio(sentence)
                         if audio_path:
                             self._log(f"🔊 TTS 完成: {audio_path}")
-                            print(json.dumps({
-                                "type": "audio_chunk",
-                                "audio_path": audio_path,
-                                "text": sentence
-                            }), flush=True)
+                            print(
+                                json.dumps(
+                                    {
+                                        "type": "audio_chunk",
+                                        "audio_path": audio_path,
+                                        "text": sentence,
+                                    }
+                                ),
+                                flush=True,
+                            )
                     except Exception as tts_error:
                         self._log(f"⚠️ TTS 生成失败: {tts_error}")
                         # TTS 失败不影响流式对话继续
@@ -293,12 +262,9 @@ class SpeekiumDaemon:
         except Exception as e:
             self._log(f"❌ 流式对话+TTS 失败: {e}")
             traceback.print_exc(file=sys.stderr)
-            print(json.dumps({
-                "type": "error",
-                "error": str(e)
-            }), flush=True)
+            print(json.dumps({"type": "error", "error": str(e)}), flush=True)
 
-    async def handle_tts(self, text: str, language: Optional[str] = None) -> dict:
+    async def handle_tts(self, text: str, language: str | None = None) -> dict:
         """处理 TTS 生成命令"""
         try:
             self._log(f"🔊 TTS 生成: {text[:50]}...")
@@ -307,10 +273,7 @@ class SpeekiumDaemon:
 
             if audio_path:
                 self._log(f"✅ TTS 完成: {audio_path}")
-                return {
-                    "success": True,
-                    "audio_path": audio_path
-                }
+                return {"success": True, "audio_path": audio_path}
             else:
                 return {"success": False, "error": "Failed to generate audio"}
 
@@ -323,6 +286,7 @@ class SpeekiumDaemon:
         """处理配置获取命令"""
         try:
             from config_manager import ConfigManager
+
             config = ConfigManager.load()
             return {"success": True, "config": config}
         except Exception as e:
@@ -338,8 +302,8 @@ class SpeekiumDaemon:
             "models_loaded": {
                 "vad": self.assistant.vad_model is not None,
                 "asr": self.assistant.asr_model is not None,
-                "llm": self.assistant.llm_backend is not None
-            }
+                "llm": self.assistant.llm_backend is not None,
+            },
         }
 
     async def handle_command(self, command: str, args: dict) -> dict:
@@ -359,16 +323,10 @@ class SpeekiumDaemon:
             return None  # 表示已处理，但无返回值
         elif command == "chat_tts_stream":
             # 流式对话 + TTS：直接输出到 stdout，不返回 dict
-            await self.handle_chat_tts_stream(
-                args.get("text", ""),
-                args.get("auto_play", True)
-            )
+            await self.handle_chat_tts_stream(args.get("text", ""), args.get("auto_play", True))
             return None
         elif command == "tts":
-            return await self.handle_tts(
-                args.get("text", ""),
-                args.get("language")
-            )
+            return await self.handle_tts(args.get("text", ""), args.get("language"))
         elif command == "config":
             return await self.handle_config()
         elif command == "health":
@@ -378,10 +336,7 @@ class SpeekiumDaemon:
             self.running = False
             return {"success": True, "message": "Daemon shutting down"}
         else:
-            return {
-                "success": False,
-                "error": f"Unknown command: {command}"
-            }
+            return {"success": False, "error": f"Unknown command: {command}"}
 
     async def run_daemon(self):
         """守护进程主循环"""
@@ -427,19 +382,13 @@ class SpeekiumDaemon:
 
                 except json.JSONDecodeError as e:
                     self._log(f"⚠️ JSON 解析错误: {e}")
-                    error_result = {
-                        "success": False,
-                        "error": f"Invalid JSON: {str(e)}"
-                    }
+                    error_result = {"success": False, "error": f"Invalid JSON: {str(e)}"}
                     print(json.dumps(error_result), flush=True)
 
             except Exception as e:
                 self._log(f"❌ 主循环错误: {e}")
                 traceback.print_exc(file=sys.stderr)
-                error_result = {
-                    "success": False,
-                    "error": f"Internal error: {str(e)}"
-                }
+                error_result = {"success": False, "error": f"Internal error: {str(e)}"}
                 print(json.dumps(error_result), flush=True)
 
         self._log("👋 守护进程正常退出")
