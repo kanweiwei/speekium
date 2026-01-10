@@ -66,7 +66,7 @@ impl PythonDaemon {
         println!("🚀 启动 Python 守护进程...");
 
         let mut child = Command::new("python3")
-            .arg("../worker_daemon.py")
+            .arg("./worker_daemon.py")
             .arg("daemon")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
