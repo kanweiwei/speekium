@@ -1,0 +1,42 @@
+# Bandit Configuration
+# Python security linter configuration
+
+[bandit]
+# Exclude test files and build directories
+exclude_dirs = [
+    '/tests',
+    '/test',
+    '/.venv',
+    '/venv',
+    '/build',
+    '/dist',
+    '/.pytest_cache',
+    '/.ruff_cache',
+    '/node_modules',
+    '/tauri-prototype',
+    '/__pycache__',
+]
+
+# Test IDs to skip (known false positives or intentional patterns)
+skips = [
+    # B101: assert_used - We use asserts in tests
+    'B101',
+    # B601: paramiko_calls - Not using paramiko
+    'B601',
+    # B602: shell_injection_subprocess - We validate inputs
+    'B602',
+]
+
+# Security issues to exclude (none for now - we want full coverage)
+exclude = []
+
+# Test IDs to include (all by default)
+tests = []
+
+# Confidence level filter (HIGH, MEDIUM, LOW)
+# We report all levels but can focus on HIGH/MEDIUM
+level = 'LOW'
+
+# Severity level filter (HIGH, MEDIUM, LOW)
+# Only fail on HIGH or MEDIUM severity issues
+severity = 'LOW'

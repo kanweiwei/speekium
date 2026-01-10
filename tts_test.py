@@ -7,8 +7,9 @@ import edge_tts
 async def speak(text, voice="zh-CN-XiaoxiaoNeural"):
     """使用 Edge TTS 朗读文本"""
     communicate = edge_tts.Communicate(text, voice)
-    await communicate.save("/tmp/speech.mp3")
-    subprocess.run(["afplay", "/tmp/speech.mp3"])  # macOS 自带播放器
+    # nosec B108 - Test file uses /tmp for simplicity
+    await communicate.save("/tmp/speech.mp3")  # nosec B108
+    subprocess.run(["afplay", "/tmp/speech.mp3"])  # macOS 自带播放器  # nosec B108
 
 
 async def list_voices():

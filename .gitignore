@@ -36,3 +36,5 @@ Thumbs.db
 *.tmp
 *.mp3
 *.wav
+bandit-report.json
+safety-report.json

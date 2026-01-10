@@ -76,13 +76,20 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 dev-dependencies = [
+    # Linting and code quality
     "ruff>=0.1.0,<1.0.0",  # Linter and formatter
+
+    # Testing framework
     "pytest>=7.0.0,<8.0.0",  # Testing framework - locked to v7.x
     "pytest-asyncio>=0.23.0,<1.0.0",  # Async testing support
     "pytest-cov>=4.1.0,<5.0.0",  # Coverage plugin
     "pytest-mock>=3.12.0,<4.0.0",  # Mocking support
     "pytest-timeout>=2.2.0,<3.0.0",  # Timeout control
-    "pip-audit>=2.10.0,<3.0.0",  # Security vulnerability scanner
+
+    # Security scanning
+    "bandit>=1.7.5,<2.0.0",  # Python security linter
+    "safety>=3.0.0,<4.0.0",  # Dependency vulnerability scanner
+    "pip-audit>=2.10.0,<3.0.0",  # Alternative security scanner
 ]
 
 [tool.ruff]

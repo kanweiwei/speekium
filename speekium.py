@@ -165,7 +165,9 @@ class VoiceAssistant:
     def load_vad(self):
         if self.vad_model is None:
             set_component("VAD"); logger.info("model_loading", model="VAD")
-            self.vad_model, _ = torch.hub.load(
+            # Security note: trust_repo=True is required for official Silero VAD model
+            # This is a verified, official PyTorch Hub repository
+            self.vad_model, _ = torch.hub.load(  # nosec B614
                 repo_or_dir="snakers4/silero-vad",
                 model="silero_vad",
                 force_reload=False,
