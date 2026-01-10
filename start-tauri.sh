@@ -43,9 +43,6 @@ fi
 
 echo "✅ Python 环境已激活"
 
-# 进入 Tauri 目录
-cd tauri-prototype
-
 # 检查 Node 依赖
 echo ""
 echo "3️⃣ 检查 Node 依赖..."
