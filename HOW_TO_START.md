@@ -12,7 +12,7 @@
 由于 Tauri CLI 原生模块需要重新安装，请执行：
 
 ```bash
-cd tauri-prototype
+cd the main project
 rm -rf node_modules package-lock.json
 npm install
 ```
@@ -26,7 +26,7 @@ npm install
 ### 方法 1: 标准启动（推荐）
 
 ```bash
-cd tauri-prototype
+cd the main project
 npm run tauri dev
 ```
 
@@ -40,7 +40,7 @@ npm run tauri dev
 
 ```bash
 # Step 1: 检查依赖
-cd tauri-prototype
+cd the main project
 npm list @tauri-apps/cli
 
 # Step 2: 如果依赖有问题，重新安装
@@ -91,7 +91,7 @@ npm run tauri dev
 
 **解决方案**:
 ```bash
-cd tauri-prototype
+cd the main project
 rm -rf node_modules package-lock.json
 npm install
 ```

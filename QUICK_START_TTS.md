@@ -13,7 +13,7 @@ source .venv/bin/activate
 ollama serve
 
 # 3. 确保已安装所有依赖
-cd tauri-prototype
+cd the main project
 npm install
 ```
 
@@ -153,7 +153,7 @@ python3 test_tts_stream.py
 **A**: 检查守护进程是否正常启动
 ```bash
 # 查看日志
-cd tauri-prototype
+cd the main project
 npm run tauri dev
 # 观察控制台输出，应该看到 "✅ 守护进程就绪"
 ```

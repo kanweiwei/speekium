@@ -66,7 +66,7 @@ speekium/
 ├── worker_daemon.py         # 守护进程主程序 ⭐ 新增
 ├── test_daemon.py          # 守护进程测试脚本 ⭐ 新增
 ├── start-tauri.sh          # 简化启动脚本 ⭐ 新增
-└── tauri-prototype/
+└── the main project/
     └── src-tauri/
         └── src/
             └── lib.rs      # 重写，支持守护进程 ✅ 已更新
@@ -87,7 +87,7 @@ speekium/
 source .venv/bin/activate
 
 # 2. 进入 Tauri 目录
-cd tauri-prototype
+cd the main project
 
 # 3. 启动应用
 npm run tauri dev

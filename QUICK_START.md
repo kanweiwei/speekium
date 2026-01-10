@@ -9,7 +9,7 @@
 ### 开发模式
 
 ```bash
-cd tauri-prototype
+cd the main project
 npm run tauri dev
 ```
 
@@ -18,7 +18,7 @@ npm run tauri dev
 ### 生产构建
 
 ```bash
-cd tauri-prototype
+cd the main project
 npm run tauri:build
 
 # 构建产物:
@@ -149,7 +149,7 @@ ollama list
 nvm use 22.21.1
 
 # 清理重建
-cd tauri-prototype
+cd the main project
 rm -rf node_modules dist
 npm install
 ```

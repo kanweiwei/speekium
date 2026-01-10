@@ -2,7 +2,7 @@
 
 ## Created Files
 
-### 1. `tauri-prototype/src-python/audio_recorder.py`
+### 1. `the main project/src-python/audio_recorder.py`
 Complete audio recording module with non-blocking VAD and ASR support.
 
 **Key Features:**
@@ -27,12 +27,12 @@ Complete audio recording module with non-blocking VAD and ASR support.
 - `record_with_interruption_async()`: Multi-segment recording
 - `shutdown()`: Cleanup resources
 
-### 2. `tauri-prototype/src-python/__init__.py`
+### 2. `the main project/src-python/__init__.py`
 Package initialization file for Python module imports.
 
 ## Updated Files
 
-### `tauri-prototype/backend.py`
+### `the main project/backend.py`
 Integrated AudioRecorder into PyTauri backend.
 
 **Changes:**
@@ -96,7 +96,7 @@ All VAD/ASR configuration is in `audio_recorder.py`:
 To test the new recording functionality:
 
 ```bash
-cd tauri-prototype
+cd the main project
 npm run tauri dev
 ```
 

@@ -2,7 +2,7 @@
 
 ## Created Files
 
-### 1. `tauri-prototype/src-python/tts_engine.py`
+### 1. `the main project/src-python/tts_engine.py`
 Complete TTS engine module with async support for Edge and Piper backends.
 
 **Key Features:**
@@ -30,7 +30,7 @@ Complete TTS engine module with async support for Edge and Piper backends.
 
 ## Updated Files
 
-### `tauri-prototype/backend.py`
+### `the main project/backend.py`
 Integrated TTSEngine into PyTauri backend.
 
 **Changes:**
@@ -78,7 +78,7 @@ async def play_tts(audio_base64: str, audio_format: str, app_handle: AppHandle) 
     """
 ```
 
-### `tauri-prototype/src/useTauriAPI.ts`
+### `the main project/src/useTauriAPI.ts`
 Added TTS API functions for frontend integration.
 
 **Changes:**
@@ -183,7 +183,7 @@ Config can also be overridden at runtime via `config.json`:
 To test the new TTS functionality:
 
 ```bash
-cd tauri-prototype
+cd the main project
 npm run tauri dev
 ```
 
