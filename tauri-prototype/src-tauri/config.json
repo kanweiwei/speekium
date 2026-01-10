@@ -1,0 +1,9 @@
+{
+  "llm_backend": "ollama",
+  "ollama_model": "qwen2.5:1.5b",
+  "ollama_base_url": "http://localhost:11434",
+  "tts_backend": "edge",
+  "tts_rate": "+0%",
+  "vad_threshold": 0.7,
+  "max_history": 10
+}

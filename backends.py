@@ -184,15 +184,30 @@ class OllamaBackend(LLMBackend):
 
             messages = self._build_messages(message)
 
+            # Debug: Print request data
+            print(f"[DEBUG] Sending to Ollama: {len(messages)} messages", flush=True)
+            for i, msg in enumerate(messages):
+                print(f"[DEBUG] Message {i}: {msg}", flush=True)
+
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False
+            }
+
+            print(f"[DEBUG] Full payload: {json.dumps(payload, ensure_ascii=False, indent=2)}", flush=True)
+
             response = httpx.post(
                 f"{self.base_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "stream": False
-                },
+                json=payload,
                 timeout=120
             )
+
+            # Debug: Print response details
+            print(f"[DEBUG] Response status: {response.status_code}", flush=True)
+            if response.status_code != 200:
+                print(f"[DEBUG] Response body: {response.text}", flush=True)
+
             response.raise_for_status()
             result = response.json()
             content = result.get("message", {}).get("content", "")
@@ -204,6 +219,9 @@ class OllamaBackend(LLMBackend):
 
             return content
         except Exception as e:
+            print(f"[ERROR] Ollama API error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             return f"Error: {e}"
 
     async def chat_stream(self, message: str) -> AsyncIterator[str]:

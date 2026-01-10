@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""
+Speekium Backend - Sidecar for Tauri Application
+This script is bundled with the Tauri application and started as a sidecar.
+"""
+
+import sys
+import os
+import subprocess
+from pathlib import Path
+
+# Get the directory of this script
+script_dir = Path(__file__).parent
+backend_dir = script_dir.parent.parent.parent
+
+# Add the parent directory to Python path
+sys.path.insert(0, str(backend_dir))
+
+# Change to the backend directory
+os.chdir(backend_dir)
+
+# Import and start the backend server
+from backend_server import main
+
+if __name__ == "__main__":
+    main()

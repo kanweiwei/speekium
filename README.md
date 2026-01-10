@@ -24,6 +24,25 @@
 
 ---
 
+> **🎉 NEW: Tauri Desktop App with Advanced Features!**
+>
+> A modern desktop application with **daemon mode**, **streaming responses**, and **real-time TTS**.
+>
+> **⚡ One-Click Start**: `./start-tauri.sh` (Recommended!)
+>
+> Or manual: `cd tauri-prototype && npm run tauri dev`
+>
+> ### 🚀 Performance Highlights
+> - **18x faster** response time (3.5s → 0.2s after first call)
+> - **10x better perceived speed** (first character in 0.5s vs 5s)
+> - **Edge-to-edge streaming** (LLM + TTS generation while playing)
+>
+> 📖 **Quick Start**: [QUICK_START_TTS.md](./QUICK_START_TTS.md)
+>
+> 📚 **Technical Docs**: [DAEMON_MODE.md](./DAEMON_MODE.md) | [STREAMING_MODE.md](./STREAMING_MODE.md) | [TTS_STREAMING_MODE.md](./TTS_STREAMING_MODE.md)
+
+---
+
 ## Why Speekium?
 
 | Feature | Speekium | Siri/Alexa | ChatGPT Voice |
