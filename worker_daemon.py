@@ -24,10 +24,63 @@ import traceback
 from typing import Optional
 import sounddevice as sd
 import numpy as np
+import resource  # NEW: For resource limits
+import signal  # NEW: For signal handling
 
 # 确保输出立即刷新
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
+
+# ===== Security: Resource Limits =====
+def set_resource_limits():
+    """
+    Set resource limits to prevent resource exhaustion attacks
+
+    Limits:
+    - Memory: 2GB virtual memory (soft), 4GB (hard)
+    - CPU: 600 seconds per process (10 minutes)
+    - File size: 1GB max file size
+    - Open files: 1024 max file descriptors
+    """
+    try:
+        # Memory limit: 2GB soft, 4GB hard
+        resource.setrlimit(
+            resource.RLIMIT_AS,
+            (2 * 1024 * 1024 * 1024, 4 * 1024 * 1024 * 1024)
+        )
+
+        # CPU time limit: 600 seconds (10 minutes)
+        resource.setrlimit(
+            resource.RLIMIT_CPU,
+            (600, 600)
+        )
+
+        # File size limit: 1GB
+        resource.setrlimit(
+            resource.RLIMIT_FSIZE,
+            (1024 * 1024 * 1024, 1024 * 1024 * 1024)
+        )
+
+        # File descriptor limit: 1024
+        resource.setrlimit(
+            resource.RLIMIT_NOFILE,
+            (1024, 1024)
+        )
+
+        print("[Security] ✅ Resource limits set", file=sys.stderr, flush=True)
+    except Exception as e:
+        print(f"[Security] ⚠️ Failed to set resource limits: {e}", file=sys.stderr, flush=True)
+
+def handle_timeout(signum, frame):
+    """Handle CPU timeout signal"""
+    print("[Security] ❌ CPU time limit exceeded, shutting down", file=sys.stderr, flush=True)
+    sys.exit(1)
+
+# Set up signal handler for CPU timeout
+signal.signal(signal.SIGXCPU, handle_timeout)
+
+# Apply resource limits
+set_resource_limits()
 
 
 class SpeekiumDaemon:

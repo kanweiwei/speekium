@@ -13,8 +13,11 @@ import os
 import re
 import platform
 import time
+import stat
+import atexit
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
+from typing import List
 import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write as write_wav
@@ -23,6 +26,52 @@ import torch
 
 from backends import create_backend
 from mode_manager import ModeManager, RecordingMode
+
+
+# ===== Security: Temporary File Management =====
+_temp_files: List[str] = []
+
+
+def create_secure_temp_file(suffix: str = ".tmp") -> str:
+    """
+    Create a temporary file with secure permissions (0600 - owner read/write only)
+
+    Args:
+        suffix: File extension
+
+    Returns:
+        Path to the temporary file
+    """
+    # Create temp file with delete=False (we'll manage cleanup manually)
+    fd, path = tempfile.mkstemp(suffix=suffix)
+
+    # Set secure permissions: 0600 (owner read/write only)
+    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+    # Close the file descriptor
+    os.close(fd)
+
+    # Track for cleanup
+    _temp_files.append(path)
+
+    return path
+
+
+def cleanup_temp_files():
+    """Clean up all temporary files created by this session"""
+    for path in _temp_files:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                print(f"🧹 Cleaned up temp file: {path}", flush=True)
+        except Exception as e:
+            print(f"⚠️ Failed to clean up {path}: {e}", flush=True)
+
+    _temp_files.clear()
+
+
+# Register cleanup on exit
+atexit.register(cleanup_temp_files)
 
 # ===== LLM Backend =====
 LLM_BACKEND = "ollama"  # Options: "claude", "ollama"
@@ -350,15 +399,15 @@ class VoiceAssistant:
         """Transcribe audio and detect language. Returns (text, language)."""
         print("🔄 Recognizing...", flush=True)
         model = self.load_asr()
-        tmp_file = None
+
+        # Security: Use secure temp file
+        tmp_file = create_secure_temp_file(suffix=".wav")
 
         try:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                tmp_file = f.name
-                audio_int16 = (audio * 32767).astype(np.int16)
-                write_wav(tmp_file, SAMPLE_RATE, audio_int16)
-                result = model.generate(input=tmp_file)
-                raw_text = result[0]["text"] if result else ""
+            audio_int16 = (audio * 32767).astype(np.int16)
+            write_wav(tmp_file, SAMPLE_RATE, audio_int16)
+            result = model.generate(input=tmp_file)
+            raw_text = result[0]["text"] if result else ""
         finally:
             if tmp_file and os.path.exists(tmp_file):
                 os.remove(tmp_file)
@@ -543,11 +592,11 @@ class VoiceAssistant:
         """Generate audio using Edge TTS (online)."""
         try:
             voice = EDGE_TTS_VOICES.get(language, EDGE_TTS_VOICES[DEFAULT_LANGUAGE])
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                tmp_file = f.name
-                communicate = edge_tts.Communicate(text, voice, rate=TTS_RATE)
-                await communicate.save(tmp_file)
-                return tmp_file
+            # Security: Use secure temp file
+            tmp_file = create_secure_temp_file(suffix=".mp3")
+            communicate = edge_tts.Communicate(text, voice, rate=TTS_RATE)
+            await communicate.save(tmp_file)
+            return tmp_file
         except Exception as e:
             print(f"⚠️ Edge TTS error: {e}", flush=True)
             return None
@@ -563,8 +612,8 @@ class VoiceAssistant:
                 print("⚠️ Falling back to Edge TTS", flush=True)
                 return await self._generate_audio_edge(text, language)
 
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                tmp_file = f.name
+            # Security: Use secure temp file
+            tmp_file = create_secure_temp_file(suffix=".wav")
 
             # Run Piper synthesis in executor (it's blocking)
             loop = asyncio.get_event_loop()
@@ -632,8 +681,8 @@ class VoiceAssistant:
                 audio = audio.astype(np.float32) / 2147483648.0
         else:
             # Use ffmpeg to convert MP3 to WAV
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                tmp_wav = f.name
+            # Security: Use secure temp file
+            tmp_wav = create_secure_temp_file(suffix=".wav")
             try:
                 subprocess.run(
                     [

@@ -11,6 +11,9 @@ __pycache__/
 dist/
 build/
 
+# Node.js
+node_modules/
+
 # uv
 .python-version
 
