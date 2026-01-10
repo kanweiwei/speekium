@@ -1,39 +1,66 @@
-# 📚 Documentation
+# 📚 Speekium Documentation
 
-Quick links to all documentation.
+Quick navigation to all documentation.
+
+---
 
 ## 🚀 Getting Started
 
-- **[README.md](./README.md)** - Project overview
-- **[中文文档 (README_CN.md)](./README_CN.md)** - Chinese documentation
-- **[HOW_TO_START.md](./HOW_TO_START.md)** - Setup guide
-- **[QUICK_START.md](./QUICK_START.md)** - Basic usage
-- **[QUICK_START_TTS.md](./QUICK_START_TTS.md)** - TTS streaming
+- **[README.md](./README.md)** - Project overview (English)
+- **[README_CN.md](./README_CN.md)** - 项目介绍（中文）
+- **[QUICK_START.md](./QUICK_START.md)** - Quick start guide
 
-## 🎯 Features
+---
 
-- **[DAEMON_MODE.md](./DAEMON_MODE.md)** - Daemon mode (18x faster)
-- **[STREAMING_MODE.md](./STREAMING_MODE.md)** - LLM streaming
-- **[TTS_STREAMING_MODE.md](./TTS_STREAMING_MODE.md)** - TTS streaming
+## 📖 Feature Guides
+
+- **[Installation Guide](./docs/guides/installation.md)** - Complete setup instructions
+- **[Daemon Mode](./docs/guides/daemon-mode.md)** - 18x faster response time
+- **[LLM Streaming](./docs/guides/llm-streaming.md)** - Real-time AI responses
+- **[TTS Streaming](./docs/guides/tts-streaming.md)** - Quick TTS integration
+- **[TTS Features](./docs/guides/tts-features.md)** - Advanced text-to-speech
+
+---
 
 ## 🔧 Development
 
-- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Development guide
-- **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing (150+ tests)
-- **[MICROPHONE_TEST_GUIDE.md](./MICROPHONE_TEST_GUIDE.md)** - Audio testing
-- **[MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)** - Migration guide
-- **[MIGRATION_GUIDE_STEP_BY_STEP.md](./MIGRATION_GUIDE_STEP_BY_STEP.md)** - Detailed migration
+- **[Development Setup](./docs/development/setup.md)** - Developer environment guide
+- **[Testing Guide](./docs/development/testing.md)** - Running 150+ tests
+- **[Audio Testing](./docs/development/audio-testing.md)** - Microphone and VAD testing
 
-## 📖 Technical Docs
+---
 
-- **[docs/ci_cd_security.md](./docs/ci_cd_security.md)** - Security & CI/CD
-- **[docs/logging.md](./docs/logging.md)** - Logging system
-- **[docs/resource_limits.md](./docs/resource_limits.md)** - Resource management
-- **[docs/dependencies.md](./docs/dependencies.md)** - Dependencies
-- **[docs/safety_scan_results.md](./docs/safety_scan_results.md)** - Security scan results
+## 📋 Technical Documentation
 
-## 🏗️ Tauri App
+- **[CI/CD & Security](./docs/ci_cd_security.md)** - Security protocols and automation
+- **[Logging System](./docs/logging.md)** - Structured logging architecture
+- **[Resource Limits](./docs/resource_limits.md)** - Memory and performance management
+- **[Dependencies](./docs/dependencies.md)** - Dependency management
+- **[Security Scan Results](./docs/safety_scan_results.md)** - Latest security audit
 
-- **[QUICK_START.md](./QUICK_START.md)** - Quick start guide
-- **[HOW_TO_START.md](./HOW_TO_START.md)** - Detailed setup guide
-- **[DAEMON_MODE.md](./DAEMON_MODE.md)** - Daemon mode (18x faster)
+---
+
+## 📁 Documentation Structure
+
+```
+speekium/
+├── README.md              # Project overview
+├── README_CN.md           # 中文介绍
+├── QUICK_START.md         # Quick start
+└── docs/
+    ├── guides/            # Feature guides
+    │   ├── installation.md
+    │   ├── daemon-mode.md
+    │   ├── llm-streaming.md
+    │   ├── tts-streaming.md
+    │   └── tts-features.md
+    ├── development/       # Developer docs
+    │   ├── setup.md
+    │   ├── testing.md
+    │   └── audio-testing.md
+    └── *.md              # Technical specs
+```
+
+---
+
+**Last Updated**: 2026-01-10
