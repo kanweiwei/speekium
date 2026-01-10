@@ -10,6 +10,50 @@ from abc import ABC, abstractmethod
 from typing import AsyncIterator, List, Dict
 
 
+# Security: Input validation constants
+MAX_INPUT_LENGTH = 10000  # Maximum characters per message
+MAX_SYSTEM_PROMPT_LENGTH = 5000
+BLOCKED_PATTERNS = [
+    r'<script',  # XSS prevention
+    r'javascript:',  # URL injection
+    r'\x00',  # Null byte injection
+]
+
+
+def validate_input(text: str, max_length: int = MAX_INPUT_LENGTH) -> str:
+    """
+    Validate and sanitize user input
+
+    Args:
+        text: Input text to validate
+        max_length: Maximum allowed length
+
+    Returns:
+        Validated text
+
+    Raises:
+        ValueError: If input is invalid
+    """
+    if not isinstance(text, str):
+        raise ValueError("Input must be a string")
+
+    if len(text) > max_length:
+        raise ValueError(f"Input too long: {len(text)} > {max_length} characters")
+
+    if len(text.strip()) == 0:
+        raise ValueError("Input cannot be empty")
+
+    # Check for blocked patterns
+    for pattern in BLOCKED_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            raise ValueError(f"Input contains blocked pattern: {pattern}")
+
+    # Remove null bytes and other control characters
+    text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+
+    return text
+
+
 class LLMBackend(ABC):
     """Abstract base class for LLM backends"""
 
@@ -60,6 +104,13 @@ class ClaudeBackend(LLMBackend):
     def chat(self, message: str) -> str:
         print("🤖 Claude thinking...", flush=True)
 
+        # Security: Validate input
+        try:
+            message = validate_input(message)
+        except ValueError as e:
+            print(f"⚠️ Input validation failed: {e}", flush=True)
+            return f"Error: {e}"
+
         # Build prompt with history context
         history_context = self.get_history_for_prompt()
         if history_context:
@@ -71,11 +122,10 @@ class ClaudeBackend(LLMBackend):
             result = subprocess.run(
                 [
                     "claude", "-p", full_message,
-                    "--dangerously-skip-permissions",
                     "--no-session-persistence",
                     "--system-prompt", self.system_prompt
                 ],
-                capture_output=True, text=True, timeout=120
+                capture_output=True, text=True, timeout=120, check=True
             )
             response = result.stdout.strip()
             print(f"💬 Claude: {response}", flush=True)
@@ -179,6 +229,14 @@ class OllamaBackend(LLMBackend):
 
     def chat(self, message: str) -> str:
         print(f"🤖 Ollama ({self.model}) thinking...", flush=True)
+
+        # Security: Validate input
+        try:
+            message = validate_input(message)
+        except ValueError as e:
+            print(f"⚠️ Input validation failed: {e}", flush=True)
+            return f"Error: {e}"
+
         try:
             import httpx
 
