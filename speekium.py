@@ -24,7 +24,11 @@ import torch
 from scipy.io.wavfile import write as write_wav
 
 from backends import create_backend
+from logger import get_logger, new_request, new_session, set_component
 from mode_manager import ModeManager, RecordingMode
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # ===== Security: Temporary File Management =====
 _temp_files: list[str] = []
@@ -61,9 +65,9 @@ def cleanup_temp_files():
         try:
             if os.path.exists(path):
                 os.remove(path)
-                print(f"🧹 Cleaned up temp file: {path}", flush=True)
+                logger.info("temp_file_cleaned", file_path=path)
         except Exception as e:
-            print(f"⚠️ Failed to clean up {path}: {e}", flush=True)
+            logger.warning("temp_file_cleanup_failed", file_path=path, error=str(e))
 
     _temp_files.clear()
 
@@ -151,28 +155,28 @@ class VoiceAssistant:
 
     def load_asr(self):
         if self.asr_model is None:
-            print("🔄 Loading SenseVoice model...", flush=True)
+            set_component("ASR"); logger.info("model_loading", model="SenseVoice")
             from funasr import AutoModel
 
             self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
-            print("✅ SenseVoice model loaded", flush=True)
+            logger.info("model_loaded", model="SenseVoice")
         return self.asr_model
 
     def load_vad(self):
         if self.vad_model is None:
-            print("🔄 Loading VAD model...", flush=True)
+            set_component("VAD"); logger.info("model_loading", model="VAD")
             self.vad_model, _ = torch.hub.load(
                 repo_or_dir="snakers4/silero-vad",
                 model="silero_vad",
                 force_reload=False,
                 trust_repo=True,
             )
-            print("✅ VAD model loaded", flush=True)
+            logger.info("model_loaded", model="VAD")
         return self.vad_model
 
     def load_llm(self):
         if self.llm_backend is None:
-            print(f"🔄 Initializing LLM backend ({LLM_BACKEND})...", flush=True)
+            set_component("LLM"); logger.info("backend_initializing", backend=LLM_BACKEND)
             if LLM_BACKEND == "ollama":
                 self.llm_backend = create_backend(
                     LLM_BACKEND,
@@ -185,7 +189,7 @@ class VoiceAssistant:
                 self.llm_backend = create_backend(
                     LLM_BACKEND, SYSTEM_PROMPT, max_history=MAX_HISTORY
                 )
-            print("✅ LLM backend initialized", flush=True)
+            logger.info("backend_initialized")
         return self.llm_backend
 
     def load_piper_voice(self, language):
@@ -197,26 +201,26 @@ class VoiceAssistant:
         model_path = os.path.join(PIPER_DATA_DIR, f"{voice_name}.onnx")
 
         if not os.path.exists(model_path):
-            print(f"⚠️ Piper model not found: {model_path}", flush=True)
-            print(
-                "   Download from: https://huggingface.co/rhasspy/piper-voices/tree/main",
-                flush=True,
+            logger.warning(
+                "piper_model_not_found",
+                model_path=model_path,
+                download_url="https://huggingface.co/rhasspy/piper-voices/tree/main"
             )
             return None
 
         try:
             from piper.voice import PiperVoice
 
-            print(f"🔄 Loading Piper voice: {voice_name}...", flush=True)
+            set_component("TTS"); logger.info("piper_voice_loading", voice=voice_name)
             voice = PiperVoice.load(model_path)
             self.piper_voices[language] = voice
-            print("✅ Piper voice loaded", flush=True)
+            logger.info("piper_voice_loaded")
             return voice
         except ImportError:
-            print("⚠️ piper-tts not installed. Run: pip install piper-tts", flush=True)
+            logger.warning("piper_not_installed", install_command="pip install piper-tts")
             return None
         except Exception as e:
-            print(f"⚠️ Failed to load Piper voice: {e}", flush=True)
+            logger.error("piper_voice_load_failed", error=str(e))
             return None
 
     def record_with_vad(self, speech_already_started=False):
@@ -235,11 +239,11 @@ class VoiceAssistant:
             history_count = len(self.llm_backend.history) // 2
 
         if speech_already_started:
-            print("\n🎤 Recording (interrupted)...", flush=True)
+            logger.info("recording_started", mode="interrupted")
         elif history_count > 0:
-            print(f"\n👂 Listening... ({history_count} turns in memory)", flush=True)
+            logger.info("listening", history_count=history_count)
         else:
-            print("\n👂 Listening...", flush=True)
+            logger.info("listening")
 
         chunk_size = 512  # Silero VAD requires 512 samples @ 16kHz
         frames = []
@@ -248,7 +252,7 @@ class VoiceAssistant:
         if speech_already_started and self.interrupt_audio_buffer:
             frames = self.interrupt_audio_buffer.copy()
             self.interrupt_audio_buffer = []  # Clear the buffer
-            print(f"📦 Using {len(frames)} buffered audio chunks", flush=True)
+            logger.debug("audio_buffer_used", chunks=len(frames))
 
         is_speaking = speech_already_started  # Start in speaking mode if interrupted
         silence_chunks = 0
@@ -286,7 +290,7 @@ class VoiceAssistant:
                         # Add pre-buffer to frames to avoid clipping speech start
                         frames.extend(pre_buffer)
                         pre_buffer.clear()
-                        print("🎤 Speech detected, recording...", flush=True)
+                        logger.info("speech_detected")
 
                     if is_speaking:
                         # Only reset silence count on consecutive speech
@@ -311,7 +315,7 @@ class VoiceAssistant:
                             and speech_chunks >= min_speech_chunks
                         ):
                             recording_done = True
-                            print("🔇 Speech ended", flush=True)
+                            logger.info("speech_ended")
                     else:
                         # Not speaking yet, fill pre-buffer
                         pre_buffer.append(audio_chunk)
@@ -319,10 +323,10 @@ class VoiceAssistant:
                 # Max duration reached
                 if len(frames) >= max_chunks:
                     recording_done = True
-                    print("⏱️ Max recording duration reached", flush=True)
+                    logger.warning("max_recording_duration")
 
             except Exception as e:
-                print(f"⚠️ VAD error: {e}", flush=True)
+                logger.error("vad_error", error=str(e))
                 recording_done = True
 
         with sd.InputStream(
@@ -339,7 +343,7 @@ class VoiceAssistant:
             return None
 
         audio = np.concatenate(frames)
-        print(f"✅ Recording complete ({len(audio) / SAMPLE_RATE:.1f}s)", flush=True)
+        logger.info("recording_complete", duration=len(audio) / SAMPLE_RATE)
         return audio
 
     def record_push_to_talk(self):
@@ -347,7 +351,7 @@ class VoiceAssistant:
         按键录音模式：手动控制录音开始和结束
         通过 mode_manager.start_recording() 和 stop_recording() 控制
         """
-        print("\n🎤 按键录音模式已激活，等待按键...")
+        logger.info("ptt_mode_activated")
 
         chunk_size = 512
         frames = []
@@ -376,16 +380,16 @@ class VoiceAssistant:
 
         # 检查是否有录音数据
         if not frames:
-            print("⚠️ 未检测到录音数据")
+            logger.warning("no_audio_data")
             return None
 
         audio = np.concatenate(frames)
-        print(f"✅ 按键录音完成 ({len(audio) / SAMPLE_RATE:.1f}s)", flush=True)
+        logger.info("ptt_recording_complete", duration=len(audio) / SAMPLE_RATE)
         return audio
 
     def transcribe(self, audio):
         """Transcribe audio and detect language. Returns (text, language)."""
-        print("🔄 Recognizing...", flush=True)
+        set_component("ASR"); logger.info("asr_processing")
         model = self.load_asr()
 
         # Security: Use secure temp file
@@ -407,7 +411,7 @@ class VoiceAssistant:
         # Clean all tags from text
         text = re.sub(r"<\|[^|]+\|>", "", raw_text).strip()
 
-        print(f"📝 [{language}] {text}", flush=True)
+        logger.info("asr_result", language=language, text=text)
         return text, language
 
     def detect_speech_start(self, timeout=1.5):
@@ -489,7 +493,7 @@ class VoiceAssistant:
             asr_task = asyncio.create_task(self.transcribe_async(combined_audio))
 
             # Check if user wants to continue speaking
-            print("⏳ Waiting for more input...", flush=True)
+            logger.info("waiting_for_input")
 
             # Run speech detection in executor (it's blocking)
             loop = asyncio.get_event_loop()
@@ -505,7 +509,7 @@ class VoiceAssistant:
                     await asr_task
                 except asyncio.CancelledError:
                     pass
-                print("🔄 Continuing recording...", flush=True)
+                logger.info("recording_continued")
                 continue
             else:
                 # No more speech, wait for ASR result
@@ -584,7 +588,7 @@ class VoiceAssistant:
             await communicate.save(tmp_file)
             return tmp_file
         except Exception as e:
-            print(f"⚠️ Edge TTS error: {e}", flush=True)
+            logger.error("edge_tts_error", error=str(e))
             return None
 
     async def _generate_audio_piper(self, text, language):
@@ -593,7 +597,7 @@ class VoiceAssistant:
             voice = self.load_piper_voice(language)
             if voice is None:
                 # Fallback to Edge TTS if Piper not available
-                print("⚠️ Falling back to Edge TTS", flush=True)
+                logger.info("fallback_to_edge_tts")
                 return await self._generate_audio_edge(text, language)
 
             # Security: Use secure temp file
@@ -604,7 +608,7 @@ class VoiceAssistant:
             await loop.run_in_executor(None, self._piper_synthesize, voice, text, tmp_file)
             return tmp_file
         except Exception as e:
-            print(f"⚠️ Piper TTS error: {e}", flush=True)
+            logger.error("piper_tts_error", error=str(e))
             # Fallback to Edge TTS
             return await self._generate_audio_edge(text, language)
 
@@ -638,7 +642,7 @@ class VoiceAssistant:
                         f"(New-Object Media.SoundPlayer '{tmp_file}').PlaySync()",
                     ]
                 else:
-                    print(f"⚠️ Unsupported platform: {system}", flush=True)
+                    logger.warning("unsupported_platform", platform=system)
                     return
 
                 process = await asyncio.create_subprocess_exec(*cmd)
@@ -721,13 +725,22 @@ class VoiceAssistant:
 
     async def chat_once(self):
         """Single conversation turn"""
-        text, language = await self.record_with_interruption()
+        from resource_limiter import with_timeout
+
+        # VAD 录音操作添加 30 秒超时保护
+        try:
+            text, language = await with_timeout(
+                self.record_with_interruption(), seconds=30, operation_name="VAD_recording"
+            )
+        except TimeoutError:
+            logger.error("vad_timeout", timeout_seconds=30)
+            return False
 
         if text is None:
             return False  # No valid speech detected
 
         if not text:
-            print("⚠️ No speech recognized", flush=True)
+            logger.warning("no_speech_recognized")
             return True
 
         backend = self.load_llm()
@@ -750,7 +763,7 @@ class VoiceAssistant:
 
         if USE_STREAMING:
             # Streaming output with barge-in support
-            print("🔊 Streaming...", flush=True)
+            logger.info("streaming_started")
             audio_queue = asyncio.Queue()
             interrupted = False
             generation_done = False
@@ -762,9 +775,19 @@ class VoiceAssistant:
                         if interrupted:
                             break
                         if sentence:
-                            audio_file = await self.generate_audio(sentence, language)
-                            if audio_file:
-                                await audio_queue.put(audio_file)
+                            # TTS 生成添加 30 秒超时保护
+                            try:
+                                audio_file = await with_timeout(
+                                    self.generate_audio(sentence, language),
+                                    seconds=30,
+                                    operation_name="TTS_streaming",
+                                )
+                                if audio_file:
+                                    await audio_queue.put(audio_file)
+                            except TimeoutError:
+                                logger.error("tts_streaming_timeout", timeout_seconds=30)
+                                # 继续处理下一句，不中断整个流
+                                continue
                 finally:
                     generation_done = True
                     await audio_queue.put(None)
@@ -802,8 +825,28 @@ class VoiceAssistant:
                 return True
         else:
             # Non-streaming output (without barge-in)
-            response = backend.chat(text)
-            tmp_file = await self.generate_audio(response, language)
+            # LLM 对话添加 120 秒超时保护
+            try:
+                response = await with_timeout(
+                    asyncio.to_thread(backend.chat, text),
+                    seconds=120,
+                    operation_name="LLM_chat",
+                )
+            except TimeoutError:
+                logger.error("llm_timeout", timeout_seconds=120)
+                return False
+
+            # TTS 生成添加 30 秒超时保护
+            try:
+                tmp_file = await with_timeout(
+                    self.generate_audio(response, language),
+                    seconds=30,
+                    operation_name="TTS_generation",
+                )
+            except TimeoutError:
+                logger.error("tts_timeout", timeout_seconds=30)
+                return False
+
             if tmp_file:
                 was_interrupted = await self.play_audio_with_barge_in(tmp_file)
                 if was_interrupted:
@@ -813,32 +856,30 @@ class VoiceAssistant:
         return True
 
     async def run(self):
-        print("=" * 50, flush=True)
-        print("🎙️  Speekium started (continuous conversation mode)", flush=True)
-        print("   VAD auto voice detection enabled", flush=True)
+        logger.info("speekium_banner", mode="continuous")
+        logger.info("vad_enabled")
         llm_info = LLM_BACKEND
         if LLM_BACKEND == "ollama":
             llm_info = f"ollama ({OLLAMA_MODEL})"
-        print(f"   LLM backend: {llm_info}", flush=True)
+        logger.info("llm_backend_info", backend=llm_info)
         tts_info = TTS_BACKEND
         if TTS_BACKEND == "piper":
             tts_info = "piper (offline)"
         else:
             tts_info = "edge (online)"
-        print(f"   TTS backend: {tts_info}", flush=True)
+        logger.info("tts_backend_info", backend=tts_info)
         if USE_STREAMING:
-            print("   Mode: streaming (speak while generating)", flush=True)
-        print(f"   Memory: last {MAX_HISTORY} turns", flush=True)
-        print("   Say 'clear history' to reset memory", flush=True)
-        print("   Ctrl+C to exit", flush=True)
-        print("=" * 50, flush=True)
-
+            logger.info("streaming_mode_enabled")
+        logger.info("memory_config", max_history=MAX_HISTORY)
+        logger.info("clear_history_hint")
+        logger.info("exit_hint")
+        
         # Preload models
         self.load_vad()
         self.load_asr()
         self.load_llm()
 
-        print("\n🎧 Ready, start speaking...\n", flush=True)
+        logger.info("ready_for_input")
 
         try:
             while True:
@@ -848,7 +889,7 @@ class VoiceAssistant:
                     await asyncio.sleep(0.5)
 
         except KeyboardInterrupt:
-            print("\n👋 Goodbye!", flush=True)
+            logger.info("shutdown")
 
 
 async def main():
@@ -857,4 +898,10 @@ async def main():
 
 
 if __name__ == "__main__":
+    # 设置资源限制（防止资源耗尽攻击）
+    from resource_limiter import initialize_resource_limits
+
+    initialize_resource_limits()
+
+    # 运行主程序
     asyncio.run(main())

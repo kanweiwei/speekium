@@ -26,6 +26,12 @@ import traceback
 
 import sounddevice as sd
 
+from logger import configure_logging, get_logger, new_request, set_component
+
+# Configure logging for daemon (JSON format)
+configure_logging(level="INFO", format="json", colored=False)
+logger = get_logger(__name__)
+
 # 确保输出立即刷新
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -55,14 +61,14 @@ def set_resource_limits():
         # File descriptor limit: 1024
         resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
 
-        print("[Security] ✅ Resource limits set", file=sys.stderr, flush=True)
+        logger.info("resource_limits_set")
     except Exception as e:
-        print(f"[Security] ⚠️ Failed to set resource limits: {e}", file=sys.stderr, flush=True)
+        logger.warning("resource_limits_failed", error=str(e))
 
 
 def handle_timeout(signum, frame):
     """Handle CPU timeout signal"""
-    print("[Security] ❌ CPU time limit exceeded, shutting down", file=sys.stderr, flush=True)
+    logger.error("cpu_timeout", action="shutdown")
     sys.exit(1)
 
 
@@ -82,24 +88,38 @@ class SpeekiumDaemon:
         self.command_count = 0
 
         # 输出启动日志
-        self._log("🚀 Speekium Daemon 初始化中...")
+        logger.info("daemon_initializing")
 
     def _log(self, message: str):
-        """输出日志到 stderr"""
-        print(f"[Daemon] {message}", file=sys.stderr, flush=True)
+        """Legacy logging method - deprecated, use logger directly"""
+        # Parse common emoji patterns for structured logging
+        if "🔄" in message:
+            logger.info("daemon_processing", message=message.replace("🔄 ", ""))
+        elif "✅" in message:
+            logger.info("daemon_success", message=message.replace("✅ ", ""))
+        elif "❌" in message:
+            logger.error("daemon_error", message=message.replace("❌ ", ""))
+        elif "⚠️" in message:
+            logger.warning("daemon_warning", message=message.replace("⚠️ ", ""))
+        elif "🎤" in message:
+            logger.info("daemon_recording", message=message.replace("🎤 ", ""))
+        elif "💬" in message:
+            logger.info("daemon_chat", message=message.replace("💬 ", ""))
+        else:
+            logger.info("daemon_log", message=message)
 
     async def initialize(self):
         """预加载所有模型（只在启动时执行一次）"""
         try:
             from speekium import VoiceAssistant
 
-            self._log("📦 加载 VoiceAssistant...")
+            logger.info("loading_voice_assistant")
             self.assistant = VoiceAssistant()
 
-            self._log("🔄 预加载 VAD 模型...")
+            logger.info("preloading_vad_model")
             self.assistant.load_vad()
 
-            self._log("🔄 预加载 ASR 模型...")
+            logger.info("preloading_asr_model")
             self.assistant.load_asr()
 
             self._log("🔄 预加载 LLM 后端...")
@@ -401,8 +421,7 @@ def main():
         daemon = SpeekiumDaemon()
         asyncio.run(daemon.run_daemon())
     else:
-        print("Usage: python3 worker_daemon.py daemon", file=sys.stderr)
-        print("This script runs as a long-lived daemon process.", file=sys.stderr)
+        logger.error("invalid_usage", usage="python3 worker_daemon.py daemon")
         sys.exit(1)
 
 

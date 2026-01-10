@@ -9,6 +9,11 @@ import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
+from logger import get_logger, set_component
+
+# Initialize logger for backends
+logger = get_logger(__name__)
+
 # Security: Input validation constants
 MAX_INPUT_LENGTH = 10000  # Maximum characters per message
 MAX_SYSTEM_PROMPT_LENGTH = 5000
@@ -71,7 +76,7 @@ class LLMBackend(ABC):
     def clear_history(self):
         """Clear conversation history"""
         self.history = []
-        print("🗑️ Conversation history cleared", flush=True)
+        logger.info("conversation_history_cleared", history_length=0)
 
     def get_history_for_prompt(self) -> str:
         """Format history as prompt text (for backends that don't support message lists)"""
@@ -101,13 +106,13 @@ class ClaudeBackend(LLMBackend):
     """Claude Code CLI backend"""
 
     def chat(self, message: str) -> str:
-        print("🤖 Claude thinking...", flush=True)
+        logger.info("llm_processing", backend="claude")
 
         # Security: Validate input
         try:
             message = validate_input(message)
         except ValueError as e:
-            print(f"⚠️ Input validation failed: {e}", flush=True)
+            logger.warning("input_validation_failed", error=str(e))
             return f"Error: {e}"
 
         # Build prompt with history context
@@ -133,7 +138,7 @@ class ClaudeBackend(LLMBackend):
                 check=True,
             )
             response = result.stdout.strip()
-            print(f"💬 Claude: {response}", flush=True)
+            logger.info("llm_response_received", backend="claude", response_preview=response[:100])
 
             # Save to history
             self.add_message("user", message)
@@ -146,7 +151,7 @@ class ClaudeBackend(LLMBackend):
             return f"Error: {e}"
 
     async def chat_stream(self, message: str) -> AsyncIterator[str]:
-        print("🤖 Claude thinking...", flush=True)
+        logger.info("llm_processing", backend="claude")
 
         # Build prompt with history context
         history_context = self.get_history_for_prompt()
@@ -197,18 +202,18 @@ class ClaudeBackend(LLMBackend):
                                     sentence = buffer[:end_pos].strip()
                                     buffer = buffer[end_pos:]
                                     if sentence:
-                                        print(f"🗣️  {sentence}", flush=True)
+                                        logger.debug("sentence_generated", sentence=sentence)
                                         yield sentence
                                 else:
                                     break
             except json.JSONDecodeError:
                 continue
             except Exception as e:
-                print(f"⚠️ Parse error: {e}", flush=True)
+                logger.warning("parse_error", error=str(e))
                 continue
 
         if buffer.strip():
-            print(f"🗣️  {buffer.strip()}", flush=True)
+            logger.debug("buffer_output", text=buffer.strip())
             full_response += buffer.strip()
             yield buffer.strip()
 
@@ -241,13 +246,13 @@ class OllamaBackend(LLMBackend):
         return messages
 
     def chat(self, message: str) -> str:
-        print(f"🤖 Ollama ({self.model}) thinking...", flush=True)
+        logger.info("llm_processing", backend="ollama", model=self.model)
 
         # Security: Validate input
         try:
             message = validate_input(message)
         except ValueError as e:
-            print(f"⚠️ Input validation failed: {e}", flush=True)
+            logger.warning("input_validation_failed", error=str(e))
             return f"Error: {e}"
 
         try:
@@ -256,28 +261,25 @@ class OllamaBackend(LLMBackend):
             messages = self._build_messages(message)
 
             # Debug: Print request data
-            print(f"[DEBUG] Sending to Ollama: {len(messages)} messages", flush=True)
+            logger.debug("ollama_request_sent", message_count=len(messages))
             for i, msg in enumerate(messages):
-                print(f"[DEBUG] Message {i}: {msg}", flush=True)
+                logger.debug("ollama_message_detail", index=i, message=msg)
 
             payload = {"model": self.model, "messages": messages, "stream": False}
 
-            print(
-                f"[DEBUG] Full payload: {json.dumps(payload, ensure_ascii=False, indent=2)}",
-                flush=True,
-            )
+            logger.debug("ollama_request_payload", payload=payload)
 
             response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=120)
 
             # Debug: Print response details
-            print(f"[DEBUG] Response status: {response.status_code}", flush=True)
+            logger.debug("ollama_response_status", status_code=response.status_code)
             if response.status_code != 200:
-                print(f"[DEBUG] Response body: {response.text}", flush=True)
+                logger.debug("ollama_response_body", body=response.text)
 
             response.raise_for_status()
             result = response.json()
             content = result.get("message", {}).get("content", "")
-            print(f"💬 Ollama: {content}", flush=True)
+            logger.info("llm_response_received", backend="ollama", response_preview=content[:100])
 
             # Save to history
             self.add_message("user", message)
@@ -285,14 +287,14 @@ class OllamaBackend(LLMBackend):
 
             return content
         except Exception as e:
-            print(f"[ERROR] Ollama API error: {e}", flush=True)
+            logger.error("ollama_api_error", error=str(e), error_type=type(e).__name__)
             import traceback
 
             traceback.print_exc()
             return f"Error: {e}"
 
     async def chat_stream(self, message: str) -> AsyncIterator[str]:
-        print(f"🤖 Ollama ({self.model}) thinking...", flush=True)
+        logger.info("llm_processing", backend="ollama", model=self.model)
 
         try:
             import httpx
@@ -328,7 +330,7 @@ class OllamaBackend(LLMBackend):
                                     sentence = buffer[:end_pos].strip()
                                     buffer = buffer[end_pos:]
                                     if sentence:
-                                        print(f"🗣️  {sentence}", flush=True)
+                                        logger.debug("sentence_generated", sentence=sentence)
                                         yield sentence
                                 else:
                                     break
@@ -336,7 +338,7 @@ class OllamaBackend(LLMBackend):
                         continue
 
             if buffer.strip():
-                print(f"🗣️  {buffer.strip()}", flush=True)
+                logger.debug("buffer_output", text=buffer.strip())
                 full_response += buffer.strip()
                 yield buffer.strip()
 
@@ -345,7 +347,7 @@ class OllamaBackend(LLMBackend):
             self.add_message("assistant", full_response)
 
         except Exception as e:
-            print(f"⚠️ Ollama error: {e}", flush=True)
+            logger.error("ollama_stream_error", error=str(e), error_type=type(e).__name__)
             yield f"Error: {e}"
 
 
