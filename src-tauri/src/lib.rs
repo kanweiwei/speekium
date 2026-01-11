@@ -339,19 +339,32 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     let _ = window.emit("ptt-state", "idle");
                                 }
                                 "user_message" => {
-                                    // 用户语音识别结果
+                                    // 用户语音识别结果 - 隐藏覆盖层，显示消息
+                                    let _ = window.emit("ptt-state", "idle");
+                                    if let Some(ref overlay) = overlay_window {
+                                        let _ = overlay.hide();
+                                        let _ = overlay.emit("ptt-state", "idle");
+                                    }
                                     if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
                                         let _ = window.emit("ptt-user-message", text);
                                     }
                                 }
                                 "assistant_chunk" => {
-                                    // LLM 流式响应片段
+                                    // LLM 流式响应片段 - 确保覆盖层已隐藏
+                                    let _ = window.emit("ptt-state", "idle");
+                                    if let Some(ref overlay) = overlay_window {
+                                        let _ = overlay.hide();
+                                    }
                                     if let Some(content) = event.get("content").and_then(|v| v.as_str()) {
                                         let _ = window.emit("ptt-assistant-chunk", content);
                                     }
                                 }
                                 "assistant_done" => {
-                                    // LLM 响应完成
+                                    // LLM 响应完成 - 确保覆盖层已隐藏
+                                    let _ = window.emit("ptt-state", "idle");
+                                    if let Some(ref overlay) = overlay_window {
+                                        let _ = overlay.hide();
+                                    }
                                     if let Some(content) = event.get("content").and_then(|v| v.as_str()) {
                                         let _ = window.emit("ptt-assistant-done", content);
                                     }
@@ -733,6 +746,17 @@ async fn load_config() -> Result<ConfigResult, String> {
 }
 
 #[tauri::command]
+async fn save_config(config: serde_json::Value) -> Result<serde_json::Value, String> {
+    println!("💾 调用守护进程: save_config");
+
+    let args = serde_json::json!({
+        "config": config
+    });
+
+    call_daemon("save_config", args)
+}
+
+#[tauri::command]
 async fn daemon_health() -> Result<HealthResult, String> {
     // 检查是否有流式操作正在进行
     if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
@@ -933,6 +957,7 @@ pub fn run() {
             chat_tts_stream,
             generate_tts,
             load_config,
+            save_config,
             daemon_health
         ])
         .setup(|app| {

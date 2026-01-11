@@ -1,25 +1,150 @@
 import React from 'react';
-import './App.css';
-
-// 导入 Tauri API hook
-import { useTauriAPI } from './useTauriAPI';
 import { listen } from '@tauri-apps/api/event';
+import { useTauriAPI } from './useTauriAPI';
+import { Settings } from './Settings';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Mic,
+  Send,
+  Settings as SettingsIcon,
+  Clock,
+  Play,
+  Sparkles,
+  Zap,
+  MessageSquare,
+  Wand2,
+  Loader2,
+  AlertCircle,
+  X,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+// Empty state component
+function EmptyState() {
+  const examplePrompts = [
+    { icon: Sparkles, text: "介绍一下自己", gradient: "from-blue-500 to-purple-500" },
+    { icon: MessageSquare, text: "今天天气怎么样？", gradient: "from-purple-500 to-pink-500" },
+    { icon: Zap, text: "讲个笑话", gradient: "from-pink-500 to-orange-500" },
+    { icon: Wand2, text: "推荐一本书", gradient: "from-orange-500 to-yellow-500" },
+  ];
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full px-4">
+      {/* 品牌图标 */}
+      <div className="relative mb-8">
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <Mic className="w-10 h-10 text-white" />
+        </div>
+        <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 opacity-20 blur-xl" />
+      </div>
+
+      {/* 标题 */}
+      <h2 className="text-2xl font-semibold text-zinc-200 mb-2">开始对话</h2>
+      <p className="text-zinc-400 mb-8">输入消息或使用语音助手</p>
+
+      {/* 快捷键提示 */}
+      <div className="flex items-center gap-2 mb-8 px-4 py-2 rounded-full bg-[#1C1C1F] border border-zinc-800/50">
+        <Mic className="w-4 h-4 text-zinc-400" />
+        <span className="text-sm text-zinc-400">按住</span>
+        <kbd className="px-2 py-1 rounded bg-[#141416] text-zinc-300 text-xs font-mono border border-zinc-800">⌘ Cmd</kbd>
+        <span className="text-sm text-zinc-400">+</span>
+        <kbd className="px-2 py-1 rounded bg-[#141416] text-zinc-300 text-xs font-mono border border-zinc-800">⌥ Alt</kbd>
+        <span className="text-sm text-zinc-400">说话</span>
+      </div>
+
+      {/* 示例提示卡片 */}
+      <div className="grid grid-cols-2 gap-3 w-full max-w-md">
+        {examplePrompts.map((prompt, idx) => {
+          const Icon = prompt.icon;
+          return (
+            <button
+              key={idx}
+              className="group p-4 rounded-xl bg-[#1C1C1F] border border-zinc-800/50 hover:border-zinc-700 transition-all hover:scale-[1.02] text-left"
+            >
+              <div className={cn(
+                "w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center mb-3",
+                prompt.gradient
+              )}>
+                <Icon className="w-4 h-4 text-white" />
+              </div>
+              <p className="text-sm text-zinc-300 group-hover:text-zinc-200">{prompt.text}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// PTT 状态覆盖层组件
+function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'error' }) {
+  if (state === 'idle' || state === 'error') return null;
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-[#0A0A0B]/80 backdrop-blur-sm z-50">
+      {state === 'recording' && (
+        <div className="flex flex-col items-center">
+          {/* 声波动画 */}
+          <div className="relative">
+            <div className="w-32 h-32 rounded-full bg-red-500/20 flex items-center justify-center">
+              <div className="w-24 h-24 rounded-full bg-red-500/40 flex items-center justify-center animate-pulse">
+                <div className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center">
+                  <Mic className="w-8 h-8 text-white" />
+                </div>
+              </div>
+            </div>
+            {/* 脉冲扩散动画 */}
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="absolute inset-0 rounded-full border-2 border-red-500 animate-ping"
+                style={{
+                  animationDelay: `${i * 0.3}s`,
+                  animationDuration: '1.5s',
+                }}
+              />
+            ))}
+          </div>
+          <p className="mt-6 text-lg font-medium text-red-400">录音中...</p>
+          <p className="mt-2 text-sm text-zinc-400">松开停止录音</p>
+        </div>
+      )}
+
+      {state === 'processing' && (
+        <div className="flex flex-col items-center">
+          {/* 处理动画 */}
+          <div className="relative">
+            <div className="w-20 h-20 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-amber-500/40 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+              </div>
+            </div>
+            <div className="absolute inset-0 rounded-full border-2 border-amber-500/50 animate-pulse" />
+          </div>
+          <p className="mt-6 text-lg font-medium text-amber-400">思考中...</p>
+          <p className="mt-2 text-sm text-zinc-400">正在处理您的消息</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function App() {
-  const [status, setStatus] = React.useState<string>('就绪');
   const [textInput, setTextInput] = React.useState<string>('');
   const [autoTTS, setAutoTTS] = React.useState<boolean>(true);
   const [isSpeaking, setIsSpeaking] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [pttState, setPttState] = React.useState<'idle' | 'recording' | 'processing' | 'error'>('idle');
+  const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
+  const [isStreaming, setIsStreaming] = React.useState<boolean>(false);
+  const [isWaitingForLLM, setIsWaitingForLLM] = React.useState<boolean>(false);
 
-  // Load recording mode from localStorage with fallback to 'push-to-talk'
   const [recordMode, setRecordMode] = React.useState<'push-to-talk' | 'continuous'>(() => {
     const saved = localStorage.getItem('recordMode');
     return (saved === 'continuous' || saved === 'push-to-talk') ? saved : 'push-to-talk';
   });
 
-  // 使用 Tauri API hook
   const {
     isRecording,
     isProcessing,
@@ -30,20 +155,19 @@ function App() {
     chatGenerator,
     clearHistory,
     loadConfig,
+    saveConfig,
     generateTTS,
     addMessage,
     updateLastAssistantMessage,
   } = useTauriAPI();
 
-  // PTT 流式响应的临时累积
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const pttAssistantResponseRef = React.useRef<string>('');
   const pttAssistantAddedRef = React.useRef<boolean>(false);
-
-  // Refs to track actual state for continuous mode (avoid stale closure issue)
   const isRecordingRef = React.useRef(isRecording);
   const isProcessingRef = React.useRef(isProcessing);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
-  // Keep refs in sync with state
   React.useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
@@ -56,60 +180,44 @@ function App() {
     loadConfig();
   }, []);
 
-  // Listen for PTT (Push-to-Talk) events from Tauri
+  // Auto scroll to bottom when messages change
+  React.useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Listen for PTT events
   React.useEffect(() => {
     const setupListeners = async () => {
       const unlistenState = await listen<string>('ptt-state', (event) => {
-        console.log('[App] PTT state:', event.payload);
         const state = event.payload as 'idle' | 'recording' | 'processing' | 'error';
         setPttState(state);
-
-        // Update status based on PTT state
-        switch (state) {
-          case 'recording':
-            setStatus('🎤 PTT 录音中... (松开停止)');
-            setError(null);
-            break;
-          case 'processing':
-            setStatus('🔄 处理中...');
-            break;
-          case 'idle':
-            setStatus('就绪');
-            break;
-          case 'error':
-            setStatus('就绪');
-            break;
+        if (state === 'recording') {
+          setError(null);
         }
       });
 
-      // 用户语音识别结果
       const unlistenUserMessage = await listen<string>('ptt-user-message', (event) => {
-        console.log('[App] PTT user message:', event.payload);
         addMessage('user', event.payload);
-        // 重置 assistant 响应累积
         pttAssistantResponseRef.current = '';
         pttAssistantAddedRef.current = false;
+        setIsWaitingForLLM(true);  // Start waiting for LLM response
       });
 
-      // LLM 流式响应片段
       const unlistenAssistantChunk = await listen<string>('ptt-assistant-chunk', (event) => {
-        console.log('[App] PTT assistant chunk:', event.payload);
+        setIsWaitingForLLM(false);  // LLM started responding, stop waiting
+        setIsStreaming(true);
         pttAssistantResponseRef.current += event.payload;
-
         if (!pttAssistantAddedRef.current) {
-          // 第一个 chunk，添加新的 assistant 消息
           addMessage('assistant', pttAssistantResponseRef.current);
           pttAssistantAddedRef.current = true;
         } else {
-          // 后续 chunk，更新已有的 assistant 消息
           updateLastAssistantMessage(pttAssistantResponseRef.current);
         }
       });
 
-      // LLM 响应完成
       const unlistenAssistantDone = await listen<string>('ptt-assistant-done', (event) => {
-        console.log('[App] PTT assistant done:', event.payload);
-        // 确保最终内容正确
+        setIsWaitingForLLM(false);  // Ensure waiting state is reset
+        setIsStreaming(false);
         if (event.payload) {
           updateLastAssistantMessage(event.payload);
         }
@@ -118,7 +226,8 @@ function App() {
       });
 
       const unlistenError = await listen<string>('ptt-error', (event) => {
-        console.error('[App] PTT error:', event.payload);
+        setIsWaitingForLLM(false);  // Reset waiting state on error
+        setIsStreaming(false);
         setError(`PTT 错误: ${event.payload}`);
       });
 
@@ -137,20 +246,14 @@ function App() {
     };
   }, [addMessage, updateLastAssistantMessage]);
 
-  // Save recording mode to localStorage when it changes
-  // Also reset status when switching modes
   React.useEffect(() => {
     localStorage.setItem('recordMode', recordMode);
-    console.log('[App] Recording mode saved:', recordMode);
-
-    // Reset status and errors when switching modes
     if (recordMode === 'push-to-talk') {
-      setStatus('就绪');
       setError(null);
     }
   }, [recordMode]);
 
-  // Continuous listening mode: auto-start listening when mode is 'continuous'
+  // Continuous listening mode
   React.useEffect(() => {
     let isContinuousMode = recordMode === 'continuous';
     let shouldKeepListening = true;
@@ -158,126 +261,79 @@ function App() {
 
     const continuousListen = async () => {
       while (isContinuousMode && shouldKeepListening && !abortController.signal.aborted) {
-        // Use refs to check current state (avoid stale closure issue)
         if (isRecordingRef.current || isProcessingRef.current) {
-          // Wait if already recording or processing
-          console.log('[App] Continuous mode: Waiting for current operation to complete...');
           await new Promise(resolve => setTimeout(resolve, 500));
           continue;
         }
 
-        console.log('[App] Continuous mode: Starting VAD listening...');
-        setStatus('持续监听中... 请说话');
-
         try {
           const result = await startRecording('continuous', 'auto', true, autoTTS);
-
           if (!result.success) {
-            console.error('[App] Continuous listening failed:', result.error);
             setError(result.error || '监听失败');
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         } catch (error) {
-          console.error('[App] Continuous listening error:', error);
-          if (abortController.signal.aborted) {
-            break; // Exit loop if aborted
-          }
+          if (abortController.signal.aborted) break;
         }
 
-        // Small delay before next listening cycle
         await new Promise(resolve => setTimeout(resolve, 500));
       }
-
-      console.log('[App] Continuous listening loop ended');
     };
 
     if (recordMode === 'continuous') {
-      console.log('[App] Entering continuous listening mode');
       continuousListen();
     } else {
-      console.log('[App] Exiting continuous listening mode');
       shouldKeepListening = false;
       abortController.abort();
-      setStatus('就绪');
       setError(null);
     }
 
-    // Cleanup function
     return () => {
-      console.log('[App] Cleaning up continuous listening mode');
       shouldKeepListening = false;
       isContinuousMode = false;
       abortController.abort();
       if (recordMode !== 'continuous') {
-        // Force stop any ongoing recording when switching to push-to-talk mode
         forceStopRecording();
-        setStatus('就绪');
         setError(null);
       }
     };
-  // Note: Only depend on recordMode to avoid re-running on isRecording/isProcessing changes
-  // The continuous loop checks refs internally to get current state values
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordMode]);
 
-  // 清空历史
   const handleClearHistory = () => {
     clearHistory();
-    setStatus('历史已清空');
   };
 
-  // 测试 TTS
-  const handleTestTTS = async () => {
-    setStatus('测试 TTS...');
-    const result = await generateTTS('你好，我是语音助手');
-    if (result.success) {
-      setStatus('TTS 播放成功');
-    } else {
-      setStatus(`TTS 失败: ${result.error}`);
-    }
-  };
-
-  // 发送文本消息
   const handleSendText = async () => {
     if (!textInput.trim() || isProcessing) return;
 
     const userMessage = textInput.trim();
     setTextInput('');
-    setStatus('思考中...');
     setError(null);
 
+    // Add user message to chat list
+    addMessage('user', userMessage);
+
     try {
-      // 调用 LLM (chatGenerator 返回 ChatResult 类型)
       const result = await chatGenerator(userMessage);
 
-      // 自动播放 TTS（如果启用）
       if (autoTTS && result && result.success && result.content) {
-        setStatus('播放语音...');
         setIsSpeaking(true);
         try {
           const ttsResult = await generateTTS(result.content);
           if (!ttsResult.success) {
             setError(`TTS 失败: ${ttsResult.error}`);
-            setStatus('就绪');
-          } else {
-            setStatus('就绪');
           }
         } catch (ttsError) {
           setError(`TTS 错误: ${ttsError}`);
-          setStatus('就绪');
         } finally {
           setIsSpeaking(false);
         }
-      } else {
-        setStatus('就绪');
       }
     } catch (error) {
       setError(`对话失败: ${error}`);
-      setStatus('就绪');
     }
   };
 
-  // 处理回车键发送
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -286,196 +342,187 @@ function App() {
   };
 
   return (
-    <div className="app-container">
-      <div className="sidebar">
-        <div className="sidebar-header">
-          <h1>🎤 Speekium</h1>
-          <p className="subtitle">Tauri 桌面应用</p>
-          <p className="version">v0.1.0</p>
-        </div>
+    <div className="flex flex-col h-screen bg-[#0A0A0B] text-zinc-200">
+      {/* 顶栏 */}
+      <header className="h-14 border-b border-zinc-800/50 bg-[#141416]/80 backdrop-blur-xl flex items-center justify-between px-4 sticky top-0 z-40">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+          onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+        >
+          <Clock className="w-4 h-4 mr-2" />
+          历史
+        </Button>
 
-        <div className="sidebar-section">
-          <h2>配置</h2>
-          {config ? (
-            <div className="config-info">
-              <div className="config-item">
-                <span className="label">LLM 后端:</span>
-                <span className="value">{config.llm_backend}</span>
-              </div>
-              <div className="config-item">
-                <span className="label">Ollama 模型:</span>
-                <span className="value">{config.ollama_model}</span>
-              </div>
-              <div className="config-item">
-                <span className="label">TTS 后端:</span>
-                <span className="value">{config.tts_backend}</span>
-              </div>
-              <div className="config-item">
-                <span className="label">VAD 阈值:</span>
-                <span className="value">{config.vad_threshold}</span>
-              </div>
-              <div className="config-item">
-                <span className="label">最大历史:</span>
-                <span className="value">{config.max_history}</span>
+        <h1 className="text-lg font-semibold text-zinc-200">Speekium</h1>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+          onClick={() => setIsSettingsOpen(true)}
+        >
+          <SettingsIcon className="w-4 h-4 mr-2" />
+          设置
+        </Button>
+      </header>
+
+      {/* 主内容区 */}
+      <div className="flex-1 overflow-hidden relative">
+        {/* 消息区域 */}
+        <div className="h-full overflow-y-auto px-4">
+          {/* 错误提示 */}
+          {error && (
+            <div className="max-w-[680px] mx-auto mt-4">
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+                <span className="flex-1 text-sm text-red-400">{error}</span>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="config-info loading">加载中...</div>
           )}
-        </div>
 
-        <div className="sidebar-section">
-          <h2>设置</h2>
-          <label className="toggle-setting">
-            <input
-              type="checkbox"
-              checked={autoTTS}
-              onChange={(e) => setAutoTTS(e.target.checked)}
-            />
-            <span>自动语音播放</span>
-          </label>
+          {/* 空状态或消息列表 */}
+          <div className="max-w-[680px] mx-auto py-4">
+            {messages.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <div className="space-y-4">
+                {messages.map((message, index) => {
+                  const isUser = message.role === 'user';
+                  const isVoice = message.content.startsWith('🎤');
+                  const isLastAssistantMessage = !isUser && index === messages.length - 1;
+                  const showStreamingCursor = isStreaming && isLastAssistantMessage;
 
-          <div className="setting-group" style={{ marginTop: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px' }}>录音模式:</label>
-            <select
-              value={recordMode}
-              onChange={(e) => setRecordMode(e.target.value as 'push-to-talk' | 'continuous')}
-              style={{
-                width: '100%',
-                padding: '8px',
-                borderRadius: '6px',
-                border: '1px solid #444',
-                background: '#2a2a2a',
-                color: '#fff',
-                fontSize: '14px'
-              }}
-            >
-              <option value="push-to-talk">按键录音 (推荐)</option>
-              <option value="continuous">自动检测</option>
-            </select>
-            <div style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
-              {recordMode === 'push-to-talk' ?
-                '✓ 点击后立即录音，3秒后自动停止' :
-                '⏱ 等待检测到语音后开始录音'
-              }
-            </div>
+                  return (
+                    <div
+                      key={index}
+                      className={cn(
+                        "flex gap-3 animate-in slide-in-from-bottom-4 duration-300",
+                        isUser ? "justify-end" : "justify-start"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-2xl px-4 py-3 transition-all",
+                          isUser
+                            ? "bg-blue-600 text-white rounded-tr-sm"
+                            : "bg-[#1C1C1F] text-zinc-200 border border-zinc-800/50 rounded-tl-sm"
+                        )}
+                      >
+                        {isVoice && (
+                          <div className="flex items-center gap-1.5 mb-1.5 opacity-70">
+                            <Mic className="h-3 w-3" />
+                            <span className="text-xs">语音消息</span>
+                          </div>
+                        )}
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                          {message.content.replace(/^🎤\s*/, '')}
+                          {showStreamingCursor && (
+                            <span
+                              className="inline-block w-[2px] h-[1.1em] bg-blue-500 ml-0.5 align-middle rounded-sm animate-cursor-blink"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </p>
+
+                        {/* AI 消息播放按钮 */}
+                        {!isUser && (
+                          <button
+                            className="mt-2 flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                            onClick={() => {
+                              if (!isSpeaking) {
+                                setIsSpeaking(true);
+                                generateTTS(message.content)
+                                  .catch(err => setError(`TTS 失败: ${err}`))
+                                  .finally(() => setIsSpeaking(false));
+                              }
+                            }}
+                          >
+                            <Play className="w-3 h-3" />
+                            <span>{isSpeaking ? '播放中...' : '播放'}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Loading indicator - shown while waiting for LLM response */}
+                {(isProcessing || isWaitingForLLM) && (
+                  <div className="flex gap-3 animate-in slide-in-from-bottom-4 duration-300">
+                    <div className="bg-[#1C1C1F] border border-zinc-800/50 rounded-2xl rounded-tl-sm px-4 py-3">
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="sidebar-section">
-          <h2>操作</h2>
-          <button
-            onClick={handleClearHistory}
-            disabled={messages.length === 0}
-            className="btn-secondary"
-          >
-            清空历史
-          </button>
-          <button
-            onClick={handleTestTTS}
-            disabled={isProcessing || isSpeaking}
-            className="btn-secondary"
-            style={{ marginTop: '10px' }}
-          >
-            🔊 测试 TTS
-          </button>
-        </div>
+        {/* PTT 覆盖层 */}
+        <PTTOverlay state={pttState} />
       </div>
 
-      <div className="main-content">
-        <div className="status-bar">
-          <span className="status-text">状态: {status}</span>
-          <div className="status-indicators">
-            {pttState === 'recording' && <span className="badge recording">PTT 录音</span>}
-            {pttState === 'processing' && <span className="badge processing">PTT 处理</span>}
-            {isRecording && pttState === 'idle' && <span className="badge recording">录音中</span>}
-            {isProcessing && pttState === 'idle' && <span className="badge processing">处理中</span>}
-            {isSpeaking && <span className="badge speaking">播放中</span>}
-          </div>
-        </div>
-
-        <div className="chat-container">
-          {error && (
-            <div className="error-banner">
-              <span className="error-icon">⚠️</span>
-              <span className="error-text">{error}</span>
-              <button
-                className="error-close"
-                onClick={() => setError(null)}
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          <div className="messages">
-            {messages.length === 0 ? (
-              <div className="empty-state">
-                <p>💬 输入消息或使用语音开始对话</p>
-                <p className="hint">🎤 按住 <kbd>Cmd+Alt</kbd> 说话，松开结束</p>
-                <p className="hint">支持文本输入和语音录音</p>
-                {autoTTS && <p className="hint">✅ 自动语音播放已启用</p>}
-              </div>
-            ) : (
-              messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`message ${message.role}`}
-                >
-                  <div className="message-content">
-                    <div className="message-role">
-                      {message.role === 'user' ? '👤 用户' : '🤖 助手'}
-                    </div>
-                    <div className="message-text">{message.content}</div>
-                  </div>
-                </div>
-              ))
-            )}
-
-            {isProcessing && (
-              <div className="message assistant">
-                <div className="message-content">
-                  <div className="message-role">🤖 助手</div>
-                  <div className="typing-indicator">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="control-bar">
-          <div className="input-group">
-            <input
-              type="text"
+      {/* 底部输入区 */}
+      <div className="border-t border-zinc-800/50 bg-[#141416] px-4 py-4">
+        <div className="max-w-[680px] mx-auto">
+          {/* 输入框和发送按钮 */}
+          <div className="flex items-center gap-3 mb-3">
+            <Input
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="输入消息或使用语音..."
+              placeholder="输入消息..."
               disabled={isProcessing}
-              className="text-input"
+              className="flex-1 bg-[#1C1C1F] border-zinc-800/50 text-zinc-200 placeholder:text-zinc-500 focus-visible:ring-blue-500"
             />
-            <button
+            <Button
               onClick={handleSendText}
               disabled={!textInput.trim() || isProcessing}
-              className="btn-send"
+              className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-zinc-800 disabled:text-zinc-500"
             >
-              发送
-            </button>
-            <div className={`ptt-status ${pttState}`}>
-              <div className="ptt-indicator"></div>
-              <span className="ptt-label">
-                {pttState === 'recording' ? '录音中...' :
-                 pttState === 'processing' ? '处理中...' :
-                 'Cmd+Alt 说话'}
-              </span>
-            </div>
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+
+          {/* PTT 提示 */}
+          <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
+            <Mic className="w-3 h-3" />
+            <span>按住 <kbd className="px-1.5 py-0.5 rounded bg-[#1C1C1F] text-zinc-400 font-mono border border-zinc-800">⌘+⌥</kbd> 说话</span>
           </div>
         </div>
       </div>
+
+      {/* 设置弹窗 */}
+      <Settings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        config={config}
+        onSave={saveConfig}
+        autoTTS={autoTTS}
+        onAutoTTSChange={setAutoTTS}
+        recordMode={recordMode}
+        onRecordModeChange={setRecordMode}
+        onClearHistory={handleClearHistory}
+      />
     </div>
   );
 }

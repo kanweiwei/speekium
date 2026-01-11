@@ -4,8 +4,8 @@
  * ❌ 旧架构：fetch HTTP API (已废弃)
  */
 
-import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useState, useEffect, useCallback } from 'react';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 
 // ============================================================================
 // Type Definitions
@@ -58,12 +58,12 @@ export function useTauriAPI() {
   const [audioQueue, setAudioQueue] = useState<Array<{ path: string; text: string }>>([]);
   const [isPlayingQueue, setIsPlayingQueue] = useState(false);
 
-  // 加载配置和健康检查
+  // Load config and health check
   useEffect(() => {
     loadConfig();
     checkDaemonHealth();
 
-    // 定期健康检查（每30秒）
+    // Periodic health check (every 30s)
     const healthInterval = setInterval(() => {
       checkDaemonHealth();
     }, 30000);
@@ -71,7 +71,7 @@ export function useTauriAPI() {
     return () => clearInterval(healthInterval);
   }, []);
 
-  // 音频队列播放器
+  // Audio queue player
   useEffect(() => {
     if (audioQueue.length === 0 || isPlayingQueue) {
       return;
@@ -99,11 +99,11 @@ export function useTauriAPI() {
           audio.play().catch(reject);
         });
 
-        // 移除已播放的音频
+        // Remove played audio
         setAudioQueue(prev => prev.slice(1));
       } catch (error) {
         console.error('[Audio Queue] Error:', error);
-        // 出错也要移除，避免卡住
+        // Remove on error to avoid getting stuck
         setAudioQueue(prev => prev.slice(1));
       } finally {
         setIsPlayingQueue(false);
@@ -133,12 +133,29 @@ export function useTauriAPI() {
     }
   };
 
+  const saveConfig = async (newConfig: Record<string, any>) => {
+    try {
+      console.log('[Config] Saving:', newConfig);
+      const result = await invoke<{ success: boolean; error?: string }>('save_config', { config: newConfig });
+      if (result.success) {
+        setConfig(newConfig);
+        console.log('[Config] Saved successfully');
+      } else {
+        console.error('[Config] Save failed:', result.error);
+        throw new Error(result.error || 'Save failed');
+      }
+    } catch (error) {
+      console.error('[Config] Save invoke failed:', error);
+      throw error;
+    }
+  };
+
   const startRecording = async (mode: string = 'push-to-talk', duration?: number | string, autoChat: boolean = true, useTTS: boolean = false) => {
     setIsRecording(true);
     try {
       console.log(`[Recording] Starting: mode=${mode}, duration=${duration}`);
 
-      // 转换 duration 为字符串（Rust 需要 String 类型）
+      // Convert duration to string (Rust requires String type)
       const durationStr = duration === undefined ? 'auto' : String(duration);
 
       const result = await invoke<RecordingResult>('record_audio', {
@@ -149,13 +166,13 @@ export function useTauriAPI() {
       if (result.success && result.text) {
         console.log(`[Recording] Success: "${result.text}" (${result.language})`);
 
-        // 添加用户消息
+        // Add user message
         setMessages(prev => [...prev, {
           role: 'user',
           content: result.text!
         }]);
 
-        // 自动调用 LLM（如果启用）
+        // Auto call LLM (if enabled)
         if (autoChat) {
           await chatGenerator(result.text!, result.language, true, useTTS);
         }
@@ -186,18 +203,18 @@ export function useTauriAPI() {
       console.log(`[Chat] Sending: "${text}" (streaming: ${useStreaming}, TTS: ${useTTS})`);
 
       if (useTTS && useStreaming) {
-        // TTS 流式模式
+        // TTS streaming mode
         return await chatTTSStream(text);
       }
 
       if (!useStreaming) {
-        // 非流式模式
+        // Non-streaming mode
         const result = await invoke<ChatResult>('chat_llm', { text });
 
         if (result.success && result.content) {
           console.log(`[Chat] Response: "${result.content}"`);
 
-          // 添加 LLM 响应
+          // Add LLM response
           setMessages(prev => [...prev, {
             role: 'assistant',
             content: result.content!
@@ -210,7 +227,7 @@ export function useTauriAPI() {
         return result;
       }
 
-      // 流式模式
+      // Streaming mode
       return await chatStream(text);
 
     } catch (error) {
@@ -226,7 +243,7 @@ export function useTauriAPI() {
       let fullResponse = '';
       let assistantMessageAdded = false;
 
-      // 监听流式事件
+      // Listen for streaming events
       const { listen } = await import('@tauri-apps/api/event');
 
       const unlistenChunk = await listen<string>('chat-chunk', (event) => {
@@ -235,23 +252,34 @@ export function useTauriAPI() {
 
         console.log(`[Chat] Chunk received: "${chunk}"`);
 
-        // 实时更新 UI
+        // Real-time UI update
         setMessages(prev => {
           if (!assistantMessageAdded) {
-            // 第一次，添加新消息
+            // First time, add new message
             assistantMessageAdded = true;
             return [...prev, {
               role: 'assistant',
               content: fullResponse
             }];
           } else {
-            // 更新最后一条消息
+            // Update last assistant message
             const newMessages = [...prev];
-            newMessages[newMessages.length - 1] = {
-              role: 'assistant',
-              content: fullResponse
-            };
-            return newMessages;
+            const lastIndex = newMessages.length - 1;
+
+            // Check if last message is assistant
+            if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+              newMessages[lastIndex] = {
+                role: 'assistant',
+                content: fullResponse
+              };
+              return newMessages;
+            } else {
+              // If last message is not assistant, add new message
+              return [...prev, {
+                role: 'assistant',
+                content: fullResponse
+              }];
+            }
           }
         });
       });
@@ -277,7 +305,7 @@ export function useTauriAPI() {
         reject(new Error(event.payload));
       });
 
-      // 调用 Rust 命令开始流式响应
+      // Call Rust command to start streaming response
       try {
         await invoke('chat_llm_stream', { text });
       } catch (error) {
@@ -294,7 +322,7 @@ export function useTauriAPI() {
       let fullResponse = '';
       let assistantMessageAdded = false;
 
-      // 监听流式事件
+      // Listen for streaming events
       const { listen } = await import('@tauri-apps/api/event');
 
       const unlistenTextChunk = await listen<string>('tts-text-chunk', (event) => {
@@ -303,7 +331,7 @@ export function useTauriAPI() {
 
         console.log(`[TTS] Text chunk: "${chunk}"`);
 
-        // 实时更新 UI
+        // Real-time UI update
         setMessages(prev => {
           if (!assistantMessageAdded) {
             assistantMessageAdded = true;
@@ -312,12 +340,24 @@ export function useTauriAPI() {
               content: fullResponse
             }];
           } else {
+            // Update last assistant message
             const newMessages = [...prev];
-            newMessages[newMessages.length - 1] = {
-              role: 'assistant',
-              content: fullResponse
-            };
-            return newMessages;
+            const lastIndex = newMessages.length - 1;
+
+            // Check if last message is assistant
+            if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+              newMessages[lastIndex] = {
+                role: 'assistant',
+                content: fullResponse
+              };
+              return newMessages;
+            } else {
+              // If last message is not assistant, add new message
+              return [...prev, {
+                role: 'assistant',
+                content: fullResponse
+              }];
+            }
           }
         });
       });
@@ -326,7 +366,7 @@ export function useTauriAPI() {
         const { audio_path, text: audioText } = event.payload;
         console.log(`[TTS] Audio chunk: "${audioText.substring(0, 30)}..." -> ${audio_path}`);
 
-        // 添加到音频队列
+        // Add to audio queue
         setAudioQueue(prev => [...prev, { path: audio_path, text: audioText }]);
       });
 
@@ -353,7 +393,7 @@ export function useTauriAPI() {
         reject(new Error(event.payload));
       });
 
-      // 调用 Rust 命令开始 TTS 流式响应
+      // Call Rust command to start TTS streaming response
       try {
         await invoke('chat_tts_stream', { text, autoPlay: true });
       } catch (error) {
@@ -392,9 +432,15 @@ export function useTauriAPI() {
 
   const playAudio = async (audioPath: string) => {
     try {
-      const audio = new Audio(`file://${audioPath}`);
+      // Use Tauri convertFileSrc to convert local file path to accessible URL
+      const audioUrl = convertFileSrc(audioPath);
+      console.log('[Audio] Playing:', audioUrl);
+      const audio = new Audio(audioUrl);
       audio.onended = () => setIsSpeaking(false);
-      audio.onerror = () => setIsSpeaking(false);
+      audio.onerror = (e) => {
+        console.error('[Audio] Playback error:', e);
+        setIsSpeaking(false);
+      };
       await audio.play();
     } catch (error) {
       console.error('[Audio] Playback failed:', error);
@@ -407,24 +453,24 @@ export function useTauriAPI() {
     console.log('[History] Cleared');
   };
 
-  const addMessage = (role: 'user' | 'assistant', content: string) => {
+  const addMessage = useCallback((role: 'user' | 'assistant', content: string) => {
     setMessages(prev => [...prev, { role, content }]);
-  };
+  }, []);
 
-  const updateLastAssistantMessage = (content: string) => {
+  const updateLastAssistantMessage = useCallback((content: string) => {
     setMessages(prev => {
       const newMessages = [...prev];
-      // 找到最后一条 assistant 消息并更新
+      // Find and update last assistant message
       for (let i = newMessages.length - 1; i >= 0; i--) {
         if (newMessages[i].role === 'assistant') {
           newMessages[i] = { ...newMessages[i], content };
           return newMessages;
         }
       }
-      // 如果没有 assistant 消息，添加新的
+      // If no assistant message, add new one
       return [...prev, { role: 'assistant', content }];
     });
-  };
+  }, []);
 
   const checkDaemonHealth = async () => {
     try {
@@ -462,6 +508,7 @@ export function useTauriAPI() {
     chatGenerator,
     clearHistory,
     loadConfig,
+    saveConfig,
     generateTTS,
     playAudio,
     checkDaemonHealth,
