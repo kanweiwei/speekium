@@ -2,6 +2,7 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{TrayIconBuilder, TrayIconEvent},
+    webview::WebviewWindowBuilder,
     Emitter, Manager, Runtime,
 };
 use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout, ChildStderr};
@@ -303,7 +304,30 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                     if let Some(ptt_event) = event.get("ptt_event").and_then(|v| v.as_str()) {
                         println!("🎤 PTT 事件: {}", ptt_event);
 
-                        if let Some(window) = app_handle.get_webview_window("main") {
+                        // 获取主窗口和浮动窗口
+                        let main_window = app_handle.get_webview_window("main");
+                        let overlay_window = app_handle.get_webview_window("ptt-overlay");
+
+                        // 发送状态到浮动窗口并控制显示/隐藏
+                        if let Some(ref overlay) = overlay_window {
+                            match ptt_event {
+                                "recording" => {
+                                    let _ = overlay.show();
+                                    let _ = overlay.emit("ptt-state", "recording");
+                                }
+                                "processing" => {
+                                    let _ = overlay.emit("ptt-state", "processing");
+                                }
+                                "idle" | "error" => {
+                                    let _ = overlay.hide();
+                                    let _ = overlay.emit("ptt-state", "idle");
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        // 发送完整事件到主窗口
+                        if let Some(window) = main_window {
                             match ptt_event {
                                 "recording" => {
                                     let _ = window.emit("ptt-state", "recording");
@@ -376,7 +400,7 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-async fn record_audio(mode: String, duration: Option<String>) -> Result<RecordResult, String> {
+async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Option<String>) -> Result<RecordResult, String> {
     // 处理 duration 参数：支持数字字符串、"auto" 或空值
     let duration_val = match duration {
         Some(d) => {
@@ -396,10 +420,46 @@ async fn record_audio(mode: String, duration: Option<String>) -> Result<RecordRe
 
     println!("🎤 调用守护进程: record {}", args);
 
-    let result = call_daemon("record", args)?;
+    // 发送录音开始状态到所有窗口（统一状态同步）
+    emit_ptt_state(&app_handle, "recording");
 
-    serde_json::from_value(result)
-        .map_err(|e| format!("Failed to parse result: {}", e))
+    let result = call_daemon("record", args);
+
+    // 发送处理中状态
+    emit_ptt_state(&app_handle, "processing");
+
+    // 处理结果
+    let parsed_result = result.and_then(|r| {
+        serde_json::from_value(r)
+            .map_err(|e| format!("Failed to parse result: {}", e))
+    });
+
+    // 发送空闲状态
+    emit_ptt_state(&app_handle, "idle");
+
+    parsed_result
+}
+
+/// 发送 PTT 状态到所有窗口
+fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
+    // 发送到主窗口
+    if let Some(main_window) = app_handle.get_webview_window("main") {
+        let _ = main_window.emit("ptt-state", state);
+    }
+    // 发送到浮动窗口
+    if let Some(overlay) = app_handle.get_webview_window("ptt-overlay") {
+        let _ = overlay.emit("ptt-state", state);
+        // 控制浮动窗口显示/隐藏
+        match state {
+            "recording" | "processing" => {
+                let _ = overlay.show();
+            }
+            "idle" | "error" => {
+                let _ = overlay.hide();
+            }
+            _ => {}
+        }
+    }
 }
 
 #[tauri::command]
@@ -813,6 +873,48 @@ fn cleanup_daemon() {
 }
 
 // ============================================================================
+// PTT Overlay Window
+// ============================================================================
+
+fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<dyn std::error::Error>> {
+    // 获取主显示器信息
+    let monitor = app.primary_monitor()?.ok_or("No primary monitor found")?;
+    let screen_size = monitor.size();
+    let scale_factor = monitor.scale_factor();
+
+    // 窗口尺寸（精简设计）
+    let window_width: u32 = 140;
+    let window_height: u32 = 50;
+
+    // 计算底部居中位置
+    let x = ((screen_size.width as f64 / scale_factor) / 2.0 - (window_width as f64 / 2.0)) as i32;
+    let y = ((screen_size.height as f64 / scale_factor) - (window_height as f64) - 60.0) as i32; // 距离底部 60px
+
+    // 创建 PTT 浮动窗口（透明窗口）
+    let _overlay = WebviewWindowBuilder::new(
+        app,
+        "ptt-overlay",
+        tauri::WebviewUrl::App("ptt-overlay.html".into())
+    )
+    .title("PTT Status")
+    .inner_size(window_width as f64, window_height as f64)
+    .position(x as f64, y as f64)
+    .always_on_top(true)
+    .decorations(false)
+    .resizable(false)
+    .skip_taskbar(true)
+    .focused(false)
+    .visible(false)
+    .transparent(true)
+    .shadow(false)  // 禁用窗口阴影，有助于透明效果
+    .build()?;
+
+    println!("✅ PTT 浮动窗口已创建 ({}x{} @ {}, {})", window_width, window_height, x, y);
+
+    Ok(())
+}
+
+// ============================================================================
 // Main Entry Point
 // ============================================================================
 
@@ -844,6 +946,11 @@ pub fn run() {
 
             // 启动 PTT 事件读取器 (监听 Python daemon 的 stderr)
             start_ptt_reader(app.handle().clone());
+
+            // 创建 PTT 浮动状态窗口
+            if let Err(e) = create_ptt_overlay(app.handle()) {
+                println!("⚠️ 创建 PTT 浮动窗口失败: {}", e);
+            }
 
             println!("✅ Speekium 应用已启动 (守护进程模式)");
             println!("🎤 PTT 快捷键: Cmd+Alt (按住说话，松开结束)");

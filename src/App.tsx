@@ -39,6 +39,19 @@ function App() {
   const pttAssistantResponseRef = React.useRef<string>('');
   const pttAssistantAddedRef = React.useRef<boolean>(false);
 
+  // Refs to track actual state for continuous mode (avoid stale closure issue)
+  const isRecordingRef = React.useRef(isRecording);
+  const isProcessingRef = React.useRef(isProcessing);
+
+  // Keep refs in sync with state
+  React.useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  React.useEffect(() => {
+    isProcessingRef.current = isProcessing;
+  }, [isProcessing]);
+
   React.useEffect(() => {
     loadConfig();
   }, []);
@@ -145,8 +158,10 @@ function App() {
 
     const continuousListen = async () => {
       while (isContinuousMode && shouldKeepListening && !abortController.signal.aborted) {
-        if (isRecording || isProcessing) {
+        // Use refs to check current state (avoid stale closure issue)
+        if (isRecordingRef.current || isProcessingRef.current) {
           // Wait if already recording or processing
+          console.log('[App] Continuous mode: Waiting for current operation to complete...');
           await new Promise(resolve => setTimeout(resolve, 500));
           continue;
         }
@@ -201,7 +216,7 @@ function App() {
       }
     };
   // Note: Only depend on recordMode to avoid re-running on isRecording/isProcessing changes
-  // The continuous loop checks isRecording/isProcessing internally
+  // The continuous loop checks refs internally to get current state values
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordMode]);
 

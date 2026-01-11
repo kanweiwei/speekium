@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for main window",
-  "windows": ["main"],
+  "description": "Capability for main window and PTT overlay",
+  "windows": ["main", "ptt-overlay"],
   "permissions": [
     "core:default",
     "core:path:default",
     "core:event:default",
     "core:window:default",
+    "core:webview:default",
     "core:app:default",
     "opener:default"
   ]
