@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="22" height="22">
+  <!-- 外圆环 -->
+  <circle cx="100" cy="100" r="90" fill="none" stroke="#000000" stroke-width="8"/>
+
+  <!-- 声波线条 - 镂空效果（黑色线条） -->
+  <!-- 第一条波（上） -->
+  <path d="M 45 70 Q 75 55, 100 70 T 155 70"
+        fill="none"
+        stroke="#000000"
+        stroke-width="8"
+        stroke-linecap="round"/>
+
+  <!-- 第二条波（中） -->
+  <path d="M 40 100 Q 70 85, 100 100 T 160 100"
+        fill="none"
+        stroke="#000000"
+        stroke-width="10"
+        stroke-linecap="round"/>
+
+  <!-- 第三条波（下） -->
+  <path d="M 45 130 Q 75 145, 100 130 T 155 130"
+        fill="none"
+        stroke="#000000"
+        stroke-width="8"
+        stroke-linecap="round"/>
+
+  <!-- 中心点 -->
+  <circle cx="100" cy="100" r="12" fill="#000000"/>
+</svg>

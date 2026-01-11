@@ -804,8 +804,8 @@ fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
         .item(&quit_item)
         .build()?;
 
-    // Load tray icon
-    let icon_bytes = include_bytes!("../icons/32x32.png");
+    // Load tray icon (template icon for macOS menu bar)
+    let icon_bytes = include_bytes!("../icons/tray-template.png");
     let icon_image = image::load_from_memory(icon_bytes)
         .expect("Failed to load tray icon");
     let rgba = icon_image.to_rgba8();
@@ -816,6 +816,8 @@ fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     let _tray = TrayIconBuilder::new()
         .menu(&menu)
         .icon(tray_icon)
+        .icon_as_template(true)
+        .tooltip("Speekium")
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => {
                 if let Some(window) = app.get_webview_window("main") {
