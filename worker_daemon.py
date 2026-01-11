@@ -210,26 +210,33 @@ class SpeekiumDaemon:
             self._log(f"🎤 开始录音 (mode={mode}, duration={duration}s)...")
 
             if mode == "continuous":
-                # 使用 VAD 自动检测
-                audio = self.assistant.record_with_vad()
+                # 使用 VAD 自动检测 - 检测到语音时发送 recording 事件
+                def on_speech():
+                    self._emit_ptt_event("recording")
+                audio = self.assistant.record_with_vad(on_speech_detected=on_speech)
             else:
-                # 按键录音模式
+                # 按键录音模式 - 发送 recording 事件
+                self._emit_ptt_event("recording")
                 audio = sd.rec(int(duration * 16000), samplerate=16000, channels=1, dtype="float32")
                 sd.wait()
                 audio = audio[:, 0]  # 转为 1D 数组
 
             if audio is None or len(audio) == 0:
+                self._emit_ptt_event("idle")
                 return {"success": False, "error": "No audio recorded"}
 
             self._log("🔄 识别中...")
+            self._emit_ptt_event("processing")
             text, language = self.assistant.transcribe(audio)
 
             self._log(f"✅ 识别完成: '{text}' ({language})")
+            self._emit_ptt_event("idle")
 
             return {"success": True, "text": text, "language": language}
 
         except Exception as e:
             self._log(f"❌ 录音失败: {e}")
+            self._emit_ptt_event("idle")
             traceback.print_exc(file=sys.stderr)
             return {"success": False, "error": str(e)}
 

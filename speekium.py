@@ -225,12 +225,13 @@ class VoiceAssistant:
             logger.error("piper_voice_load_failed", error=str(e))
             return None
 
-    def record_with_vad(self, speech_already_started=False):
+    def record_with_vad(self, speech_already_started=False, on_speech_detected=None):
         """Use VAD to detect speech, auto start and stop recording.
 
         Args:
             speech_already_started: If True, skip waiting for speech to begin and start recording immediately.
                                    Used when user interrupts TTS (barge-in).
+            on_speech_detected: Optional callback called when speech is first detected.
         """
         model = self.load_vad()
         model.reset_states()  # Reset VAD state
@@ -293,6 +294,9 @@ class VoiceAssistant:
                         frames.extend(pre_buffer)
                         pre_buffer.clear()
                         logger.info("speech_detected")
+                        # Call callback if provided
+                        if on_speech_detected:
+                            on_speech_detected()
 
                     if is_speaking:
                         # Only reset silence count on consecutive speech
