@@ -4,9 +4,9 @@ use tauri::{
     tray::{TrayIconBuilder, TrayIconEvent},
     Emitter, Manager, Runtime,
 };
-use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout};
+use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout, ChildStderr};
 use std::io::{BufReader, BufWriter, Write, BufRead};
-use std::sync::Mutex;
+use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -66,20 +66,77 @@ impl PythonDaemon {
         println!("🚀 启动 Python 守护进程...");
 
         let mut child = Command::new("python3")
-            .arg("./worker_daemon.py")
+            .arg("../worker_daemon.py")
             .arg("daemon")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())  // 将 stderr 输出到控制台
+            .stderr(Stdio::piped())  // 捕获 stderr 用于 PTT 事件
             .spawn()
             .map_err(|e| format!("Failed to start daemon: {}", e))?;
 
         let stdin = BufWriter::new(
             child.stdin.take().ok_or("Failed to get stdin")?
         );
-        let stdout = BufReader::new(
+        let mut stdout = BufReader::new(
             child.stdout.take().ok_or("Failed to get stdout")?
         );
+        let stderr = BufReader::new(
+            child.stderr.take().ok_or("Failed to get stderr")?
+        );
+
+        // 存储 stderr 到全局变量，供 PTT 事件读取器使用
+        {
+            let mut ptt_stderr = PTT_STDERR.lock().unwrap();
+            *ptt_stderr = Some(stderr);
+        }
+
+        // 等待守护进程初始化完成 - 读取 stdout 直到看到带 "就绪" 消息的事件
+        // 守护进程加载模型需要约 7 秒，设置 15 秒超时
+        use std::time::{Duration, Instant};
+        let start = Instant::now();
+        let timeout = Duration::from_secs(15);
+        let mut initialized = false;
+
+        println!("⏳ 等待守护进程初始化...");
+
+        while start.elapsed() < timeout {
+            let mut line = String::new();
+            match stdout.read_line(&mut line) {
+                Ok(0) => {
+                    // EOF - 守护进程意外退出
+                    println!("❌ 守护进程在初始化期间退出");
+                    return Err("Daemon exited during initialization".to_string());
+                }
+                Ok(_) => {
+                    // 解析 JSON 日志事件
+                    if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
+                        if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
+                            println!("📋 守护进程事件: {}", event_type);
+
+                            // 检查是否是带"就绪"消息的 daemon_success 事件（最后一个初始化事件）
+                            if event_type == "daemon_success" {
+                                if let Some(message) = event.get("message").and_then(|v| v.as_str()) {
+                                    if message.contains("就绪") || message.contains("ready") {
+                                        initialized = true;
+                                        println!("✨ 守护进程初始化完成");
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("❌ 读取守护进程输出失败: {}", e);
+                    return Err(format!("Failed to read daemon output: {}", e));
+                }
+            }
+        }
+
+        if !initialized {
+            println!("❌ 守护进程初始化超时 (15 秒)");
+            return Err("Daemon initialization timeout (15 seconds)".to_string());
+        }
 
         println!("✅ Python 守护进程已启动");
 
@@ -97,6 +154,8 @@ impl PythonDaemon {
             "args": args
         });
 
+        println!("📤 发送命令: {}", command);
+
         // 发送到 stdin
         writeln!(self.stdin, "{}", request.to_string())
             .map_err(|e| format!("Failed to write command: {}", e))?;
@@ -104,27 +163,56 @@ impl PythonDaemon {
         self.stdin.flush()
             .map_err(|e| format!("Failed to flush stdin: {}", e))?;
 
-        // 从 stdout 读取响应
-        let mut line = String::new();
-        self.stdout.read_line(&mut line)
-            .map_err(|e| format!("Failed to read response: {}", e))?;
+        println!("⏳ 等待响应...");
 
-        // 解析 JSON
-        serde_json::from_str(&line)
-            .map_err(|e| format!("Failed to parse JSON: {}", e))
+        // 从 stdout 读取响应，跳过日志事件
+        // 守护进程的日志事件有 "event" 字段，命令响应有 "success" 字段
+        loop {
+            let mut line = String::new();
+            self.stdout.read_line(&mut line)
+                .map_err(|e| {
+                    println!("❌ 读取响应失败: {}", e);
+                    format!("Failed to read response: {}", e)
+                })?;
+
+            // 解析 JSON
+            let result: serde_json::Value = serde_json::from_str(&line)
+                .map_err(|e| {
+                    println!("❌ JSON 解析失败: {} | 原始内容: {}", e, line);
+                    format!("Failed to parse JSON: {}", e)
+                })?;
+
+            // 检查是否是日志事件（有 "event" 字段）
+            if result.get("event").is_some() {
+                println!("📋 跳过日志事件: {}", result.get("event").unwrap().as_str().unwrap_or("unknown"));
+                continue;  // 跳过日志，继续读取下一行
+            }
+
+            // 这是命令响应（有 "success" 字段或其他响应字段）
+            println!("📥 收到命令响应: {}", line.trim());
+            return Ok(result);
+        }
     }
 
     fn health_check(&mut self) -> bool {
+        println!("🏥 执行健康检查...");
         match self.send_command("health", serde_json::json!({})) {
             Ok(result) => {
+                println!("✅ 健康检查响应: {:?}", result);
                 if let Some(obj) = result.as_object() {
-                    return obj.get("success")
+                    let success = obj.get("success")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
+                    println!("🔍 success 字段: {}", success);
+                    return success;
                 }
+                println!("⚠️ 响应不是对象");
                 false
             }
-            Err(_) => false
+            Err(e) => {
+                println!("❌ 健康检查失败: {}", e);
+                false
+            }
         }
     }
 }
@@ -132,11 +220,23 @@ impl PythonDaemon {
 // 全局守护进程实例
 static DAEMON: Mutex<Option<PythonDaemon>> = Mutex::new(None);
 
+// PTT stderr reader handle
+static PTT_STDERR: Mutex<Option<BufReader<ChildStderr>>> = Mutex::new(None);
+
+// 流式操作标志 - 防止健康检查干扰流式操作
+static STREAMING_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
 fn ensure_daemon_running() -> Result<(), String> {
     let mut daemon = DAEMON.lock().unwrap();
 
     // 如果守护进程已存在，先检查健康状态
     if let Some(ref mut d) = *daemon {
+        // 流式操作期间跳过健康检查
+        if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
+            println!("⏸️ 流式操作进行中，跳过 ensure_daemon 健康检查");
+            return Ok(());
+        }
+
         if d.health_check() {
             return Ok(());  // 健康，直接返回
         }
@@ -161,6 +261,111 @@ fn call_daemon(command: &str, args: serde_json::Value) -> Result<serde_json::Val
     daemon.send_command(command, args)
 }
 
+/// 启动 PTT (Push-to-Talk) 事件读取器
+/// 在后台线程中监听 Python daemon 的 stderr，解析 PTT 事件并转发到前端
+fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
+    std::thread::spawn(move || {
+        println!("🎧 PTT 事件读取器启动");
+
+        loop {
+            // 获取 stderr 读取器
+            let line = {
+                let mut ptt_stderr = PTT_STDERR.lock().unwrap();
+                if let Some(ref mut stderr) = *ptt_stderr {
+                    let mut line = String::new();
+                    match stderr.read_line(&mut line) {
+                        Ok(0) => {
+                            println!("🔚 PTT: stderr EOF - 守护进程可能已退出");
+                            break;
+                        }
+                        Ok(_) => Some(line),
+                        Err(e) => {
+                            println!("❌ PTT: 读取 stderr 失败: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    // stderr 尚未就绪，等待一下
+                    drop(ptt_stderr);
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    continue;
+                }
+            };
+
+            if let Some(line) = line {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+
+                // 尝试解析为 JSON PTT 事件
+                if let Ok(event) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(ptt_event) = event.get("ptt_event").and_then(|v| v.as_str()) {
+                        println!("🎤 PTT 事件: {}", ptt_event);
+
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            match ptt_event {
+                                "recording" => {
+                                    let _ = window.emit("ptt-state", "recording");
+                                }
+                                "processing" => {
+                                    let _ = window.emit("ptt-state", "processing");
+                                }
+                                "idle" => {
+                                    let _ = window.emit("ptt-state", "idle");
+                                }
+                                "user_message" => {
+                                    // 用户语音识别结果
+                                    if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
+                                        let _ = window.emit("ptt-user-message", text);
+                                    }
+                                }
+                                "assistant_chunk" => {
+                                    // LLM 流式响应片段
+                                    if let Some(content) = event.get("content").and_then(|v| v.as_str()) {
+                                        let _ = window.emit("ptt-assistant-chunk", content);
+                                    }
+                                }
+                                "assistant_done" => {
+                                    // LLM 响应完成
+                                    if let Some(content) = event.get("content").and_then(|v| v.as_str()) {
+                                        let _ = window.emit("ptt-assistant-done", content);
+                                    }
+                                }
+                                "audio_chunk" => {
+                                    // TTS 音频片段
+                                    let audio_path = event.get("audio_path").and_then(|v| v.as_str());
+                                    let text = event.get("text").and_then(|v| v.as_str());
+                                    if let (Some(path), Some(txt)) = (audio_path, text) {
+                                        let _ = window.emit("ptt-audio-chunk", serde_json::json!({
+                                            "audio_path": path,
+                                            "text": txt
+                                        }));
+                                    }
+                                }
+                                "error" => {
+                                    let _ = window.emit("ptt-state", "error");
+                                    if let Some(error) = event.get("error").and_then(|v| v.as_str()) {
+                                        let _ = window.emit("ptt-error", error);
+                                    }
+                                }
+                                _ => {
+                                    println!("⚠️ PTT: 未知事件类型: {}", ptt_event);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // 不是 PTT 事件 JSON，作为普通日志输出
+                    println!("📋 daemon stderr: {}", line);
+                }
+            }
+        }
+
+        println!("🛑 PTT 事件读取器退出");
+    });
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
@@ -171,8 +376,19 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-async fn record_audio(mode: String, duration: Option<f32>) -> Result<RecordResult, String> {
-    let duration_val = duration.unwrap_or(3.0);
+async fn record_audio(mode: String, duration: Option<String>) -> Result<RecordResult, String> {
+    // 处理 duration 参数：支持数字字符串、"auto" 或空值
+    let duration_val = match duration {
+        Some(d) => {
+            if d == "auto" {
+                3.0  // "auto" 默认为 3 秒
+            } else {
+                d.parse::<f32>().unwrap_or(3.0)
+            }
+        },
+        None => 3.0
+    };
+
     let args = serde_json::json!({
         "mode": mode,
         "duration": duration_val
@@ -207,6 +423,9 @@ async fn chat_llm_stream(
 ) -> Result<(), String> {
     println!("💬 调用守护进程: chat_stream");
 
+    // 设置流式操作标志
+    STREAMING_IN_PROGRESS.store(true, Ordering::SeqCst);
+
     // 在单独的线程中处理流式响应
     std::thread::spawn(move || {
         let mut daemon = DAEMON.lock().unwrap();
@@ -214,6 +433,7 @@ async fn chat_llm_stream(
             Some(d) => d,
             None => {
                 let _ = window.emit("chat-error", "Daemon not available");
+                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                 return;
             }
         };
@@ -226,11 +446,13 @@ async fn chat_llm_stream(
 
         if let Err(e) = writeln!(daemon.stdin, "{}", request.to_string()) {
             let _ = window.emit("chat-error", format!("Write error: {}", e));
+            STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
         if let Err(e) = daemon.stdin.flush() {
             let _ = window.emit("chat-error", format!("Flush error: {}", e));
+            STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
@@ -241,11 +463,17 @@ async fn chat_llm_stream(
                 Ok(0) => {
                     // EOF - 守护进程可能崩溃
                     let _ = window.emit("chat-error", "Daemon connection lost");
+                    STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                     break;
                 }
                 Ok(_) => {
                     // 解析 JSON
                     if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(&line) {
+                        // 跳过日志事件（有 "event" 字段）
+                        if chunk.get("event").is_some() {
+                            continue;
+                        }
+
                         let chunk_type = chunk.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
                         match chunk_type {
@@ -258,6 +486,7 @@ async fn chat_llm_stream(
                             "done" => {
                                 // 流式响应完成
                                 let _ = window.emit("chat-done", ());
+                                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                                 break;
                             }
                             "error" => {
@@ -265,6 +494,7 @@ async fn chat_llm_stream(
                                 if let Some(error) = chunk.get("error").and_then(|v| v.as_str()) {
                                     let _ = window.emit("chat-error", error);
                                 }
+                                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                                 break;
                             }
                             _ => {
@@ -275,6 +505,7 @@ async fn chat_llm_stream(
                 }
                 Err(e) => {
                     let _ = window.emit("chat-error", format!("Read error: {}", e));
+                    STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                     break;
                 }
             }
@@ -292,35 +523,51 @@ async fn chat_tts_stream(
 ) -> Result<(), String> {
     println!("💬🔊 调用守护进程: chat_tts_stream");
 
+    // 设置流式操作标志
+    STREAMING_IN_PROGRESS.store(true, Ordering::SeqCst);
+
     // 在单独的线程中处理流式响应
     std::thread::spawn(move || {
+        println!("🧵 TTS 流式线程启动");
         let mut daemon = DAEMON.lock().unwrap();
         let daemon = match daemon.as_mut() {
             Some(d) => d,
             None => {
+                println!("❌ TTS 流式线程：守护进程不可用");
                 let _ = window.emit("tts-error", "Daemon not available");
+                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                 return;
             }
         };
+
+        println!("🔒 TTS 流式线程：已获取守护进程锁");
 
         // 发送流式命令
         let request = serde_json::json!({
             "command": "chat_tts_stream",
             "args": {
-                "text": text,
+                "text": text.clone(),
                 "auto_play": auto_play.unwrap_or(true)
             }
         });
 
+        println!("📤 TTS 流式线程：发送命令 - {}", text);
+
         if let Err(e) = writeln!(daemon.stdin, "{}", request.to_string()) {
+            println!("❌ TTS 流式线程：写入失败 - {}", e);
             let _ = window.emit("tts-error", format!("Write error: {}", e));
+            STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
         if let Err(e) = daemon.stdin.flush() {
+            println!("❌ TTS 流式线程：刷新失败 - {}", e);
             let _ = window.emit("tts-error", format!("Flush error: {}", e));
+            STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
+
+        println!("✅ TTS 流式线程：命令已发送，开始读取响应...");
 
         // 循环读取流式输出
         loop {
@@ -328,13 +575,26 @@ async fn chat_tts_stream(
             match daemon.stdout.read_line(&mut line) {
                 Ok(0) => {
                     // EOF - 守护进程可能崩溃
+                    println!("❌ TTS 流式线程：读到 EOF");
                     let _ = window.emit("tts-error", "Daemon connection lost");
+                    STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                     break;
                 }
-                Ok(_) => {
+                Ok(n) => {
+                    println!("📥 TTS 流式线程：读到 {} 字节: {}", n, line.trim());
+
                     // 解析 JSON
                     if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(&line) {
+                        println!("✅ TTS 流式线程：JSON 解析成功: {:?}", chunk);
+
+                        // 跳过日志事件（有 "event" 字段）
+                        if chunk.get("event").is_some() {
+                            println!("⏭️ TTS 流式线程：跳过日志事件");
+                            continue;
+                        }
+
                         let chunk_type = chunk.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                        println!("🔍 TTS 流式线程：chunk_type = {}", chunk_type);
 
                         match chunk_type {
                             "text_chunk" => {
@@ -356,6 +616,7 @@ async fn chat_tts_stream(
                             "done" => {
                                 // 流式响应完成
                                 let _ = window.emit("tts-done", ());
+                                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                                 break;
                             }
                             "error" => {
@@ -363,16 +624,21 @@ async fn chat_tts_stream(
                                 if let Some(error) = chunk.get("error").and_then(|v| v.as_str()) {
                                     let _ = window.emit("tts-error", error);
                                 }
+                                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                                 break;
                             }
                             _ => {
-                                println!("⚠️ Unknown chunk type: {}", chunk_type);
+                                println!("⚠️ TTS 流式线程：Unknown chunk type: {}", chunk_type);
                             }
                         }
+                    } else {
+                        println!("❌ TTS 流式线程：JSON 解析失败，原始内容: {}", line.trim());
                     }
                 }
                 Err(e) => {
+                    println!("❌ TTS 流式线程：读取错误: {}", e);
                     let _ = window.emit("tts-error", format!("Read error: {}", e));
+                    STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                     break;
                 }
             }
@@ -408,6 +674,18 @@ async fn load_config() -> Result<ConfigResult, String> {
 
 #[tauri::command]
 async fn daemon_health() -> Result<HealthResult, String> {
+    // 检查是否有流式操作正在进行
+    if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
+        println!("⏸️ 流式操作进行中，跳过健康检查");
+        return Ok(HealthResult {
+            success: true,
+            status: Some("streaming".to_string()),
+            command_count: None,
+            models_loaded: None,
+            error: None,
+        });
+    }
+
     println!("🏥 守护进程健康检查");
 
     let result = call_daemon("health", serde_json::json!({}))?;
@@ -424,10 +702,10 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
     // 注册显示/隐藏窗口快捷键: Command+Shift+Space
-    let shortcut: Shortcut = "CommandOrControl+Shift+Space".parse().unwrap();
+    let toggle_shortcut: Shortcut = "CommandOrControl+Shift+Space".parse().unwrap();
 
     let app_handle = app.clone();
-    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, _event| {
+    app.global_shortcut().on_shortcut(toggle_shortcut, move |_app, _shortcut, _event| {
         if let Some(window) = app_handle.get_webview_window("main") {
             if window.is_visible().unwrap_or(false) {
                 let _ = window.hide();
@@ -436,10 +714,14 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
                 let _ = window.set_focus();
             }
         }
-    }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register shortcut: {}", e)))?;
+    }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register toggle shortcut: {}", e)))?;
+
+    // PTT 快捷键现在由 Python daemon 的 HotkeyManager 处理 (支持 Cmd+Alt)
+    // 不再需要在 Tauri 中注册
 
     println!("✅ 全局快捷键已注册:");
     println!("   • Command+Shift+Space - 显示/隐藏窗口");
+    println!("   • Command+Alt (Python pynput) - Push-to-Talk (按住说话)");
 
     Ok(())
 }
@@ -560,7 +842,11 @@ pub fn run() {
             ensure_daemon_running()
                 .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to start daemon: {}", e)))?;
 
+            // 启动 PTT 事件读取器 (监听 Python daemon 的 stderr)
+            start_ptt_reader(app.handle().clone());
+
             println!("✅ Speekium 应用已启动 (守护进程模式)");
+            println!("🎤 PTT 快捷键: Cmd+Alt (按住说话，松开结束)");
 
             Ok(())
         })

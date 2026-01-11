@@ -121,9 +121,9 @@ PIPER_VOICES = {
 PIPER_DATA_DIR = os.path.expanduser("~/.local/share/piper-voices")
 
 # ===== VAD Config =====
-VAD_THRESHOLD = 0.7  # Voice detection threshold - increased to avoid echo detection
+VAD_THRESHOLD = 0.5  # Voice detection threshold (0.0-1.0, lower = more sensitive)
 VAD_CONSECUTIVE_THRESHOLD = (
-    8  # Consecutive detections to confirm speech start - increased for robustness
+    3  # Consecutive detections to confirm speech start (lower = faster response)
 )
 VAD_PRE_BUFFER = 0.3  # Pre-buffer duration (seconds) to capture speech start
 MIN_SPEECH_DURATION = 0.4  # Minimum speech duration (seconds) - increased

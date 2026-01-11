@@ -3,6 +3,7 @@ import './App.css';
 
 // 导入 Tauri API hook
 import { useTauriAPI } from './useTauriAPI';
+import { listen } from '@tauri-apps/api/event';
 
 function App() {
   const [status, setStatus] = React.useState<string>('就绪');
@@ -10,7 +11,13 @@ function App() {
   const [autoTTS, setAutoTTS] = React.useState<boolean>(true);
   const [isSpeaking, setIsSpeaking] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [recordMode, setRecordMode] = React.useState<'push-to-talk' | 'continuous'>('push-to-talk');
+  const [pttState, setPttState] = React.useState<'idle' | 'recording' | 'processing' | 'error'>('idle');
+
+  // Load recording mode from localStorage with fallback to 'push-to-talk'
+  const [recordMode, setRecordMode] = React.useState<'push-to-talk' | 'continuous'>(() => {
+    const saved = localStorage.getItem('recordMode');
+    return (saved === 'continuous' || saved === 'push-to-talk') ? saved : 'push-to-talk';
+  });
 
   // 使用 Tauri API hook
   const {
@@ -19,37 +26,184 @@ function App() {
     config,
     messages,
     startRecording,
+    forceStopRecording,
     chatGenerator,
     clearHistory,
     loadConfig,
-    generateTTS
+    generateTTS,
+    addMessage,
+    updateLastAssistantMessage,
   } = useTauriAPI();
+
+  // PTT 流式响应的临时累积
+  const pttAssistantResponseRef = React.useRef<string>('');
+  const pttAssistantAddedRef = React.useRef<boolean>(false);
 
   React.useEffect(() => {
     loadConfig();
   }, []);
 
-  // 开始录音
-  const handleStartRecording = async () => {
-    if (isRecording || isProcessing) {
-      return;
-    }
+  // Listen for PTT (Push-to-Talk) events from Tauri
+  React.useEffect(() => {
+    const setupListeners = async () => {
+      const unlistenState = await listen<string>('ptt-state', (event) => {
+        console.log('[App] PTT state:', event.payload);
+        const state = event.payload as 'idle' | 'recording' | 'processing' | 'error';
+        setPttState(state);
 
+        // Update status based on PTT state
+        switch (state) {
+          case 'recording':
+            setStatus('🎤 PTT 录音中... (松开停止)');
+            setError(null);
+            break;
+          case 'processing':
+            setStatus('🔄 处理中...');
+            break;
+          case 'idle':
+            setStatus('就绪');
+            break;
+          case 'error':
+            setStatus('就绪');
+            break;
+        }
+      });
+
+      // 用户语音识别结果
+      const unlistenUserMessage = await listen<string>('ptt-user-message', (event) => {
+        console.log('[App] PTT user message:', event.payload);
+        addMessage('user', event.payload);
+        // 重置 assistant 响应累积
+        pttAssistantResponseRef.current = '';
+        pttAssistantAddedRef.current = false;
+      });
+
+      // LLM 流式响应片段
+      const unlistenAssistantChunk = await listen<string>('ptt-assistant-chunk', (event) => {
+        console.log('[App] PTT assistant chunk:', event.payload);
+        pttAssistantResponseRef.current += event.payload;
+
+        if (!pttAssistantAddedRef.current) {
+          // 第一个 chunk，添加新的 assistant 消息
+          addMessage('assistant', pttAssistantResponseRef.current);
+          pttAssistantAddedRef.current = true;
+        } else {
+          // 后续 chunk，更新已有的 assistant 消息
+          updateLastAssistantMessage(pttAssistantResponseRef.current);
+        }
+      });
+
+      // LLM 响应完成
+      const unlistenAssistantDone = await listen<string>('ptt-assistant-done', (event) => {
+        console.log('[App] PTT assistant done:', event.payload);
+        // 确保最终内容正确
+        if (event.payload) {
+          updateLastAssistantMessage(event.payload);
+        }
+        pttAssistantResponseRef.current = '';
+        pttAssistantAddedRef.current = false;
+      });
+
+      const unlistenError = await listen<string>('ptt-error', (event) => {
+        console.error('[App] PTT error:', event.payload);
+        setError(`PTT 错误: ${event.payload}`);
+      });
+
+      return () => {
+        unlistenState();
+        unlistenUserMessage();
+        unlistenAssistantChunk();
+        unlistenAssistantDone();
+        unlistenError();
+      };
+    };
+
+    const cleanup = setupListeners();
+    return () => {
+      cleanup.then(fn => fn());
+    };
+  }, [addMessage, updateLastAssistantMessage]);
+
+  // Save recording mode to localStorage when it changes
+  // Also reset status when switching modes
+  React.useEffect(() => {
+    localStorage.setItem('recordMode', recordMode);
+    console.log('[App] Recording mode saved:', recordMode);
+
+    // Reset status and errors when switching modes
     if (recordMode === 'push-to-talk') {
-      setStatus('录音中... 请说话');
+      setStatus('就绪');
+      setError(null);
+    }
+  }, [recordMode]);
+
+  // Continuous listening mode: auto-start listening when mode is 'continuous'
+  React.useEffect(() => {
+    let isContinuousMode = recordMode === 'continuous';
+    let shouldKeepListening = true;
+    let abortController = new AbortController();
+
+    const continuousListen = async () => {
+      while (isContinuousMode && shouldKeepListening && !abortController.signal.aborted) {
+        if (isRecording || isProcessing) {
+          // Wait if already recording or processing
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
+        }
+
+        console.log('[App] Continuous mode: Starting VAD listening...');
+        setStatus('持续监听中... 请说话');
+
+        try {
+          const result = await startRecording('continuous', 'auto', true, autoTTS);
+
+          if (!result.success) {
+            console.error('[App] Continuous listening failed:', result.error);
+            setError(result.error || '监听失败');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        } catch (error) {
+          console.error('[App] Continuous listening error:', error);
+          if (abortController.signal.aborted) {
+            break; // Exit loop if aborted
+          }
+        }
+
+        // Small delay before next listening cycle
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      console.log('[App] Continuous listening loop ended');
+    };
+
+    if (recordMode === 'continuous') {
+      console.log('[App] Entering continuous listening mode');
+      continuousListen();
     } else {
-      setStatus('等待语音... 请开始说话');
+      console.log('[App] Exiting continuous listening mode');
+      shouldKeepListening = false;
+      abortController.abort();
+      setStatus('就绪');
+      setError(null);
     }
 
-    setError(null);
-    const result = await startRecording(recordMode, 'auto');
-
-    if (!result.success) {
-      setError(result.error || '录音失败');
-    }
-
-    setStatus('就绪');
-  };
+    // Cleanup function
+    return () => {
+      console.log('[App] Cleaning up continuous listening mode');
+      shouldKeepListening = false;
+      isContinuousMode = false;
+      abortController.abort();
+      if (recordMode !== 'continuous') {
+        // Force stop any ongoing recording when switching to push-to-talk mode
+        forceStopRecording();
+        setStatus('就绪');
+        setError(null);
+      }
+    };
+  // Note: Only depend on recordMode to avoid re-running on isRecording/isProcessing changes
+  // The continuous loop checks isRecording/isProcessing internally
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordMode]);
 
   // 清空历史
   const handleClearHistory = () => {
@@ -78,29 +232,26 @@ function App() {
     setError(null);
 
     try {
-      // 调用 LLM
-      const chunks = await chatGenerator(userMessage);
+      // 调用 LLM (chatGenerator 返回 ChatResult 类型)
+      const result = await chatGenerator(userMessage);
 
       // 自动播放 TTS（如果启用）
-      if (autoTTS && chunks && chunks.length > 0) {
-        const lastChunk = chunks[chunks.length - 1];
-        if (lastChunk.content) {
-          setStatus('播放语音...');
-          setIsSpeaking(true);
-          try {
-            const result = await generateTTS(lastChunk.content);
-            if (!result.success) {
-              setError(`TTS 失败: ${result.error}`);
-              setStatus('就绪');
-            } else {
-              setStatus('就绪');
-            }
-          } catch (ttsError) {
-            setError(`TTS 错误: ${ttsError}`);
+      if (autoTTS && result && result.success && result.content) {
+        setStatus('播放语音...');
+        setIsSpeaking(true);
+        try {
+          const ttsResult = await generateTTS(result.content);
+          if (!ttsResult.success) {
+            setError(`TTS 失败: ${ttsResult.error}`);
             setStatus('就绪');
-          } finally {
-            setIsSpeaking(false);
+          } else {
+            setStatus('就绪');
           }
+        } catch (ttsError) {
+          setError(`TTS 错误: ${ttsError}`);
+          setStatus('就绪');
+        } finally {
+          setIsSpeaking(false);
         }
       } else {
         setStatus('就绪');
@@ -220,8 +371,10 @@ function App() {
         <div className="status-bar">
           <span className="status-text">状态: {status}</span>
           <div className="status-indicators">
-            {isRecording && <span className="badge recording">录音中</span>}
-            {isProcessing && <span className="badge processing">处理中</span>}
+            {pttState === 'recording' && <span className="badge recording">PTT 录音</span>}
+            {pttState === 'processing' && <span className="badge processing">PTT 处理</span>}
+            {isRecording && pttState === 'idle' && <span className="badge recording">录音中</span>}
+            {isProcessing && pttState === 'idle' && <span className="badge processing">处理中</span>}
             {isSpeaking && <span className="badge speaking">播放中</span>}
           </div>
         </div>
@@ -244,6 +397,7 @@ function App() {
             {messages.length === 0 ? (
               <div className="empty-state">
                 <p>💬 输入消息或使用语音开始对话</p>
+                <p className="hint">🎤 按住 <kbd>Cmd+Alt</kbd> 说话，松开结束</p>
                 <p className="hint">支持文本输入和语音录音</p>
                 {autoTTS && <p className="hint">✅ 自动语音播放已启用</p>}
               </div>
@@ -296,13 +450,14 @@ function App() {
             >
               发送
             </button>
-            <button
-              onClick={handleStartRecording}
-              disabled={isRecording || isProcessing}
-              className={`btn-record ${isRecording ? 'recording' : ''}`}
-            >
-              {isRecording ? '🔴 停止' : '🎤 录音'}
-            </button>
+            <div className={`ptt-status ${pttState}`}>
+              <div className="ptt-indicator"></div>
+              <span className="ptt-label">
+                {pttState === 'recording' ? '录音中...' :
+                 pttState === 'processing' ? '处理中...' :
+                 'Cmd+Alt 说话'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

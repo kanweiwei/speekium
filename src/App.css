@@ -182,6 +182,11 @@
   animation: pulse 1.5s infinite;
 }
 
+.btn-record.processing {
+  background: #f59e0b;
+  animation: pulse 1.5s infinite;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
@@ -189,6 +194,84 @@
   50% {
     opacity: 0.7;
   }
+}
+
+/* PTT Status Widget */
+.ptt-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  min-width: 140px;
+  transition: all 0.3s ease;
+}
+
+.ptt-status.idle {
+  background: #2a2a2a;
+  border-color: #444;
+}
+
+.ptt-status.recording {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}
+
+.ptt-status.processing {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+}
+
+.ptt-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #666;
+  transition: all 0.3s ease;
+}
+
+.ptt-status.idle .ptt-indicator {
+  background: #666;
+}
+
+.ptt-status.recording .ptt-indicator {
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+  animation: pulse-glow 1s infinite;
+}
+
+.ptt-status.processing .ptt-indicator {
+  background: #f59e0b;
+  box-shadow: 0 0 10px #f59e0b;
+  animation: pulse-glow 1s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+.ptt-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #999;
+  white-space: nowrap;
+}
+
+.ptt-status.recording .ptt-label {
+  color: #ef4444;
+}
+
+.ptt-status.processing .ptt-label {
+  color: #f59e0b;
 }
 
 .btn-secondary {

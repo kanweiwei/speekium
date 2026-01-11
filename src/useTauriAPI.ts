@@ -133,14 +133,17 @@ export function useTauriAPI() {
     }
   };
 
-  const startRecording = async (mode: string = 'push-to-talk', duration?: number) => {
+  const startRecording = async (mode: string = 'push-to-talk', duration?: number | string, autoChat: boolean = true, useTTS: boolean = false) => {
     setIsRecording(true);
     try {
       console.log(`[Recording] Starting: mode=${mode}, duration=${duration}`);
 
+      // 转换 duration 为字符串（Rust 需要 String 类型）
+      const durationStr = duration === undefined ? 'auto' : String(duration);
+
       const result = await invoke<RecordingResult>('record_audio', {
         mode,
-        duration: duration || 3.0
+        duration: durationStr
       });
 
       if (result.success && result.text) {
@@ -152,8 +155,10 @@ export function useTauriAPI() {
           content: result.text!
         }]);
 
-        // 自动调用 LLM
-        await chatGenerator(result.text!, result.language);
+        // 自动调用 LLM（如果启用）
+        if (autoChat) {
+          await chatGenerator(result.text!, result.language, true, useTTS);
+        }
       } else {
         console.error('[Recording] Failed:', result.error);
         throw new Error(result.error || 'Recording failed');
@@ -168,7 +173,13 @@ export function useTauriAPI() {
     }
   };
 
-  const chatGenerator = async (text: string, language: string = 'auto', useStreaming: boolean = true, useTTS: boolean = false) => {
+  const forceStopRecording = () => {
+    console.log('[Recording] Force stopping...');
+    setIsRecording(false);
+    setIsProcessing(false);
+  };
+
+  const chatGenerator = async (text: string, _language: string = 'auto', useStreaming: boolean = true, useTTS: boolean = false) => {
     setIsProcessing(true);
 
     try {
@@ -396,6 +407,25 @@ export function useTauriAPI() {
     console.log('[History] Cleared');
   };
 
+  const addMessage = (role: 'user' | 'assistant', content: string) => {
+    setMessages(prev => [...prev, { role, content }]);
+  };
+
+  const updateLastAssistantMessage = (content: string) => {
+    setMessages(prev => {
+      const newMessages = [...prev];
+      // 找到最后一条 assistant 消息并更新
+      for (let i = newMessages.length - 1; i >= 0; i--) {
+        if (newMessages[i].role === 'assistant') {
+          newMessages[i] = { ...newMessages[i], content };
+          return newMessages;
+        }
+      }
+      // 如果没有 assistant 消息，添加新的
+      return [...prev, { role: 'assistant', content }];
+    });
+  };
+
   const checkDaemonHealth = async () => {
     try {
       const result = await invoke<HealthResult>('daemon_health');
@@ -428,11 +458,14 @@ export function useTauriAPI() {
     daemonHealth,
     audioQueue,
     startRecording,
+    forceStopRecording,
     chatGenerator,
     clearHistory,
     loadConfig,
     generateTTS,
     playAudio,
     checkDaemonHealth,
+    addMessage,
+    updateLastAssistantMessage,
   };
 }

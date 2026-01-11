@@ -87,6 +87,17 @@ class SpeekiumDaemon:
         self.running = True
         self.command_count = 0
 
+        # PTT (Push-to-Talk) state
+        self.ptt_recording = False
+        self.ptt_audio_frames = []
+        self.ptt_stream = None
+
+        # Hotkey manager for PTT
+        self.hotkey_manager = None
+
+        # Event loop reference for PTT callbacks (set during initialization)
+        self.loop = None
+
         # 输出启动日志
         logger.info("daemon_initializing")
 
@@ -108,9 +119,56 @@ class SpeekiumDaemon:
         else:
             logger.info("daemon_log", message=message)
 
+    def _emit_ptt_event(self, event_type: str, data: dict = None):
+        """Emit PTT event to stderr for Tauri to capture (stdout is for command responses)"""
+        event = {"ptt_event": event_type}
+        if data:
+            event.update(data)
+        # Use stderr to avoid interfering with command responses on stdout
+        print(json.dumps(event), file=sys.stderr, flush=True)
+
+    def _on_hotkey_press(self):
+        """Callback when PTT hotkey is pressed"""
+        self._log("🎤 PTT: Hotkey pressed - starting recording")
+        self._emit_ptt_event("recording")
+
+        # Start recording in background (use stored loop reference for thread safety)
+        if self.loop:
+            asyncio.run_coroutine_threadsafe(self.handle_record_start(), self.loop)
+
+    def _on_hotkey_release(self):
+        """Callback when PTT hotkey is released"""
+        self._log("🎤 PTT: Hotkey released - stopping recording")
+        self._emit_ptt_event("processing")
+
+        # Stop recording and process in background (use stored loop reference for thread safety)
+        if not self.loop:
+            return
+
+        future = asyncio.run_coroutine_threadsafe(
+            self.handle_record_stop(auto_chat=True, use_tts=True),
+            self.loop
+        )
+
+        # Handle result in another thread to not block
+        def handle_result(fut):
+            try:
+                result = fut.result()
+                if result.get("success"):
+                    self._emit_ptt_event("idle", {"text": result.get("text", "")})
+                else:
+                    self._emit_ptt_event("error", {"error": result.get("error", "Unknown error")})
+            except Exception as e:
+                self._emit_ptt_event("error", {"error": str(e)})
+
+        future.add_done_callback(handle_result)
+
     async def initialize(self):
         """预加载所有模型（只在启动时执行一次）"""
         try:
+            # Store event loop reference for PTT callbacks (called from different thread)
+            self.loop = asyncio.get_running_loop()
+
             from speekium import VoiceAssistant
 
             logger.info("loading_voice_assistant")
@@ -124,6 +182,19 @@ class SpeekiumDaemon:
 
             self._log("🔄 预加载 LLM 后端...")
             self.assistant.load_llm()
+
+            # Initialize and start hotkey manager for PTT
+            try:
+                from hotkey_manager import HotkeyManager
+                self.hotkey_manager = HotkeyManager()
+                self.hotkey_manager.start(
+                    on_press=self._on_hotkey_press,
+                    on_release=self._on_hotkey_release
+                )
+                self._log("✅ PTT 快捷键监听已启动 (Cmd+Alt)")
+            except Exception as e:
+                self._log(f"⚠️ PTT 快捷键监听启动失败: {e}")
+                # Continue without hotkey - can still use commands
 
             self._log("✅ 所有模型加载完成，进入待命状态")
             return True
@@ -161,6 +232,154 @@ class SpeekiumDaemon:
             self._log(f"❌ 录音失败: {e}")
             traceback.print_exc(file=sys.stderr)
             return {"success": False, "error": str(e)}
+
+    async def handle_record_start(self) -> dict:
+        """Start PTT recording - called when hotkey is pressed"""
+        try:
+            if self.ptt_recording:
+                return {"success": False, "error": "Already recording"}
+
+            self._log("🎤 PTT: Starting recording...")
+
+            # Clear previous audio frames
+            self.ptt_audio_frames = []
+            self.ptt_recording = True
+
+            # Audio callback to collect frames
+            def audio_callback(indata, frames, time_info, status):
+                if self.ptt_recording:
+                    self.ptt_audio_frames.append(indata.copy())
+
+            # Start audio stream
+            self.ptt_stream = sd.InputStream(
+                samplerate=16000,
+                channels=1,
+                dtype="float32",
+                callback=audio_callback,
+                blocksize=512
+            )
+            self.ptt_stream.start()
+
+            self._log("🎤 PTT: Recording started")
+            return {"success": True, "message": "Recording started"}
+
+        except Exception as e:
+            self._log(f"❌ PTT start failed: {e}")
+            self.ptt_recording = False
+            traceback.print_exc(file=sys.stderr)
+            return {"success": False, "error": str(e)}
+
+    async def handle_record_stop(self, auto_chat: bool = True, use_tts: bool = True) -> dict:
+        """Stop PTT recording and process - called when hotkey is released"""
+        try:
+            if not self.ptt_recording:
+                return {"success": False, "error": "Not recording"}
+
+            self._log("🎤 PTT: Stopping recording...")
+
+            # Stop recording
+            self.ptt_recording = False
+
+            if self.ptt_stream:
+                self.ptt_stream.stop()
+                self.ptt_stream.close()
+                self.ptt_stream = None
+
+            # Combine audio frames
+            if not self.ptt_audio_frames:
+                return {"success": False, "error": "No audio recorded"}
+
+            import numpy as np
+            audio = np.concatenate(self.ptt_audio_frames, axis=0)
+            audio = audio[:, 0]  # Convert to 1D array
+
+            duration = len(audio) / 16000
+            self._log(f"🎤 PTT: Recorded {duration:.2f}s of audio")
+
+            if duration < 0.3:
+                return {"success": False, "error": "Recording too short"}
+
+            # ASR
+            self._log("🔄 识别中...")
+            text, language = self.assistant.transcribe(audio)
+            self._log(f"✅ 识别完成: '{text}' ({language})")
+
+            if not text or not text.strip():
+                return {"success": True, "text": "", "language": language, "message": "No speech detected"}
+
+            # Emit user message for frontend display
+            self._emit_ptt_event("user_message", {"text": text})
+
+            # Auto chat with TTS if enabled
+            if auto_chat and text.strip():
+                self._log(f"💬 PTT: Auto chat with TTS...")
+                await self._handle_ptt_chat_tts(text, use_tts)
+
+            return {"success": True, "text": text, "language": language}
+
+        except Exception as e:
+            self._log(f"❌ PTT stop failed: {e}")
+            self.ptt_recording = False
+            if self.ptt_stream:
+                try:
+                    self.ptt_stream.stop()
+                    self.ptt_stream.close()
+                except:
+                    pass
+                self.ptt_stream = None
+            traceback.print_exc(file=sys.stderr)
+            return {"success": False, "error": str(e)}
+
+    async def _handle_ptt_chat_tts(self, text: str, use_tts: bool = True) -> None:
+        """Handle LLM streaming chat + TTS for PTT mode (emits via stderr for Rust capture)"""
+        try:
+            self._log(f"💬🔊 PTT LLM+TTS: {text[:50]}...")
+
+            backend = self.assistant.load_llm()
+            full_response = ""
+
+            # Check if streaming is supported
+            if not hasattr(backend, "chat_stream"):
+                # Fallback to non-streaming mode
+                response = backend.chat(text)
+                full_response = response
+                self._emit_ptt_event("assistant_chunk", {"content": response})
+
+                # Generate TTS
+                if use_tts:
+                    audio_path = await self.assistant.generate_audio(response)
+                    if audio_path:
+                        self._emit_ptt_event("audio_chunk", {"audio_path": audio_path, "text": response})
+                        await self._play_audio(audio_path)
+            else:
+                # Stream LLM + TTS generation
+                async for sentence in backend.chat_stream(text):
+                    if sentence and sentence.strip():
+                        full_response += sentence
+                        self._log(f"📤 PTT streaming: {sentence[:30]}...")
+
+                        # Send text chunk via stderr
+                        self._emit_ptt_event("assistant_chunk", {"content": sentence})
+
+                        # Generate TTS immediately
+                        if use_tts:
+                            try:
+                                audio_path = await self.assistant.generate_audio(sentence)
+                                if audio_path:
+                                    self._log(f"🔊 TTS completed: {audio_path}")
+                                    self._emit_ptt_event("audio_chunk", {"audio_path": audio_path, "text": sentence})
+                                    await self._play_audio(audio_path)
+                            except Exception as tts_error:
+                                self._log(f"⚠️ TTS generation failed: {tts_error}")
+
+            # Send completion marker
+            self._emit_ptt_event("assistant_done", {"content": full_response})
+            self._log("✅ PTT LLM+TTS completed")
+
+        except Exception as e:
+            self._log(f"❌ PTT LLM+TTS failed: {e}")
+            traceback.print_exc(file=sys.stderr)
+            self._emit_ptt_event("error", {"error": str(e)})
 
     async def handle_chat(self, text: str) -> dict:
         """处理 LLM 对话命令（非流式）"""
@@ -216,51 +435,56 @@ class SpeekiumDaemon:
             print(json.dumps({"type": "error", "error": str(e)}), flush=True)
 
     async def handle_chat_tts_stream(self, text: str, auto_play: bool = True) -> None:
-        """处理 LLM 流式对话 + TTS 流式生成命令
+        """Handle LLM streaming chat + TTS streaming generation
 
-        流式响应格式：
-        - 文本片段：{"type": "text_chunk", "content": "句子内容"}
-        - 音频片段：{"type": "audio_chunk", "audio_path": "/tmp/xxx.mp3", "text": "对应文本"}
-        - 结束标记：{"type": "done"}
-        - 错误标记：{"type": "error", "error": "错误信息"}
+        Streaming response format:
+        - Text chunk: {"type": "text_chunk", "content": "sentence content"}
+        - Audio chunk: {"type": "audio_chunk", "audio_path": "/tmp/xxx.mp3", "text": "corresponding text"}
+        - Done marker: {"type": "done"}
+        - Error marker: {"type": "error", "error": "error message"}
         """
+        import asyncio
+        import platform
+
         try:
-            self._log(f"💬🔊 LLM+TTS 流式: {text[:50]}...")
+            self._log(f"💬🔊 LLM+TTS streaming: {text[:50]}...")
 
             backend = self.assistant.load_llm()
 
-            # 检查是否支持流式
+            # Check if streaming is supported
             if not hasattr(backend, "chat_stream"):
-                # 不支持流式，降级处理
+                # Fallback to non-streaming mode
                 response = backend.chat(text)
                 print(json.dumps({"type": "text_chunk", "content": response}), flush=True)
 
-                # 生成 TTS
+                # Generate TTS
                 audio_path = await self.assistant.generate_audio(response)
-                if audio_path:
+                if audio_path and auto_play:
                     print(
                         json.dumps(
                             {"type": "audio_chunk", "audio_path": audio_path, "text": response}
                         ),
                         flush=True,
                     )
+                    # Play audio immediately
+                    await self._play_audio(audio_path)
 
                 print(json.dumps({"type": "done"}), flush=True)
                 return
 
-            # 流式生成 LLM + TTS
+            # Stream LLM + TTS generation
             async for sentence in backend.chat_stream(text):
                 if sentence and sentence.strip():
-                    self._log(f"📤 流式输出: {sentence[:30]}...")
+                    self._log(f"📤 Streaming output: {sentence[:30]}...")
 
-                    # 发送文本片段
+                    # Send text chunk
                     print(json.dumps({"type": "text_chunk", "content": sentence}), flush=True)
 
-                    # 立即生成 TTS
+                    # Generate TTS immediately
                     try:
                         audio_path = await self.assistant.generate_audio(sentence)
                         if audio_path:
-                            self._log(f"🔊 TTS 完成: {audio_path}")
+                            self._log(f"🔊 TTS completed: {audio_path}")
                             print(
                                 json.dumps(
                                     {
@@ -271,18 +495,94 @@ class SpeekiumDaemon:
                                 ),
                                 flush=True,
                             )
+                            # Play audio immediately if auto_play is enabled
+                            if auto_play:
+                                await self._play_audio(audio_path)
                     except Exception as tts_error:
-                        self._log(f"⚠️ TTS 生成失败: {tts_error}")
-                        # TTS 失败不影响流式对话继续
+                        self._log(f"⚠️ TTS generation failed: {tts_error}")
+                        # TTS failure should not interrupt streaming chat
 
-            # 发送完成标记
+            # Send completion marker
             print(json.dumps({"type": "done"}), flush=True)
-            self._log("✅ 流式对话+TTS 完成")
+            self._log("✅ Streaming chat+TTS completed")
 
         except Exception as e:
-            self._log(f"❌ 流式对话+TTS 失败: {e}")
+            self._log(f"❌ Streaming chat+TTS failed: {e}")
             traceback.print_exc(file=sys.stderr)
             print(json.dumps({"type": "error", "error": str(e)}), flush=True)
+
+    async def _play_audio(self, audio_path: str) -> None:
+        """Play audio file (cross-platform)"""
+        import asyncio
+        import os
+        import platform
+        import subprocess
+
+        try:
+            system = platform.system()
+
+            if system == "Darwin":  # macOS
+                # Use afplay (built-in macOS command)
+                process = await asyncio.create_subprocess_exec(
+                    "afplay", audio_path,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL
+                )
+                self._log(f"🔊 Playing audio: {audio_path}")
+                await process.wait()  # Wait for playback to complete
+
+            elif system == "Linux":
+                # Try mpg123 or ffplay
+                try:
+                    process = await asyncio.create_subprocess_exec(
+                        "mpg123", "-q", audio_path,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL
+                    )
+                    self._log(f"🔊 Playing audio: {audio_path}")
+                    await process.wait()
+                except FileNotFoundError:
+                    # Fallback to ffplay if mpg123 is not available
+                    process = await asyncio.create_subprocess_exec(
+                        "ffplay", "-nodisp", "-autoexit", audio_path,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL
+                    )
+                    self._log(f"🔊 Playing audio: {audio_path}")
+                    await process.wait()
+
+            elif system == "Windows":
+                # Use Windows Media Player with duration detection
+                # Convert Unix path to Windows path if needed
+                win_path = os.path.abspath(audio_path).replace('/', '\\')
+
+                # PowerShell script to play audio and wait for completion
+                ps_script = (
+                    f"Add-Type -AssemblyName presentationCore; "
+                    f"$mediaPlayer = New-Object System.Windows.Media.MediaPlayer; "
+                    f"$mediaPlayer.Open([uri]::new('{win_path}')); "
+                    f"$mediaPlayer.Play(); "
+                    # Wait for NaturalDuration to be available
+                    f"while ($mediaPlayer.NaturalDuration.HasTimeSpan -eq $false) {{ Start-Sleep -Milliseconds 100 }}; "
+                    # Get duration in seconds and add 0.5s buffer
+                    f"$duration = $mediaPlayer.NaturalDuration.TimeSpan.TotalSeconds + 0.5; "
+                    f"Start-Sleep -Seconds $duration; "
+                    f"$mediaPlayer.Close()"
+                )
+
+                process = await asyncio.create_subprocess_exec(
+                    "powershell", "-c", ps_script,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL
+                )
+                self._log(f"🔊 Playing audio: {audio_path}")
+                await process.wait()
+
+            else:
+                self._log(f"⚠️ Unsupported operating system: {system}")
+
+        except Exception as e:
+            self._log(f"⚠️ Audio playback failed: {e}")
 
     async def handle_tts(self, text: str, language: str | None = None) -> dict:
         """处理 TTS 生成命令"""
@@ -335,6 +635,13 @@ class SpeekiumDaemon:
 
         if command == "record":
             return await self.handle_record(**args)
+        elif command == "record_start":
+            return await self.handle_record_start()
+        elif command == "record_stop":
+            return await self.handle_record_stop(
+                args.get("auto_chat", True),
+                args.get("use_tts", True)
+            )
         elif command == "chat":
             return await self.handle_chat(args.get("text", ""))
         elif command == "chat_stream":
