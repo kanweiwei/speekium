@@ -958,17 +958,28 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // 窗口关闭时隐藏而不是退出
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // 阻止窗口关闭，改为隐藏
+                api.prevent_close();
                 window.hide().unwrap();
             }
         })
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|_app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                // 应用退出时清理守护进程
-                cleanup_daemon();
+        .run(|app_handle, event| {
+            match event {
+                tauri::RunEvent::Reopen { .. } => {
+                    // macOS: 点击 dock 图标时显示主窗口
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                tauri::RunEvent::ExitRequested { .. } => {
+                    // 应用退出时清理守护进程
+                    cleanup_daemon();
+                }
+                _ => {}
             }
         });
 }
