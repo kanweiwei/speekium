@@ -874,6 +874,78 @@ async fn daemon_health() -> Result<HealthResult, String> {
         .map_err(|e| format!("Failed to parse result: {}", e))
 }
 
+#[tauri::command]
+async fn test_ollama_connection(base_url: String, model: String) -> Result<serde_json::Value, String> {
+    println!("🔗 测试 Ollama 连接: {} ({})", base_url, model);
+
+    // 使用 reqwest 直接测试 Ollama 连接
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // 测试 1: 检查 Ollama 服务是否运行
+    let tags_url = format!("{}/api/tags", base_url);
+    let response = client
+        .get(&tags_url)
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                println!("✅ Ollama 服务运行正常");
+
+                // 测试 2: 检查指定模型是否存在
+                let models = resp.json::<serde_json::Value>()
+                    .await
+                    .map_err(|e| format!("Failed to parse models list: {}", e))?;
+
+                if let Some(models_array) = models.get("models").and_then(|m| m.as_array()) {
+                    let model_exists = models_array.iter().any(|m| {
+                        m.get("name")
+                            .and_then(|n| n.as_str())
+                            .map(|n| n.starts_with(&model) || n == model)
+                            .unwrap_or(false)
+                    });
+
+                    if model_exists {
+                        println!("✅ 模型 {} 已安装", model);
+                        return Ok(serde_json::json!({
+                            "success": true,
+                            "message": format!("连接成功，模型 {} 已安装", model)
+                        }));
+                    } else {
+                        println!("⚠️ 模型 {} 未找到", model);
+                        return Ok(serde_json::json!({
+                            "success": false,
+                            "error": format!("模型 {} 未安装，请先运行: ollama pull {}", model, model)
+                        }));
+                    }
+                } else {
+                    return Ok(serde_json::json!({
+                        "success": false,
+                        "error": "无法解析模型列表"
+                    }));
+                }
+            } else {
+                println!("❌ Ollama 服务返回错误: {}", resp.status());
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": format!("Ollama 服务返回错误状态: {}", resp.status())
+                }));
+            }
+        }
+        Err(e) => {
+            println!("❌ 连接 Ollama 失败: {}", e);
+            return Ok(serde_json::json!({
+                "success": false,
+                "error": format!("无法连接到 Ollama 服务: {}", e)
+            }));
+        }
+    }
+}
+
 // ============================================================================
 // Global Shortcuts
 // ============================================================================
@@ -1077,6 +1149,7 @@ pub fn run() {
             load_config,
             save_config,
             daemon_health,
+            test_ollama_connection,
             // Database commands
             db_create_session,
             db_list_sessions,

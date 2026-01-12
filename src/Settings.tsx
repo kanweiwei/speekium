@@ -34,6 +34,7 @@ import {
   Loader2,
   Trash2
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 
 interface SettingsProps {
   isOpen: boolean;
@@ -66,12 +67,25 @@ export function Settings({
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [isTestingConnection, setIsTestingConnection] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<'idle' | 'success' | 'error'>('idle');
+  const [connectionError, setConnectionError] = React.useState<string>('');
+  const [isPreviewingTTS, setIsPreviewingTTS] = React.useState(false);
+  const [previewAudio, setPreviewAudio] = React.useState<HTMLAudioElement | null>(null);
 
   React.useEffect(() => {
     if (config) {
       setLocalConfig({ ...config });
     }
   }, [config]);
+
+  // 清理音频播放器
+  React.useEffect(() => {
+    return () => {
+      if (previewAudio) {
+        previewAudio.pause();
+        previewAudio.src = '';
+      }
+    };
+  }, [previewAudio]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -92,19 +106,101 @@ export function Settings({
   const handleTestConnection = async () => {
     setIsTestingConnection(true);
     setConnectionStatus('idle');
+    setConnectionError('');
 
-    // TODO: Implement actual connection test
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      console.log('[Settings] Testing Ollama connection...');
 
-    // Simulate success/error
-    const success = Math.random() > 0.3;
-    setConnectionStatus(success ? 'success' : 'error');
-    setIsTestingConnection(false);
+      // 调用 Rust 后端的测试连接命令
+      const result = await invoke<{
+        success: boolean;
+        message?: string;
+        error?: string;
+      }>('test_ollama_connection', {
+        baseUrl: localConfig.ollama_base_url || 'http://localhost:11434',
+        model: localConfig.ollama_model || 'qwen2.5:1.5b'
+      });
+
+      if (result.success) {
+        console.log('[Settings] Connection test successful:', result.message);
+        setConnectionStatus('success');
+      } else {
+        console.error('[Settings] Connection test failed:', result.error);
+        setConnectionStatus('error');
+        setConnectionError(result.error || '未知错误');
+      }
+    } catch (error) {
+      console.error('[Settings] Connection test error:', error);
+      setConnectionStatus('error');
+      setConnectionError(String(error));
+    } finally {
+      setIsTestingConnection(false);
+    }
   };
 
-  const handlePreviewTTS = () => {
-    // TODO: Implement TTS preview
-    console.log('Preview TTS with current settings');
+  const handlePreviewTTS = async () => {
+    // 如果正在播放，则停止
+    if (previewAudio && !previewAudio.paused) {
+      previewAudio.pause();
+      previewAudio.currentTime = 0;
+      setIsPreviewingTTS(false);
+      return;
+    }
+
+    setIsPreviewingTTS(true);
+    setConnectionStatus('idle');
+    setConnectionError('');
+
+    try {
+      console.log('[Settings] Previewing TTS...');
+
+      // 调用 Rust 后端的 generate_tts 命令
+      const result = await invoke<{
+        success: boolean;
+        audio_path?: string;
+        error?: string;
+      }>('generate_tts', {
+        text: '你好，这是语音预览测试。'
+      });
+
+      if (result.success && result.audio_path) {
+        console.log('[Settings] TTS generated successfully:', result.audio_path);
+
+        // 使用 convertFileSrc 转换文件路径
+        const { convertFileSrc } = await import('@tauri-apps/api/core');
+        const audioUrl = convertFileSrc(result.audio_path);
+
+        // 创建并播放音频
+        const audio = new Audio(audioUrl);
+
+        audio.onended = () => {
+          console.log('[Settings] TTS preview finished');
+          setIsPreviewingTTS(false);
+          setPreviewAudio(null);
+        };
+
+        audio.onerror = (error) => {
+          console.error('[Settings] TTS playback error:', error);
+          setIsPreviewingTTS(false);
+          setConnectionStatus('error');
+          setConnectionError('音频播放失败');
+          setPreviewAudio(null);
+        };
+
+        setPreviewAudio(audio);
+        await audio.play();
+      } else {
+        console.error('[Settings] TTS generation failed:', result.error);
+        setIsPreviewingTTS(false);
+        setConnectionStatus('error');
+        setConnectionError(result.error || '语音生成失败');
+      }
+    } catch (error) {
+      console.error('[Settings] TTS preview error:', error);
+      setIsPreviewingTTS(false);
+      setConnectionStatus('error');
+      setConnectionError(String(error));
+    }
   };
 
   const categories = [
@@ -385,7 +481,7 @@ export function Settings({
                     </p>
                   </div>
 
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-2">
                     <Button
                       onClick={handleTestConnection}
                       disabled={isTestingConnection}
@@ -410,6 +506,11 @@ export function Settings({
                         '测试连接'
                       )}
                     </Button>
+                    {connectionStatus === 'error' && connectionError && (
+                      <p className="text-xs text-red-400 px-2">
+                        {connectionError}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -463,14 +564,29 @@ export function Settings({
                     />
                   </div>
 
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-2">
                     <Button
                       onClick={handlePreviewTTS}
+                      disabled={isPreviewingTTS && connectionStatus !== 'error'}
                       className="w-full bg-muted hover:bg-zinc-700 text-foreground border border-border"
                     >
-                      <Volume2 className="h-4 w-4 mr-2" />
-                      预览语音
+                      {isPreviewingTTS ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          播放中...
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="h-4 w-4 mr-2" />
+                          预览语音
+                        </>
+                      )}
                     </Button>
+                    {connectionStatus === 'error' && connectionError && (
+                      <p className="text-xs text-red-400 px-2">
+                        {connectionError}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
