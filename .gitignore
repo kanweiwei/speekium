@@ -39,8 +39,23 @@ Thumbs.db
 *.wav
 *.backup
 .backup/
+*.bak
 bandit-report.json
 safety-report.json
+
+# Temporary documentation files
+task_plan.md
+notes.md
+*_PLAN.md
+*_GUIDE.md
+*IMPLEMENTATION*.md
+*MIGRATION*.md
+*ANALYSIS*.md
+DEBUG*.md
+TRACE*.md
+
+# Design documents (optional - remove if you want to track them)
+# docs/design/
 
 # Temporary text files
 现在请运行.txt

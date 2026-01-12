@@ -104,14 +104,12 @@ export function useTauriAPI() {
       setIsSpeaking(true);
 
       const audioItem = audioQueue[0];
-      console.log(`[Audio Queue] Playing: ${audioItem.text.substring(0, 30)}...`);
 
       try {
         const audio = new Audio(`file://${audioItem.path}`);
 
         await new Promise<void>((resolve, reject) => {
           audio.onended = () => {
-            console.log('[Audio Queue] Finished playing');
             resolve();
           };
           audio.onerror = (error) => {
@@ -157,11 +155,9 @@ export function useTauriAPI() {
 
   const saveConfig = async (newConfig: Record<string, any>) => {
     try {
-      console.log('[Config] Saving:', newConfig);
       const result = await invoke<{ success: boolean; error?: string }>('save_config', { config: newConfig });
       if (result.success) {
         setConfig(newConfig);
-        console.log('[Config] Saved successfully');
       } else {
         console.error('[Config] Save failed:', result.error);
         throw new Error(result.error || 'Save failed');
@@ -175,7 +171,6 @@ export function useTauriAPI() {
   const startRecording = async (mode: string = 'push-to-talk', duration?: number | string, autoChat: boolean = true, useTTS: boolean = false) => {
     setIsRecording(true);
     try {
-      console.log(`[Recording] Starting: mode=${mode}, duration=${duration}`);
 
       // Convert duration to string (Rust requires String type)
       const durationStr = duration === undefined ? 'auto' : String(duration);
@@ -186,7 +181,6 @@ export function useTauriAPI() {
       });
 
       if (result.success && result.text) {
-        console.log(`[Recording] Success: "${result.text}" (${result.language})`);
 
         // Add user message
         setMessages(prev => [...prev, {
@@ -213,7 +207,6 @@ export function useTauriAPI() {
   };
 
   const forceStopRecording = () => {
-    console.log('[Recording] Force stopping...');
     setIsRecording(false);
     setIsProcessing(false);
   };
@@ -222,7 +215,6 @@ export function useTauriAPI() {
     setIsProcessing(true);
 
     try {
-      console.log(`[Chat] Sending: "${text}" (streaming: ${useStreaming}, TTS: ${useTTS})`);
 
       if (useTTS && useStreaming) {
         // TTS streaming mode
@@ -234,7 +226,6 @@ export function useTauriAPI() {
         const result = await invoke<ChatResult>('chat_llm', { text });
 
         if (result.success && result.content) {
-          console.log(`[Chat] Response: "${result.content}"`);
 
           // Add LLM response
           setMessages(prev => [...prev, {
@@ -272,7 +263,6 @@ export function useTauriAPI() {
         const chunk = event.payload;
         fullResponse += chunk;
 
-        console.log(`[Chat] Chunk received: "${chunk}"`);
 
         // Real-time UI update
         setMessages(prev => {
@@ -307,7 +297,6 @@ export function useTauriAPI() {
       });
 
       const unlistenDone = await listen('chat-done', () => {
-        console.log('[Chat] Stream done');
         unlistenChunk();
         unlistenDone();
         unlistenError();
@@ -351,7 +340,6 @@ export function useTauriAPI() {
         const chunk = event.payload;
         fullResponse += chunk;
 
-        console.log(`[TTS] Text chunk: "${chunk}"`);
 
         // Real-time UI update
         setMessages(prev => {
@@ -386,14 +374,12 @@ export function useTauriAPI() {
 
       const unlistenAudioChunk = await listen<{ audio_path: string; text: string }>('tts-audio-chunk', (event) => {
         const { audio_path, text: audioText } = event.payload;
-        console.log(`[TTS] Audio chunk: "${audioText.substring(0, 30)}..." -> ${audio_path}`);
 
         // Add to audio queue
         setAudioQueue(prev => [...prev, { path: audio_path, text: audioText }]);
       });
 
       const unlistenDone = await listen('tts-done', () => {
-        console.log('[TTS] Stream done');
         unlistenTextChunk();
         unlistenAudioChunk();
         unlistenDone();
@@ -430,13 +416,11 @@ export function useTauriAPI() {
 
   const generateTTS = async (text: string) => {
     try {
-      console.log(`[TTS] Generating: "${text}"`);
       setIsSpeaking(true);
 
       const result = await invoke<TTSResult>('generate_tts', { text });
 
       if (result.success && result.audio_path) {
-        console.log(`[TTS] Success: ${result.audio_path}`);
         await playAudio(result.audio_path);
       } else {
         console.error('[TTS] Failed:', result.error);
@@ -456,7 +440,6 @@ export function useTauriAPI() {
     try {
       // Use Tauri convertFileSrc to convert local file path to accessible URL
       const audioUrl = convertFileSrc(audioPath);
-      console.log('[Audio] Playing:', audioUrl);
       const audio = new Audio(audioUrl);
       audio.onended = () => setIsSpeaking(false);
       audio.onerror = (e) => {
@@ -472,7 +455,6 @@ export function useTauriAPI() {
 
   const clearHistory = () => {
     setMessages([]);
-    console.log('[History] Cleared');
   };
 
   const addMessage = useCallback((role: 'user' | 'assistant', content: string) => {
@@ -500,7 +482,6 @@ export function useTauriAPI() {
       setDaemonHealth(result);
 
       if (result.success) {
-        console.log('[Daemon] Healthy - Commands:', result.command_count);
       } else {
         console.warn('[Daemon] Health check failed:', result.error);
       }

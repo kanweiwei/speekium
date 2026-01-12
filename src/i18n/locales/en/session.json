@@ -1,8 +1,0 @@
-{
-  "newSession": {
-    "title": "New Session",
-    "description": "Set a title for the new session, or leave empty to auto-name when sending the first message.",
-    "placeholder": "Enter title...",
-    "characterLimit": "{{count}}/{{max}}"
-  }
-}

@@ -33,7 +33,9 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  Trash2
+  Trash2,
+  MessageCircle,
+  Type,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from '@/i18n';
@@ -47,6 +49,8 @@ interface SettingsProps {
   onAutoTTSChange?: (value: boolean) => void;
   recordMode?: 'push-to-talk' | 'continuous';
   onRecordModeChange?: (value: 'push-to-talk' | 'continuous') => void;
+  workMode?: 'conversation' | 'text';
+  onWorkModeChange?: (value: 'conversation' | 'text') => void;
   onClearHistory?: () => void;
 }
 
@@ -61,6 +65,8 @@ export function Settings({
   onAutoTTSChange,
   recordMode,
   onRecordModeChange,
+  workMode,
+  onWorkModeChange,
   onClearHistory,
 }: SettingsProps) {
   const { t } = useTranslation();
@@ -112,8 +118,6 @@ export function Settings({
     setConnectionError('');
 
     try {
-      console.log('[Settings] Testing Ollama connection...');
-
       // 调用 Rust 后端的测试连接命令
       const result = await invoke<{
         success: boolean;
@@ -125,7 +129,6 @@ export function Settings({
       });
 
       if (result.success) {
-        console.log('[Settings] Connection test successful:', result.message);
         setConnectionStatus('success');
       } else {
         console.error('[Settings] Connection test failed:', result.error);
@@ -155,8 +158,6 @@ export function Settings({
     setConnectionError('');
 
     try {
-      console.log('[Settings] Previewing TTS...');
-
       // 调用 Rust 后端的 generate_tts 命令
       const result = await invoke<{
         success: boolean;
@@ -167,8 +168,6 @@ export function Settings({
       });
 
       if (result.success && result.audio_path) {
-        console.log('[Settings] TTS generated successfully:', result.audio_path);
-
         // 使用 convertFileSrc 转换文件路径
         const { convertFileSrc } = await import('@tauri-apps/api/core');
         const audioUrl = convertFileSrc(result.audio_path);
@@ -178,12 +177,10 @@ export function Settings({
         let hasStartedPlaying = false;
 
         audio.onplay = () => {
-          console.log('[Settings] TTS preview started playing');
           hasStartedPlaying = true;
         };
 
         audio.onended = () => {
-          console.log('[Settings] TTS preview finished');
           setIsPreviewingTTS(false);
           setConnectionStatus('idle');
           setConnectionError('');
@@ -201,7 +198,6 @@ export function Settings({
             setPreviewAudio(null);
           } else {
             // 如果已经开始播放，清除加载状态但不显示错误
-            console.log('[Settings] Audio error after playback started, ignoring');
             setIsPreviewingTTS(false);
           }
         };
@@ -365,6 +361,48 @@ export function Settings({
               {/* Voice Recognition Settings */}
               {activeCategory === 'voice-recognition' && (
                 <div className="space-y-6">
+                  {/* Work Mode Selector - 新增 */}
+                  <div className="space-y-2">
+                    <Label htmlFor="work-mode" className="text-foreground">
+                      {t('settings.fields.workMode')}
+                    </Label>
+                    <Select
+                      value={localConfig.work_mode || workMode}
+                      onValueChange={(v) => {
+                        // 同时更新 localConfig 和调用 onWorkModeChange
+                        updateConfig('work_mode', v);
+                        onWorkModeChange?.(v as 'conversation' | 'text');
+                      }}
+                    >
+                      <SelectTrigger
+                        id="work-mode"
+                        className="bg-muted border-border text-foreground
+                                   focus:border-blue-500 focus:ring-blue-500
+                                   focus-visible:ring-offset-2
+                                   focus-visible:ring-offset-background"
+                      >
+                        <SelectValue placeholder={t('settings.workModes.conversation')} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-muted border-border">
+                        <SelectItem value="conversation">
+                          <div className="flex items-center gap-2">
+                            <MessageCircle className="h-4 w-4 text-blue-400" />
+                            <span>{t('settings.workModes.conversation')}</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="text">
+                          <div className="flex items-center gap-2">
+                            <Type className="h-4 w-4 text-green-400" />
+                            <span>{t('settings.workModes.text')}</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t('settings.hints.workMode')}
+                    </p>
+                  </div>
+
                   <div className="space-y-2">
                     <Label className="text-foreground">{t('settings.fields.recordingMode')}</Label>
                     <Select

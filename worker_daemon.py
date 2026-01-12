@@ -141,12 +141,25 @@ class SpeekiumDaemon:
         self._log("🎤 PTT: Hotkey released - stopping recording")
         self._emit_ptt_event("processing")
 
+        # Read config to check work mode
+        from config_manager import ConfigManager
+        config = ConfigManager.load()
+        work_mode = config.get("work_mode", "conversation")
+
+
+        # Determine auto_chat based on work_mode
+        # conversation mode: auto_chat=True (trigger LLM + TTS)
+        # text mode: auto_chat=False (only return ASR text)
+        auto_chat = (work_mode == "conversation")
+
+        self._log(f"🎤 PTT: Work mode = {work_mode}, auto_chat = {auto_chat}")
+
         # Stop recording and process in background (use stored loop reference for thread safety)
         if not self.loop:
             return
 
         future = asyncio.run_coroutine_threadsafe(
-            self.handle_record_stop(auto_chat=True, use_tts=True),
+            self.handle_record_stop(auto_chat=auto_chat, use_tts=True),
             self.loop
         )
 
@@ -625,8 +638,13 @@ class SpeekiumDaemon:
         try:
             from config_manager import ConfigManager
 
+            self._log(f"📥 收到保存配置请求: work_mode = {config.get('work_mode', 'MISSING')}")
             ConfigManager.save(config)
             self._log("✅ 配置已保存")
+
+            # 验证保存
+            saved_config = ConfigManager.load()
+
             return {"success": True}
         except Exception as e:
             self._log(f"❌ 配置保存失败: {e}")
@@ -676,7 +694,8 @@ class SpeekiumDaemon:
         elif command == "config":
             return await self.handle_config()
         elif command == "save_config":
-            return await self.handle_save_config(args.get("config", {}))
+            # args 直接是 config 对象（Rust 端已经处理）
+            return await self.handle_save_config(args)
         elif command == "health":
             return await self.handle_health()
         elif command == "exit":

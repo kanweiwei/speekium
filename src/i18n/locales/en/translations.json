@@ -25,9 +25,15 @@
       "recordingHint": "Release to stop recording",
       "processing": "Thinking...",
       "processingHint": "Processing your message",
-      "hint": "Hold",
+      "hint": "Press",
       "shortcutKey": "⌘+⌥",
       "hintAction": "to speak"
+    },
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "autoCollapse": {
+      "warning": "Input will collapse in 3 seconds",
+      "cancel": "Cancel collapse"
     },
     "messages": {
       "placeholder": "Type your message...",
@@ -99,6 +105,7 @@
       "advanced": "Dangerous operations and system information"
     },
     "fields": {
+      "workMode": "Work Mode",
       "systemPrompt": "System Prompt",
       "maxHistory": "Max History",
       "items": "items",
@@ -120,6 +127,14 @@
       "serviceStatus": "Service Status",
       "running": "Running"
     },
+    "workModes": {
+      "conversation": "Conversation Mode",
+      "text": "Text Input Mode"
+    },
+    "workModeDescriptions": {
+      "conversation": "Voice → AI conversation → Text-to-Speech",
+      "text": "Voice → Direct text input to focused field"
+    },
     "placeholders": {
       "systemPrompt": "You are a helpful voice assistant...",
       "apiKey": "sk-...",
@@ -129,6 +144,7 @@
       "selectTtsBackend": "Select TTS Backend"
     },
     "hints": {
+      "workMode": "Select how voice input is processed",
       "systemPrompt": "Customize AI assistant behavior and role",
       "maxHistory": "Number of conversation history to keep",
       "recordingMode": "Press and hold Cmd+Alt to record, release to stop",
@@ -212,5 +228,12 @@
       "placeholder": "Enter title...",
       "characterLimit": "{{count}}/{{max}}"
     }
+  },
+  "toast": {
+    "modeSwitched": "Mode Switched",
+    "conversationMode": "Current: Voice → AI conversation → Text-to-Speech",
+    "textMode": "Current: Voice → Direct text input",
+    "switchFailed": "Failed to switch mode. Please try again.",
+    "error": "Error"
   }
 }

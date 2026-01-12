@@ -25,9 +25,15 @@
       "recordingHint": "松开停止录音",
       "processing": "思考中...",
       "processingHint": "正在处理您的消息",
-      "hint": "按住",
+      "hint": "按",
       "shortcutKey": "⌘+⌥",
       "hintAction": "说话"
+    },
+    "collapse": "收起",
+    "expand": "展开",
+    "autoCollapse": {
+      "warning": "输入框将在3秒后自动折叠",
+      "cancel": "取消折叠"
     },
     "messages": {
       "placeholder": "输入消息...",
@@ -99,6 +105,7 @@
       "advanced": "危险操作和系统信息"
     },
     "fields": {
+      "workMode": "工作模式",
       "systemPrompt": "系统提示词",
       "maxHistory": "最大历史记录",
       "items": "条",
@@ -120,6 +127,14 @@
       "serviceStatus": "服务状态",
       "running": "运行中"
     },
+    "workModes": {
+      "conversation": "对话模式",
+      "text": "文字输入模式"
+    },
+    "workModeDescriptions": {
+      "conversation": "语音 → AI 对话 → 语音播放",
+      "text": "语音 → 直接输入文字到焦点框"
+    },
     "placeholders": {
       "systemPrompt": "你是一个有帮助的语音助手...",
       "apiKey": "sk-...",
@@ -129,6 +144,7 @@
       "selectTtsBackend": "选择 TTS 后端"
     },
     "hints": {
+      "workMode": "选择语音输入的处理方式",
       "systemPrompt": "自定义 AI 助手的行为和角色",
       "maxHistory": "保留的对话历史条数",
       "recordingMode": "按住 Cmd+Alt 开始录音，松开停止",
@@ -212,5 +228,12 @@
       "placeholder": "输入标题...",
       "characterLimit": "{{count}}/{{max}}"
     }
+  },
+  "toast": {
+    "modeSwitched": "模式已切换",
+    "conversationMode": "当前模式: 语音 → AI 对话 → 语音播放",
+    "textMode": "当前模式: 语音 → 直接输入文字",
+    "switchFailed": "切换模式失败，请重试",
+    "error": "错误"
   }
 }

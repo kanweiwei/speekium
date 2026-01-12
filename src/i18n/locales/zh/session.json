@@ -1,8 +1,0 @@
-{
-  "newSession": {
-    "title": "新建会话",
-    "description": "为新会话设置一个标题，留空将在发送第一条消息时自动命名。",
-    "placeholder": "输入标题...",
-    "characterLimit": "{{count}}/{{max}}"
-  }
-}

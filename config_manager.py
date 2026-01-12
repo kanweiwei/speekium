@@ -41,6 +41,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "tts_rate": "+0%",
     "vad_threshold": 0.7,
     "max_history": 10,
+    "work_mode": "conversation",  # conversation | text
 }
 
 
@@ -57,7 +58,7 @@ class ConfigManager:
                 config = json.load(f)
                 return {**DEFAULT_CONFIG, **config}
         except Exception as e:
-            print(f"加载配置失败: {e}")
+            print(f"加载配置失败: {e}", file=sys.stderr)
             return DEFAULT_CONFIG.copy()
 
     @staticmethod
@@ -67,7 +68,7 @@ class ConfigManager:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存配置失败: {e}")
+            print(f"保存配置失败: {e}", file=sys.stderr)
             raise
 
     @staticmethod

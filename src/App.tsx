@@ -1,10 +1,14 @@
 import React from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { useTauriAPI } from './useTauriAPI';
 import { Settings } from './Settings';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { NewSessionDialog } from './components/NewSessionDialog';
 import { ThemeToggle } from './components/ThemeToggle';
+import { WorkModeToast } from './components/WorkModeToast';
+import { CollapsibleInput } from './components/CollapsibleInput';
+import { WorkModeProvider, useWorkMode } from './contexts/WorkModeContext';
 import { historyAPI } from './useTauriAPI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,9 +29,10 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
+import type { WorkMode } from './types/workMode';
 
 // Empty state component
-function EmptyState() {
+function EmptyState({ onPromptClick }: { onPromptClick: (prompt: string) => void }) {
   const { t } = useTranslation();
 
   const examplePrompts = [
@@ -68,7 +73,8 @@ function EmptyState() {
           return (
             <button
               key={idx}
-              className="group p-4 rounded-xl bg-muted border border-border/50 hover:border-border transition-all hover:scale-[1.02] text-left"
+              onClick={() => onPromptClick(prompt.text)}
+              className="group p-4 rounded-xl bg-muted border border-border/50 hover:border-border transition-all hover:scale-[1.02] text-left cursor-pointer"
             >
               <div className={cn(
                 "w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center mb-3",
@@ -85,71 +91,26 @@ function EmptyState() {
   );
 }
 
-// PTT state overlay component
-function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'error' }) {
-  const { t } = useTranslation();
-
-  if (state === 'idle' || state === 'error') return null;
-
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50">
-      {state === 'recording' && (
-        <div className="flex flex-col items-center">
-          {/* 声波动画 */}
-          <div className="relative">
-            <div className="w-32 h-32 rounded-full bg-red-500/20 flex items-center justify-center">
-              <div className="w-24 h-24 rounded-full bg-red-500/40 flex items-center justify-center animate-pulse">
-                <div className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center">
-                  <Mic className="w-8 h-8 text-white" />
-                </div>
-              </div>
-            </div>
-            {/* 脉冲扩散动画 */}
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="absolute inset-0 rounded-full border-2 border-red-500 animate-ping"
-                style={{
-                  animationDelay: `${i * 0.3}s`,
-                  animationDuration: '1.5s',
-                }}
-              />
-            ))}
-          </div>
-          <p className="mt-6 text-lg font-medium text-red-400">{t('app.ptt.recording')}</p>
-          <p className="mt-2 text-sm text-muted-foreground">{t('app.ptt.recordingHint')}</p>
-        </div>
-      )}
-
-      {state === 'processing' && (
-        <div className="flex flex-col items-center">
-          {/* 处理动画 */}
-          <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-amber-500/20 flex items-center justify-center">
-              <div className="w-16 h-16 rounded-full bg-amber-500/40 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
-              </div>
-            </div>
-            <div className="absolute inset-0 rounded-full border-2 border-amber-500/50 animate-pulse" />
-          </div>
-          <p className="mt-6 text-lg font-medium text-amber-400">{t('app.ptt.processing')}</p>
-          <p className="mt-2 text-sm text-muted-foreground">{t('app.ptt.processingHint')}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function App() {
   const { t } = useTranslation();
+  const { workMode, setWorkMode } = useWorkMode();
   const [textInput, setTextInput] = React.useState<string>('');
   const [autoTTS, setAutoTTS] = React.useState<boolean>(true);
   const [isSpeaking, setIsSpeaking] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [pttState, setPttState] = React.useState<'idle' | 'recording' | 'processing' | 'error'>('idle');
   const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
   const [isStreaming, setIsStreaming] = React.useState<boolean>(false);
   const [isWaitingForLLM, setIsWaitingForLLM] = React.useState<boolean>(false);
+
+  // Work Mode Toast 状态
+  const [toast, setToast] = React.useState<{
+    show: boolean;
+    mode: WorkMode;
+    message?: string;
+  }>({
+    show: false,
+    mode: 'conversation',
+  });
 
   const [recordMode, setRecordMode] = React.useState<'push-to-talk' | 'continuous'>(() => {
     const saved = localStorage.getItem('recordMode');
@@ -240,36 +201,67 @@ function App() {
   // Listen for PTT events
   React.useEffect(() => {
     const setupListeners = async () => {
-      const unlistenState = await listen<string>('ptt-state', (event) => {
-        const state = event.payload as 'idle' | 'recording' | 'processing' | 'error';
-        setPttState(state);
-        if (state === 'recording') {
-          setError(null);
-        }
-      });
-
       const unlistenUserMessage = await listen<string>('ptt-user-message', async (event) => {
         const userText = event.payload;
-        addMessage('user', userText);
-        pttAssistantResponseRef.current = '';
-        pttAssistantAddedRef.current = false;
-        setIsWaitingForLLM(true);  // Start waiting for LLM response
 
-        // Save to database
-        try {
-          let sessionId = currentSessionIdRef.current;
-          if (!sessionId) {
-            // Create new session with first message as title
-            const title = userText.slice(0, 30) + (userText.length > 30 ? '...' : '');
-            const session = await historyAPI.createSession(title);
-            sessionId = session.id;
-            setCurrentSessionId(sessionId);
-            currentSessionIdRef.current = sessionId;
-            setCurrentSessionTitle(title);
+        // 根据工作模式决定行为
+        if (workMode === 'text') {
+          // 文字输入模式：调用 type_text_command 输入文字到焦点框，并记录到会话历史
+
+          // 先记录到会话历史和数据库
+          addMessage('user', userText);
+
+          // Save to database
+          try {
+            let sessionId = currentSessionIdRef.current;
+            if (!sessionId) {
+              // Create new session with first message as title
+              const title = userText.slice(0, 30) + (userText.length > 30 ? '...' : '');
+              const session = await historyAPI.createSession(title);
+              sessionId = session.id;
+              setCurrentSessionId(sessionId);
+              currentSessionIdRef.current = sessionId;
+              setCurrentSessionTitle(title);
+            }
+            await historyAPI.addSessionMessage(sessionId, 'user', userText);
+          } catch (error) {
+            console.error('Failed to save user message:', error);
           }
-          await historyAPI.addSessionMessage(sessionId, 'user', userText);
-        } catch (error) {
-          console.error('Failed to save user message:', error);
+
+          // 然后调用 type_text_command 粘贴文字到焦点框
+          try {
+            const result = await invoke<string>('type_text_command', { text: userText });
+            // 显示简短通知
+            setError(`✓ ${result}`);
+            setTimeout(() => setError(null), 2000);
+          } catch (error) {
+            console.error('[PTT] 文字输入失败:', error);
+            setError(`文字输入失败: ${error}`);
+            setTimeout(() => setError(null), 3000);
+          }
+        } else {
+          // 对话模式：显示用户消息并等待 LLM 响应
+          addMessage('user', userText);
+          pttAssistantResponseRef.current = '';
+          pttAssistantAddedRef.current = false;
+          setIsWaitingForLLM(true);  // Start waiting for LLM response
+
+          // Save to database
+          try {
+            let sessionId = currentSessionIdRef.current;
+            if (!sessionId) {
+              // Create new session with first message as title
+              const title = userText.slice(0, 30) + (userText.length > 30 ? '...' : '');
+              const session = await historyAPI.createSession(title);
+              sessionId = session.id;
+              setCurrentSessionId(sessionId);
+              currentSessionIdRef.current = sessionId;
+              setCurrentSessionTitle(title);
+            }
+            await historyAPI.addSessionMessage(sessionId, 'user', userText);
+          } catch (error) {
+            console.error('Failed to save user message:', error);
+          }
         }
       });
 
@@ -313,7 +305,6 @@ function App() {
       });
 
       return () => {
-        unlistenState();
         unlistenUserMessage();
         unlistenAssistantChunk();
         unlistenAssistantDone();
@@ -325,7 +316,7 @@ function App() {
     return () => {
       cleanup.then(fn => fn());
     };
-  }, [addMessage, updateLastAssistantMessage]);
+  }, [addMessage, updateLastAssistantMessage, workMode]);
 
   React.useEffect(() => {
     localStorage.setItem('recordMode', recordMode);
@@ -410,10 +401,11 @@ function App() {
     }
   };
 
-  const handleSendText = async () => {
-    if (!textInput.trim() || isProcessing) return;
+  const handleSendText = async (text?: string) => {
+    const message = text?.trim() || textInput.trim();
+    if (!message || isProcessing) return;
 
-    const userMessage = textInput.trim();
+    const userMessage = message;
     setTextInput('');
     setError(null);
 
@@ -461,9 +453,14 @@ function App() {
           setIsSpeaking(false);
         }
       }
-    } catch (error) {
-      setError(`${t('app.errors.chatFailed')}: ${error}`);
+    } catch (chatError) {
+      setError(`${t('app.errors.chatFailed')}: ${chatError}`);
     }
+  };
+
+  // 处理快速提示卡片点击
+  const handlePromptClick = async (prompt: string) => {
+    await handleSendText(prompt);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -546,7 +543,7 @@ function App() {
           {/* 空状态或消息列表 */}
           <div className="max-w-[680px] mx-auto py-4">
             {messages.length === 0 ? (
-              <EmptyState />
+              <EmptyState onPromptClick={handlePromptClick} />
             ) : (
               <div className="space-y-4">
                 {messages.map((message, index) => {
@@ -627,44 +624,16 @@ function App() {
             )}
           </div>
         </div>
-
-        {/* PTT 覆盖层 */}
-        <PTTOverlay state={pttState} />
       </div>
 
-      {/* 底部输入区 */}
-      <div className="border-t border-border/50 bg-background px-4 py-4">
-        <div className="max-w-[680px] mx-auto">
-          {/* 输入框和发送按钮 */}
-          <div className="flex items-center gap-3 mb-3">
-            <Input
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={t('app.messages.placeholder')}
-              disabled={isProcessing}
-              className="flex-1 bg-muted border-border/50 text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500"
-            />
-            <Button
-              onClick={handleSendText}
-              disabled={!textInput.trim() || isProcessing}
-              className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-muted disabled:text-muted-foreground"
-            >
-              {isProcessing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-
-          {/* PTT 提示 */}
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <Mic className="w-3 h-3" />
-            <span>{t('app.ptt.hint')} <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono border border-border">{t('app.ptt.shortcutKey')}</kbd> {t('app.ptt.hintAction')}</span>
-          </div>
-        </div>
-      </div>
+      {/* 底部输入区 - 使用可折叠输入框 */}
+      <CollapsibleInput
+        value={textInput}
+        onChange={setTextInput}
+        onSend={handleSendText}
+        isProcessing={isProcessing}
+        isStreaming={isStreaming}
+      />
 
       {/* 设置弹窗 */}
       <Settings
@@ -676,6 +645,15 @@ function App() {
         onAutoTTSChange={setAutoTTS}
         recordMode={recordMode}
         onRecordModeChange={setRecordMode}
+        workMode={workMode}
+        onWorkModeChange={(mode) => {
+          setWorkMode(mode, 'settings');
+          // 显示 Toast 通知
+          setToast({
+            show: true,
+            mode,
+          });
+        }}
         onClearHistory={handleClearHistory}
       />
 
@@ -688,6 +666,15 @@ function App() {
           setIsNewSessionDialogOpen(true);
         }}
       />
+
+      {/* 工作模式 Toast */}
+      {toast.show && (
+        <WorkModeToast
+          mode={toast.mode}
+          message={toast.message}
+          onClose={() => setToast(prev => ({ ...prev, show: false }))}
+        />
+      )}
 
       {/* 新建会话弹窗 */}
       <NewSessionDialog
