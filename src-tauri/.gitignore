@@ -9,3 +9,4 @@
 # Prevent config.json from being created here (should be in project root)
 # If created here, it triggers Tauri dev mode restart
 config.json
+target/
