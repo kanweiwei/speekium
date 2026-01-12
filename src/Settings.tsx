@@ -172,19 +172,35 @@ export function Settings({
 
         // 创建并播放音频
         const audio = new Audio(audioUrl);
+        let hasStartedPlaying = false;
+
+        audio.onplay = () => {
+          console.log('[Settings] TTS preview started playing');
+          hasStartedPlaying = true;
+        };
 
         audio.onended = () => {
           console.log('[Settings] TTS preview finished');
           setIsPreviewingTTS(false);
+          setConnectionStatus('idle');
+          setConnectionError('');
           setPreviewAudio(null);
         };
 
         audio.onerror = (error) => {
           console.error('[Settings] TTS playback error:', error);
-          setIsPreviewingTTS(false);
-          setConnectionStatus('error');
-          setConnectionError('音频播放失败');
-          setPreviewAudio(null);
+          // 只在音频真的没有播放时才显示错误
+          // 如果已经开始播放了，说明可能是播放结束后的误触发
+          if (!hasStartedPlaying) {
+            setIsPreviewingTTS(false);
+            setConnectionStatus('error');
+            setConnectionError('音频播放失败');
+            setPreviewAudio(null);
+          } else {
+            // 如果已经开始播放，清除加载状态但不显示错误
+            console.log('[Settings] Audio error after playback started, ignoring');
+            setIsPreviewingTTS(false);
+          }
         };
 
         setPreviewAudio(audio);
