@@ -550,6 +550,10 @@ fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
         // 控制浮动窗口显示/隐藏
         match state {
             "recording" | "processing" => {
+                // Recalculate position before showing (in case screen config changed)
+                if let Ok((x, y)) = calculate_overlay_position(app_handle) {
+                    let _ = overlay.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+                }
                 let _ = overlay.show();
             }
             "idle" | "error" => {
@@ -987,19 +991,29 @@ fn cleanup_daemon() {
 // PTT Overlay Window
 // ============================================================================
 
-fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<dyn std::error::Error>> {
-    // 获取主显示器信息
+/// Calculate PTT overlay window position based on current screen size
+fn calculate_overlay_position<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(f64, f64), Box<dyn std::error::Error>> {
     let monitor = app.primary_monitor()?.ok_or("No primary monitor found")?;
     let screen_size = monitor.size();
     let scale_factor = monitor.scale_factor();
 
-    // 窗口尺寸（精简设计）
-    let window_width: u32 = 140;
-    let window_height: u32 = 50;
+    let window_width: f64 = 140.0;
+    let window_height: f64 = 50.0;
 
-    // 计算底部居中位置
-    let x = ((screen_size.width as f64 / scale_factor) / 2.0 - (window_width as f64 / 2.0)) as i32;
-    let y = ((screen_size.height as f64 / scale_factor) - (window_height as f64) - 60.0) as i32; // 距离底部 60px
+    // Calculate bottom center position
+    let x = (screen_size.width as f64 / scale_factor) / 2.0 - (window_width / 2.0);
+    let y = (screen_size.height as f64 / scale_factor) - window_height - 60.0; // 60px from bottom
+
+    Ok((x, y))
+}
+
+fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<dyn std::error::Error>> {
+    // Calculate initial position
+    let (x, y) = calculate_overlay_position(app)?;
+
+    // 窗口尺寸（精简设计）
+    let window_width: f64 = 140.0;
+    let window_height: f64 = 50.0;
 
     // 创建 PTT 浮动窗口（透明窗口）
     let _overlay = WebviewWindowBuilder::new(
@@ -1008,8 +1022,8 @@ fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<d
         tauri::WebviewUrl::App("ptt-overlay.html".into())
     )
     .title("PTT Status")
-    .inner_size(window_width as f64, window_height as f64)
-    .position(x as f64, y as f64)
+    .inner_size(window_width, window_height)
+    .position(x, y)
     .always_on_top(true)
     .decorations(false)
     .resizable(false)
