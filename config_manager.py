@@ -1,8 +1,37 @@
 import json
 import os
+import sys
 from typing import Any
 
-CONFIG_PATH = "config.json"
+APP_NAME = "speekium"
+
+
+def get_config_dir() -> str:
+    """获取应用配置目录（跨平台）
+
+    - macOS: ~/Library/Application Support/speekium/
+    - Windows: C:/Users/<user>/AppData/Roaming/speekium/
+    - Linux: ~/.config/speekium/
+    """
+    if sys.platform == "darwin":
+        # macOS
+        base = os.path.expanduser("~/Library/Application Support")
+    elif sys.platform == "win32":
+        # Windows
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    else:
+        # Linux and others
+        base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+
+    config_dir = os.path.join(base, APP_NAME)
+
+    # 确保目录存在
+    os.makedirs(config_dir, exist_ok=True)
+
+    return config_dir
+
+
+CONFIG_PATH = os.path.join(get_config_dir(), "config.json")
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "llm_backend": "ollama",
@@ -40,3 +69,8 @@ class ConfigManager:
         except Exception as e:
             print(f"保存配置失败: {e}")
             raise
+
+    @staticmethod
+    def get_path() -> str:
+        """获取配置文件路径"""
+        return CONFIG_PATH

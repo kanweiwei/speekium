@@ -2,6 +2,8 @@ import React from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useTauriAPI } from './useTauriAPI';
 import { Settings } from './Settings';
+import { HistoryDrawer } from './components/HistoryDrawer';
+import { historyAPI } from './useTauriAPI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -162,6 +164,8 @@ function App() {
   } = useTauriAPI();
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const [currentSessionId, setCurrentSessionId] = React.useState<string | null>(null);
+  const currentSessionIdRef = React.useRef<string | null>(null);
   const pttAssistantResponseRef = React.useRef<string>('');
   const pttAssistantAddedRef = React.useRef<boolean>(false);
   const isRecordingRef = React.useRef(isRecording);
@@ -175,6 +179,10 @@ function App() {
   React.useEffect(() => {
     isProcessingRef.current = isProcessing;
   }, [isProcessing]);
+
+  React.useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
 
   React.useEffect(() => {
     loadConfig();
@@ -196,11 +204,28 @@ function App() {
         }
       });
 
-      const unlistenUserMessage = await listen<string>('ptt-user-message', (event) => {
-        addMessage('user', event.payload);
+      const unlistenUserMessage = await listen<string>('ptt-user-message', async (event) => {
+        const userText = event.payload;
+        addMessage('user', userText);
         pttAssistantResponseRef.current = '';
         pttAssistantAddedRef.current = false;
         setIsWaitingForLLM(true);  // Start waiting for LLM response
+
+        // Save to database
+        try {
+          let sessionId = currentSessionIdRef.current;
+          if (!sessionId) {
+            // Create new session with first message as title
+            const title = userText.slice(0, 30) + (userText.length > 30 ? '...' : '');
+            const session = await historyAPI.createSession(title);
+            sessionId = session.id;
+            setCurrentSessionId(sessionId);
+            currentSessionIdRef.current = sessionId;
+          }
+          await historyAPI.addSessionMessage(sessionId, 'user', userText);
+        } catch (error) {
+          console.error('Failed to save user message:', error);
+        }
       });
 
       const unlistenAssistantChunk = await listen<string>('ptt-assistant-chunk', (event) => {
@@ -215,12 +240,23 @@ function App() {
         }
       });
 
-      const unlistenAssistantDone = await listen<string>('ptt-assistant-done', (event) => {
+      const unlistenAssistantDone = await listen<string>('ptt-assistant-done', async (event) => {
         setIsWaitingForLLM(false);  // Ensure waiting state is reset
         setIsStreaming(false);
+        const finalResponse = event.payload || pttAssistantResponseRef.current;
         if (event.payload) {
           updateLastAssistantMessage(event.payload);
         }
+
+        // Save assistant message to database
+        if (finalResponse && currentSessionIdRef.current) {
+          try {
+            await historyAPI.addSessionMessage(currentSessionIdRef.current, 'assistant', finalResponse);
+          } catch (error) {
+            console.error('Failed to save assistant message:', error);
+          }
+        }
+
         pttAssistantResponseRef.current = '';
         pttAssistantAddedRef.current = false;
       });
@@ -301,6 +337,8 @@ function App() {
 
   const handleClearHistory = () => {
     clearHistory();
+    setCurrentSessionId(null);
+    currentSessionIdRef.current = null;
   };
 
   const handleSendText = async () => {
@@ -313,8 +351,32 @@ function App() {
     // Add user message to chat list
     addMessage('user', userMessage);
 
+    // Save user message to database
+    let sessionId = currentSessionIdRef.current;
+    try {
+      if (!sessionId) {
+        const title = userMessage.slice(0, 30) + (userMessage.length > 30 ? '...' : '');
+        const session = await historyAPI.createSession(title);
+        sessionId = session.id;
+        setCurrentSessionId(sessionId);
+        currentSessionIdRef.current = sessionId;
+      }
+      await historyAPI.addSessionMessage(sessionId, 'user', userMessage);
+    } catch (error) {
+      console.error('Failed to save user message:', error);
+    }
+
     try {
       const result = await chatGenerator(userMessage);
+
+      // Save assistant message to database
+      if (result && result.success && result.content && sessionId) {
+        try {
+          await historyAPI.addSessionMessage(sessionId, 'assistant', result.content);
+        } catch (error) {
+          console.error('Failed to save assistant message:', error);
+        }
+      }
 
       if (autoTTS && result && result.success && result.content) {
         setIsSpeaking(true);
@@ -522,6 +584,12 @@ function App() {
         recordMode={recordMode}
         onRecordModeChange={setRecordMode}
         onClearHistory={handleClearHistory}
+      />
+
+      {/* 历史抽屉 */}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
       />
     </div>
   );

@@ -3,12 +3,15 @@ use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{TrayIconBuilder, TrayIconEvent},
     webview::WebviewWindowBuilder,
-    Emitter, Manager, Runtime,
+    Emitter, Manager, Runtime, State,
 };
 use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout, ChildStderr};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
 use serde::{Deserialize, Serialize};
+
+mod database;
+use database::{Database, Session, Message, PaginatedResult};
 
 // ============================================================================
 // Data Structures
@@ -401,6 +404,88 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
 
         println!("🛑 PTT 事件读取器退出");
     });
+}
+
+// ============================================================================
+// App State (for Database)
+// ============================================================================
+
+pub struct AppState {
+    pub db: Database,
+}
+
+// ============================================================================
+// Database Commands
+// ============================================================================
+
+#[tauri::command]
+async fn db_create_session(
+    state: State<'_, AppState>,
+    title: String,
+) -> Result<Session, String> {
+    state.db.create_session(title)
+}
+
+#[tauri::command]
+async fn db_list_sessions(
+    state: State<'_, AppState>,
+    page: i32,
+    page_size: i32,
+) -> Result<PaginatedResult<Session>, String> {
+    state.db.list_sessions(page, page_size)
+}
+
+#[tauri::command]
+async fn db_get_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Session, String> {
+    state.db.get_session(&session_id)
+}
+
+#[tauri::command]
+async fn db_update_session(
+    state: State<'_, AppState>,
+    session_id: String,
+    title: String,
+) -> Result<Session, String> {
+    state.db.update_session(&session_id, title)
+}
+
+#[tauri::command]
+async fn db_delete_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<bool, String> {
+    state.db.delete_session(&session_id)
+}
+
+#[tauri::command]
+async fn db_add_message(
+    state: State<'_, AppState>,
+    session_id: String,
+    role: String,
+    content: String,
+) -> Result<Message, String> {
+    state.db.add_message(&session_id, &role, &content)
+}
+
+#[tauri::command]
+async fn db_get_messages(
+    state: State<'_, AppState>,
+    session_id: String,
+    page: i32,
+    page_size: i32,
+) -> Result<PaginatedResult<Message>, String> {
+    state.db.get_messages(&session_id, page, page_size)
+}
+
+#[tauri::command]
+async fn db_delete_message(
+    state: State<'_, AppState>,
+    message_id: String,
+) -> Result<bool, String> {
+    state.db.delete_message(&message_id)
 }
 
 // ============================================================================
@@ -958,9 +1043,28 @@ pub fn run() {
             generate_tts,
             load_config,
             save_config,
-            daemon_health
+            daemon_health,
+            // Database commands
+            db_create_session,
+            db_list_sessions,
+            db_get_session,
+            db_update_session,
+            db_delete_session,
+            db_add_message,
+            db_get_messages,
+            db_delete_message
         ])
         .setup(|app| {
+            // 初始化数据库
+            let db_path = database::get_database_path(app.handle())
+                .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to get database path: {}", e)))?;
+
+            let db = Database::new(db_path)
+                .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to initialize database: {}", e)))?;
+
+            app.manage(AppState { db });
+            println!("✅ 数据库已初始化");
+
             // 创建托盘图标
             create_tray(app.handle())?;
 

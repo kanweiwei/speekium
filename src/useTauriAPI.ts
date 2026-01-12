@@ -44,6 +44,28 @@ interface HealthResult {
   error?: string;
 }
 
+// History types
+interface Session {
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+}
+
+interface HistoryMessage {
+  id: string;
+  session_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+}
+
+interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  has_more: boolean;
+}
+
 // ============================================================================
 // Main Hook
 // ============================================================================
@@ -492,6 +514,80 @@ export function useTauriAPI() {
   };
 
   // ============================================================================
+  // History API
+  // ============================================================================
+
+  const listSessions = async (page: number = 1, pageSize: number = 20) => {
+    try {
+      const result = await invoke<PaginatedResult<Session>>('db_list_sessions', {
+        page,
+        pageSize,
+      });
+      return result;
+    } catch (error) {
+      console.error('[History] List sessions failed:', error);
+      throw error;
+    }
+  };
+
+  const getSession = async (sessionId: string) => {
+    try {
+      const result = await invoke<Session>('db_get_session', { sessionId });
+      return result;
+    } catch (error) {
+      console.error('[History] Get session failed:', error);
+      throw error;
+    }
+  };
+
+  const createSession = async (title: string) => {
+    try {
+      const result = await invoke<Session>('db_create_session', { title });
+      return result;
+    } catch (error) {
+      console.error('[History] Create session failed:', error);
+      throw error;
+    }
+  };
+
+  const deleteSession = async (sessionId: string) => {
+    try {
+      await invoke('db_delete_session', { sessionId });
+    } catch (error) {
+      console.error('[History] Delete session failed:', error);
+      throw error;
+    }
+  };
+
+  const getSessionMessages = async (sessionId: string, page: number = 1, pageSize: number = 100) => {
+    try {
+      const result = await invoke<PaginatedResult<HistoryMessage>>('db_get_messages', {
+        sessionId,
+        page,
+        pageSize,
+      });
+      return result;
+    } catch (error) {
+      console.error('[History] Get messages failed:', error);
+      throw error;
+    }
+  };
+
+  const addSessionMessage = async (sessionId: string, role: string, content: string) => {
+    try {
+      const result = await invoke<HistoryMessage>('db_add_message', {
+        sessionId,
+        role,
+        content,
+      });
+      return result;
+    } catch (error) {
+      console.error('[History] Add message failed:', error);
+      throw error;
+    }
+  };
+
+  // ============================================================================
   // Return
   // ============================================================================
 
@@ -514,5 +610,61 @@ export function useTauriAPI() {
     checkDaemonHealth,
     addMessage,
     updateLastAssistantMessage,
+    // History API
+    listSessions,
+    getSession,
+    createSession,
+    deleteSession,
+    getSessionMessages,
+    addSessionMessage,
   };
 }
+
+// Export types for use in components
+export type { Session, HistoryMessage, PaginatedResult };
+
+// ============================================================================
+// Standalone History API (can be used outside of hook)
+// ============================================================================
+
+export const historyAPI = {
+  listSessions: async (page: number = 1, pageSize: number = 20) => {
+    const result = await invoke<PaginatedResult<Session>>('db_list_sessions', {
+      page,
+      pageSize,
+    });
+    return result;
+  },
+
+  getSession: async (sessionId: string) => {
+    const result = await invoke<Session>('db_get_session', { sessionId });
+    return result;
+  },
+
+  createSession: async (title: string) => {
+    const result = await invoke<Session>('db_create_session', { title });
+    return result;
+  },
+
+  deleteSession: async (sessionId: string) => {
+    await invoke('db_delete_session', { sessionId });
+  },
+
+  getSessionMessages: async (sessionId: string, page: number = 1, pageSize: number = 100) => {
+    const result = await invoke<PaginatedResult<HistoryMessage>>('db_get_messages', {
+      sessionId,
+      page,
+      pageSize,
+    });
+    return result;
+  },
+
+  addSessionMessage: async (sessionId: string, role: string, content: string) => {
+    const result = await invoke<HistoryMessage>('db_add_message', {
+      sessionId,
+      role,
+      content,
+    });
+    return result;
+  },
+};

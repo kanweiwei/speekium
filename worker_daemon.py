@@ -620,6 +620,18 @@ class SpeekiumDaemon:
             self._log(f"❌ 配置加载失败: {e}")
             return {"success": False, "error": str(e)}
 
+    async def handle_save_config(self, config: dict) -> dict:
+        """保存配置"""
+        try:
+            from config_manager import ConfigManager
+
+            ConfigManager.save(config)
+            self._log("✅ 配置已保存")
+            return {"success": True}
+        except Exception as e:
+            self._log(f"❌ 配置保存失败: {e}")
+            return {"success": False, "error": str(e)}
+
     async def handle_health(self) -> dict:
         """健康检查"""
         return {
@@ -663,6 +675,8 @@ class SpeekiumDaemon:
             return await self.handle_tts(args.get("text", ""), args.get("language"))
         elif command == "config":
             return await self.handle_config()
+        elif command == "save_config":
+            return await self.handle_save_config(args.get("config", {}))
         elif command == "health":
             return await self.handle_health()
         elif command == "exit":

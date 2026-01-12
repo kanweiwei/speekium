@@ -27,6 +27,7 @@ node_modules/
 .env
 *.local.*
 .notes/
+config.json
 
 # OS
 .DS_Store

@@ -1,8 +1,0 @@
-{
-  "extends": "@vitejs/app-react-ts/node",
-  "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true
-  },
-  "include": ["vite.config.ts"]
-}
