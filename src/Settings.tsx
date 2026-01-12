@@ -621,18 +621,6 @@ export function Settings({
                         按住开始录音，松开停止并发送
                       </p>
                     </div>
-
-                    <div className="p-4 rounded-lg border border-border bg-muted opacity-50">
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="text-foreground">全局唤醒</Label>
-                        <kbd className="px-3 py-1.5 text-xs font-mono font-semibold text-foreground bg-muted/80 border border-border rounded-md shadow-sm">
-                          未设置
-                        </kbd>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        即将推出...
-                      </p>
-                    </div>
                   </div>
                 </div>
               )}
