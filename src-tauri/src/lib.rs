@@ -551,8 +551,15 @@ fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
         match state {
             "recording" | "processing" => {
                 // Recalculate position before showing (in case screen config changed)
-                if let Ok((x, y)) = calculate_overlay_position(app_handle) {
-                    let _ = overlay.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+                match calculate_overlay_position(app_handle) {
+                    Ok((x, y)) => {
+                        if let Err(e) = overlay.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y })) {
+                            eprintln!("❌ Failed to set PTT overlay position: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to calculate PTT overlay position: {}, showing anyway", e);
+                    }
                 }
                 let _ = overlay.show();
             }
@@ -991,18 +998,34 @@ fn cleanup_daemon() {
 // PTT Overlay Window
 // ============================================================================
 
+// PTT Overlay window constants
+const OVERLAY_WIDTH: f64 = 140.0;
+const OVERLAY_HEIGHT: f64 = 50.0;
+const BOTTOM_MARGIN: f64 = 60.0;
+
 /// Calculate PTT overlay window position based on current screen size
 fn calculate_overlay_position<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(f64, f64), Box<dyn std::error::Error>> {
-    let monitor = app.primary_monitor()?.ok_or("No primary monitor found")?;
+    let monitor = app.primary_monitor()?.ok_or_else(|| Box::<dyn std::error::Error>::from("No primary monitor found"))?;
     let screen_size = monitor.size();
     let scale_factor = monitor.scale_factor();
 
-    let window_width: f64 = 140.0;
-    let window_height: f64 = 50.0;
+    // Validate scale factor
+    if scale_factor <= 0.0 {
+        return Err(format!("Invalid scale factor: {}", scale_factor).into());
+    }
 
-    // Calculate bottom center position
-    let x = (screen_size.width as f64 / scale_factor) / 2.0 - (window_width / 2.0);
-    let y = (screen_size.height as f64 / scale_factor) - window_height - 60.0; // 60px from bottom
+    // Calculate scaled screen dimensions
+    let scaled_width = screen_size.width as f64 / scale_factor;
+    let scaled_height = screen_size.height as f64 / scale_factor;
+
+    // Calculate bottom center position with boundary validation
+    let x = (scaled_width / 2.0 - OVERLAY_WIDTH / 2.0).max(0.0);
+    let y = (scaled_height - OVERLAY_HEIGHT - BOTTOM_MARGIN).max(0.0);
+
+    // Final boundary check
+    if x + OVERLAY_WIDTH > scaled_width || y + OVERLAY_HEIGHT > scaled_height {
+        eprintln!("⚠️ Warning: Calculated PTT overlay position may exceed screen bounds");
+    }
 
     Ok((x, y))
 }
@@ -1011,10 +1034,6 @@ fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<d
     // Calculate initial position
     let (x, y) = calculate_overlay_position(app)?;
 
-    // 窗口尺寸（精简设计）
-    let window_width: f64 = 140.0;
-    let window_height: f64 = 50.0;
-
     // 创建 PTT 浮动窗口（透明窗口）
     let _overlay = WebviewWindowBuilder::new(
         app,
@@ -1022,7 +1041,7 @@ fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<d
         tauri::WebviewUrl::App("ptt-overlay.html".into())
     )
     .title("PTT Status")
-    .inner_size(window_width, window_height)
+    .inner_size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
     .position(x, y)
     .always_on_top(true)
     .decorations(false)
@@ -1034,7 +1053,7 @@ fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<d
     .shadow(false)  // 禁用窗口阴影，有助于透明效果
     .build()?;
 
-    println!("✅ PTT 浮动窗口已创建 ({}x{} @ {}, {})", window_width, window_height, x, y);
+    println!("✅ PTT 浮动窗口已创建 ({}x{} @ {}, {})", OVERLAY_WIDTH, OVERLAY_HEIGHT, x, y);
 
     Ok(())
 }
