@@ -19,6 +19,7 @@ import {
   Loader2,
   AlertCircle,
   X,
+  PenSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -341,6 +342,17 @@ function App() {
     currentSessionIdRef.current = null;
   };
 
+  // 新建会话
+  const handleNewSession = () => {
+    // 清空当前消息列表
+    clearHistory();
+    // 重置会话 ID
+    setCurrentSessionId(null);
+    currentSessionIdRef.current = null;
+    // 清空错误状态
+    setError(null);
+  };
+
   const handleSendText = async () => {
     if (!textInput.trim() || isProcessing) return;
 
@@ -407,15 +419,30 @@ function App() {
     <div className="flex flex-col h-screen bg-[#0A0A0B] text-zinc-200">
       {/* 顶栏 */}
       <header className="h-14 border-b border-zinc-800/50 bg-[#141416]/80 backdrop-blur-xl flex items-center justify-between px-4 sticky top-0 z-40">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-          onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-        >
-          <Clock className="w-4 h-4 mr-2" />
-          历史
-        </Button>
+        {/* 左侧按钮组 */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+            onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+          >
+            <Clock className="w-4 h-4 mr-2" />
+            历史
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all duration-200 active:scale-[0.98]"
+            onClick={handleNewSession}
+            disabled={isProcessing}
+            aria-label="新建会话"
+          >
+            <PenSquare className="w-4 h-4 mr-2" />
+            新建
+          </Button>
+        </div>
 
         <h1 className="text-lg font-semibold text-zinc-200">Speekium</h1>
 
