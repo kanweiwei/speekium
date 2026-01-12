@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Clock, Trash2, MessageSquare, ChevronLeft } from 'lucide-react';
+import { X, Clock, Trash2, MessageSquare, ChevronLeft, PenSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { historyAPI, Session, HistoryMessage } from '../useTauriAPI';
@@ -8,6 +8,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onLoadSession?: (messages: Array<{ role: 'user' | 'assistant'; content: string }>) => void;
+  onNewSession?: () => void;
 }
 
 // Time grouping helper
@@ -34,7 +35,7 @@ const timeLabels: Record<string, string> = {
   earlier: '更早',
 };
 
-export function HistoryDrawer({ isOpen, onClose, onLoadSession }: Props) {
+export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: Props) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -153,21 +154,33 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession }: Props) {
               </span>
             </>
           ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-blue-500" />
-                <h2 className="text-lg font-semibold text-zinc-200">历史记录</h2>
-              </div>
-            </>
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-blue-500" />
+              <h2 className="text-lg font-semibold text-zinc-200">历史记录</h2>
+            </div>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-zinc-400 hover:text-zinc-200"
-            onClick={onClose}
-          >
-            <X className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {/* 新建会话按钮 - 仅在列表视图显示 */}
+            {!selectedSession && onNewSession && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                onClick={onNewSession}
+                title="新建会话"
+              >
+                <PenSquare className="w-5 h-5" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-zinc-400 hover:text-zinc-200"
+              onClick={onClose}
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
         </header>
 
         {/* Content */}

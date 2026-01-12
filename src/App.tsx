@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useTauriAPI } from './useTauriAPI';
 import { Settings } from './Settings';
 import { HistoryDrawer } from './components/HistoryDrawer';
+import { NewSessionDialog } from './components/NewSessionDialog';
 import { historyAPI } from './useTauriAPI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -80,7 +81,7 @@ function EmptyState() {
   );
 }
 
-// PTT 状态覆盖层组件
+// PTT state overlay component
 function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'error' }) {
   if (state === 'idle' || state === 'error') return null;
 
@@ -165,7 +166,9 @@ function App() {
   } = useTauriAPI();
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const [isNewSessionDialogOpen, setIsNewSessionDialogOpen] = React.useState(false);
   const [currentSessionId, setCurrentSessionId] = React.useState<string | null>(null);
+  const [currentSessionTitle, setCurrentSessionTitle] = React.useState<string | null>(null);
   const currentSessionIdRef = React.useRef<string | null>(null);
   const pttAssistantResponseRef = React.useRef<string>('');
   const pttAssistantAddedRef = React.useRef<boolean>(false);
@@ -222,6 +225,7 @@ function App() {
             sessionId = session.id;
             setCurrentSessionId(sessionId);
             currentSessionIdRef.current = sessionId;
+            setCurrentSessionTitle(title);
           }
           await historyAPI.addSessionMessage(sessionId, 'user', userText);
         } catch (error) {
@@ -342,15 +346,28 @@ function App() {
     currentSessionIdRef.current = null;
   };
 
-  // 新建会话
-  const handleNewSession = () => {
-    // 清空当前消息列表
+  // New session
+  const handleNewSession = async (customTitle?: string | null) => {
+    // Clear current message list
     clearHistory();
-    // 重置会话 ID
+    // Reset session ID
     setCurrentSessionId(null);
     currentSessionIdRef.current = null;
-    // 清空错误状态
+    // Clear error state
     setError(null);
+    // Reset session title
+    setCurrentSessionTitle(customTitle || null);
+
+    // If custom title provided, create session immediately
+    if (customTitle) {
+      try {
+        const session = await historyAPI.createSession(customTitle);
+        setCurrentSessionId(session.id);
+        currentSessionIdRef.current = session.id;
+      } catch (error) {
+        console.error('Failed to create session:', error);
+      }
+    }
   };
 
   const handleSendText = async () => {
@@ -372,6 +389,7 @@ function App() {
         sessionId = session.id;
         setCurrentSessionId(sessionId);
         currentSessionIdRef.current = sessionId;
+        setCurrentSessionTitle(title);
       }
       await historyAPI.addSessionMessage(sessionId, 'user', userMessage);
     } catch (error) {
@@ -435,7 +453,7 @@ function App() {
             variant="ghost"
             size="sm"
             className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all duration-200 active:scale-[0.98]"
-            onClick={handleNewSession}
+            onClick={() => setIsNewSessionDialogOpen(true)}
             disabled={isProcessing}
             aria-label="新建会话"
           >
@@ -444,7 +462,12 @@ function App() {
           </Button>
         </div>
 
-        <h1 className="text-lg font-semibold text-zinc-200">Speekium</h1>
+        <h1 className={cn(
+          "text-lg font-semibold max-w-[300px] truncate",
+          currentSessionTitle ? "text-zinc-200" : "text-zinc-200"
+        )}>
+          {currentSessionTitle || 'Speekium'}
+        </h1>
 
         <Button
           variant="ghost"
@@ -617,6 +640,17 @@ function App() {
       <HistoryDrawer
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
+        onNewSession={() => {
+          setIsHistoryOpen(false);
+          setIsNewSessionDialogOpen(true);
+        }}
+      />
+
+      {/* 新建会话弹窗 */}
+      <NewSessionDialog
+        isOpen={isNewSessionDialogOpen}
+        onClose={() => setIsNewSessionDialogOpen(false)}
+        onCreate={handleNewSession}
       />
     </div>
   );
