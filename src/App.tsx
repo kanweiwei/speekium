@@ -4,6 +4,7 @@ import { useTauriAPI } from './useTauriAPI';
 import { Settings } from './Settings';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { NewSessionDialog } from './components/NewSessionDialog';
+import { ThemeToggle } from './components/ThemeToggle';
 import { historyAPI } from './useTauriAPI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,17 +45,17 @@ function EmptyState() {
       </div>
 
       {/* 标题 */}
-      <h2 className="text-2xl font-semibold text-zinc-200 mb-2">开始对话</h2>
-      <p className="text-zinc-400 mb-8">输入消息或使用语音助手</p>
+      <h2 className="text-2xl font-semibold text-foreground mb-2">开始对话</h2>
+      <p className="text-muted-foreground mb-8">输入消息或使用语音助手</p>
 
       {/* 快捷键提示 */}
-      <div className="flex items-center gap-2 mb-8 px-4 py-2 rounded-full bg-[#1C1C1F] border border-zinc-800/50">
-        <Mic className="w-4 h-4 text-zinc-400" />
-        <span className="text-sm text-zinc-400">按住</span>
-        <kbd className="px-2 py-1 rounded bg-[#141416] text-zinc-300 text-xs font-mono border border-zinc-800">⌘ Cmd</kbd>
-        <span className="text-sm text-zinc-400">+</span>
-        <kbd className="px-2 py-1 rounded bg-[#141416] text-zinc-300 text-xs font-mono border border-zinc-800">⌥ Alt</kbd>
-        <span className="text-sm text-zinc-400">说话</span>
+      <div className="flex items-center gap-2 mb-8 px-4 py-2 rounded-full bg-muted border border-border/50">
+        <Mic className="w-4 h-4 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">按住</span>
+        <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">⌘ Cmd</kbd>
+        <span className="text-sm text-muted-foreground">+</span>
+        <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">⌥ Alt</kbd>
+        <span className="text-sm text-muted-foreground">说话</span>
       </div>
 
       {/* 示例提示卡片 */}
@@ -64,7 +65,7 @@ function EmptyState() {
           return (
             <button
               key={idx}
-              className="group p-4 rounded-xl bg-[#1C1C1F] border border-zinc-800/50 hover:border-zinc-700 transition-all hover:scale-[1.02] text-left"
+              className="group p-4 rounded-xl bg-muted border border-border/50 hover:border-border transition-all hover:scale-[1.02] text-left"
             >
               <div className={cn(
                 "w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center mb-3",
@@ -72,7 +73,7 @@ function EmptyState() {
               )}>
                 <Icon className="w-4 h-4 text-white" />
               </div>
-              <p className="text-sm text-zinc-300 group-hover:text-zinc-200">{prompt.text}</p>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground">{prompt.text}</p>
             </button>
           );
         })}
@@ -86,7 +87,7 @@ function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'e
   if (state === 'idle' || state === 'error') return null;
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-[#0A0A0B]/80 backdrop-blur-sm z-50">
+    <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50">
       {state === 'recording' && (
         <div className="flex flex-col items-center">
           {/* 声波动画 */}
@@ -111,7 +112,7 @@ function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'e
             ))}
           </div>
           <p className="mt-6 text-lg font-medium text-red-400">录音中...</p>
-          <p className="mt-2 text-sm text-zinc-400">松开停止录音</p>
+          <p className="mt-2 text-sm text-muted-foreground">松开停止录音</p>
         </div>
       )}
 
@@ -127,7 +128,7 @@ function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'e
             <div className="absolute inset-0 rounded-full border-2 border-amber-500/50 animate-pulse" />
           </div>
           <p className="mt-6 text-lg font-medium text-amber-400">思考中...</p>
-          <p className="mt-2 text-sm text-zinc-400">正在处理您的消息</p>
+          <p className="mt-2 text-sm text-muted-foreground">正在处理您的消息</p>
         </div>
       )}
     </div>
@@ -467,15 +468,15 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#0A0A0B] text-zinc-200">
+    <div className="flex flex-col h-screen bg-background text-foreground">
       {/* 顶栏 */}
-      <header className="h-14 border-b border-zinc-800/50 bg-[#141416]/80 backdrop-blur-xl flex items-center justify-between px-4 sticky top-0 z-40">
+      <header className="h-14 border-b border-border/50 bg-background/80 backdrop-blur-xl flex items-center justify-between px-4 sticky top-0 z-40">
         {/* 左侧按钮组 */}
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
-            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
             onClick={() => setIsHistoryOpen(!isHistoryOpen)}
           >
             <Clock className="w-4 h-4 mr-2" />
@@ -485,7 +486,7 @@ function App() {
           <Button
             variant="ghost"
             size="sm"
-            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all duration-200 active:scale-[0.98]"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200 active:scale-[0.98]"
             onClick={() => setIsNewSessionDialogOpen(true)}
             disabled={isProcessing}
             aria-label="新建会话"
@@ -497,20 +498,23 @@ function App() {
 
         <h1 className={cn(
           "text-lg font-semibold max-w-[300px] truncate",
-          currentSessionTitle ? "text-zinc-200" : "text-zinc-200"
+          currentSessionTitle ? "text-foreground" : "text-foreground"
         )}>
           {currentSessionTitle || 'Speekium'}
         </h1>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-          onClick={() => setIsSettingsOpen(true)}
-        >
-          <SettingsIcon className="w-4 h-4 mr-2" />
-          设置
-        </Button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            onClick={() => setIsSettingsOpen(true)}
+          >
+            <SettingsIcon className="w-4 h-4 mr-2" />
+            设置
+          </Button>
+        </div>
       </header>
 
       {/* 主内容区 */}
@@ -520,12 +524,12 @@ function App() {
           {/* 错误提示 */}
           {error && (
             <div className="max-w-[680px] mx-auto mt-4">
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
-                <span className="flex-1 text-sm text-red-400">{error}</span>
+              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+                <span className="flex-1 text-sm text-destructive">{error}</span>
                 <button
                   onClick={() => setError(null)}
-                  className="text-red-400 hover:text-red-300 transition-colors"
+                  className="text-destructive hover:text-destructive/80 transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -558,7 +562,7 @@ function App() {
                           "max-w-[85%] rounded-2xl px-4 py-3 transition-all",
                           isUser
                             ? "bg-blue-600 text-white rounded-tr-sm"
-                            : "bg-[#1C1C1F] text-zinc-200 border border-zinc-800/50 rounded-tl-sm"
+                            : "bg-muted text-foreground border border-border/50 rounded-tl-sm"
                         )}
                       >
                         {isVoice && (
@@ -580,7 +584,7 @@ function App() {
                         {/* AI 消息播放按钮 */}
                         {!isUser && (
                           <button
-                            className="mt-2 flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                            className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                             onClick={() => {
                               if (!isSpeaking) {
                                 setIsSpeaking(true);
@@ -602,11 +606,11 @@ function App() {
                 {/* Loading indicator - shown while waiting for LLM response */}
                 {(isProcessing || isWaitingForLLM) && (
                   <div className="flex gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                    <div className="bg-[#1C1C1F] border border-zinc-800/50 rounded-2xl rounded-tl-sm px-4 py-3">
+                    <div className="bg-muted border border-border/50 rounded-2xl rounded-tl-sm px-4 py-3">
                       <div className="flex gap-1">
-                        <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
                       </div>
                     </div>
                   </div>
@@ -623,7 +627,7 @@ function App() {
       </div>
 
       {/* 底部输入区 */}
-      <div className="border-t border-zinc-800/50 bg-[#141416] px-4 py-4">
+      <div className="border-t border-border/50 bg-background px-4 py-4">
         <div className="max-w-[680px] mx-auto">
           {/* 输入框和发送按钮 */}
           <div className="flex items-center gap-3 mb-3">
@@ -633,12 +637,12 @@ function App() {
               onKeyPress={handleKeyPress}
               placeholder="输入消息..."
               disabled={isProcessing}
-              className="flex-1 bg-[#1C1C1F] border-zinc-800/50 text-zinc-200 placeholder:text-zinc-500 focus-visible:ring-blue-500"
+              className="flex-1 bg-muted border-border/50 text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500"
             />
             <Button
               onClick={handleSendText}
               disabled={!textInput.trim() || isProcessing}
-              className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-zinc-800 disabled:text-zinc-500"
+              className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-muted disabled:text-muted-foreground"
             >
               {isProcessing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -649,9 +653,9 @@ function App() {
           </div>
 
           {/* PTT 提示 */}
-          <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <Mic className="w-3 h-3" />
-            <span>按住 <kbd className="px-1.5 py-0.5 rounded bg-[#1C1C1F] text-zinc-400 font-mono border border-zinc-800">⌘+⌥</kbd> 说话</span>
+            <span>按住 <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono border border-border">⌘+⌥</kbd> 说话</span>
           </div>
         </div>
       </div>
