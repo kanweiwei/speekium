@@ -43,10 +43,10 @@ export function NewSessionDialog({ isOpen, onClose, onCreate }: Props) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-gradient-to-br from-[#1C1C1F] to-[#141416] border-zinc-800/50 sm:max-w-[400px]">
+      <DialogContent className="bg-gradient-to-br from-muted to-background border-border/50 sm:max-w-[400px]">
         <DialogHeader>
-          <DialogTitle className="text-zinc-200">新建会话</DialogTitle>
-          <DialogDescription className="text-zinc-500">
+          <DialogTitle className="text-foreground">新建会话</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
             为新会话设置一个标题，留空将在发送第一条消息时自动命名。
           </DialogDescription>
         </DialogHeader>
@@ -57,10 +57,10 @@ export function NewSessionDialog({ isOpen, onClose, onCreate }: Props) {
             onChange={(e) => setTitle(e.target.value.slice(0, MAX_TITLE_LENGTH))}
             onKeyDown={handleKeyDown}
             placeholder="输入标题..."
-            className="bg-[#0A0A0B] border-zinc-800 text-zinc-200 placeholder:text-zinc-600 focus-visible:ring-blue-500"
+            className="bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500"
             autoFocus
           />
-          <p className="text-xs text-zinc-500 mt-2 text-right">
+          <p className="text-xs text-muted-foreground mt-2 text-right">
             {title.length}/{MAX_TITLE_LENGTH}
           </p>
         </div>
@@ -69,7 +69,7 @@ export function NewSessionDialog({ isOpen, onClose, onCreate }: Props) {
           <Button
             variant="ghost"
             onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
           >
             取消
           </Button>
