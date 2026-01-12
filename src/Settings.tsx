@@ -485,7 +485,7 @@ export function Settings({
                     <Button
                       onClick={handleTestConnection}
                       disabled={isTestingConnection}
-                      className="w-full bg-muted hover:bg-zinc-700 text-foreground border border-border"
+                      className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border"
                     >
                       {isTestingConnection ? (
                         <>
@@ -568,7 +568,7 @@ export function Settings({
                     <Button
                       onClick={handlePreviewTTS}
                       disabled={isPreviewingTTS && connectionStatus !== 'error'}
-                      className="w-full bg-muted hover:bg-zinc-700 text-foreground border border-border"
+                      className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border"
                     >
                       {isPreviewingTTS ? (
                         <>
