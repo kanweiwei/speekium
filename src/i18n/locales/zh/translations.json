@@ -1,0 +1,216 @@
+{
+  "app": {
+    "title": "Speekium",
+    "header": {
+      "history": "历史",
+      "newSession": "新建",
+      "settings": "设置"
+    },
+    "emptyState": {
+      "title": "开始对话",
+      "description": "输入消息或使用语音助手",
+      "prompts": {
+        "introduce": "介绍一下自己",
+        "weather": "今天天气怎么样？",
+        "joke": "讲个笑话",
+        "book": "推荐一本书"
+      },
+      "shortcutHint": "按住",
+      "shortcutKey1": "⌘ Cmd",
+      "shortcutKey2": "⌥ Alt",
+      "shortcutAction": "说话"
+    },
+    "ptt": {
+      "recording": "录音中...",
+      "recordingHint": "松开停止录音",
+      "processing": "思考中...",
+      "processingHint": "正在处理您的消息",
+      "hint": "按住",
+      "shortcutKey": "⌘+⌥",
+      "hintAction": "说话"
+    },
+    "messages": {
+      "placeholder": "输入消息...",
+      "user": "你",
+      "assistant": "助手",
+      "voiceLabel": "语音消息",
+      "play": "播放",
+      "playing": "播放中..."
+    },
+    "errors": {
+      "pttError": "PTT 错误",
+      "listenFailed": "监听失败",
+      "ttsFailed": "TTS 失败",
+      "ttsError": "TTS 错误",
+      "chatFailed": "对话失败"
+    }
+  },
+  "buttons": {
+    "cancel": "取消",
+    "confirm": "确认",
+    "create": "创建",
+    "save": "保存",
+    "saveSettings": "保存设置",
+    "saving": "保存中...",
+    "delete": "删除",
+    "close": "关闭",
+    "back": "返回",
+    "load": "加载",
+    "send": "发送"
+  },
+  "status": {
+    "loading": "加载中...",
+    "success": "成功",
+    "error": "错误",
+    "empty": "暂无数据"
+  },
+  "themes": {
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统",
+    "lightMode": "浅色模式",
+    "darkMode": "深色模式",
+    "systemMode": "跟随系统"
+  },
+  "languages": {
+    "en": "English",
+    "zh": "中文",
+    "switch": "切换语言"
+  },
+  "settings": {
+    "title": "设置",
+    "description": "配置语音助手的各项参数",
+    "categories": {
+      "assistant": "助手设置",
+      "voiceRecognition": "语音识别",
+      "aiModel": "AI 模型",
+      "tts": "语音合成",
+      "shortcuts": "快捷键",
+      "appearance": "外观设置",
+      "advanced": "高级设置"
+    },
+    "descriptions": {
+      "assistant": "配置 AI 助手的行为和对话参数",
+      "voiceRecognition": "配置录音模式和语音检测参数",
+      "aiModel": "选择 AI 服务商和模型配置",
+      "tts": "配置文本转语音引擎和参数",
+      "shortcuts": "查看和配置快捷键",
+      "appearance": "自定义界面外观和主题",
+      "advanced": "危险操作和系统信息"
+    },
+    "fields": {
+      "systemPrompt": "系统提示词",
+      "maxHistory": "最大历史记录",
+      "items": "条",
+      "recordingMode": "录音模式",
+      "pushToTalk": "按键录音 (推荐)",
+      "continuous": "自动检测",
+      "vadThreshold": "VAD 灵敏度",
+      "silenceTimeout": "静音检测时长",
+      "seconds": "秒",
+      "llmBackend": "服务商",
+      "apiKey": "API Key",
+      "ollamaModel": "模型名称",
+      "ollamaUrl": "API URL",
+      "ttsEngine": "TTS 引擎",
+      "ttsRate": "语速调整",
+      "autoTTS": "自动播放",
+      "language": "语言",
+      "theme": "主题",
+      "serviceStatus": "服务状态",
+      "running": "运行中"
+    },
+    "placeholders": {
+      "systemPrompt": "你是一个有帮助的语音助手...",
+      "apiKey": "sk-...",
+      "ollamaModel": "qwen2.5:1.5b",
+      "ollamaUrl": "http://localhost:11434",
+      "selectLlmBackend": "选择 LLM 后端",
+      "selectTtsBackend": "选择 TTS 后端"
+    },
+    "hints": {
+      "systemPrompt": "自定义 AI 助手的行为和角色",
+      "maxHistory": "保留的对话历史条数",
+      "recordingMode": "按住 Cmd+Alt 开始录音，松开停止",
+      "autoDetection": "自动检测语音开始和结束",
+      "vadThreshold": "语音活动检测灵敏度，值越低越敏感",
+      "silenceTimeout": "检测到静音后等待的时间",
+      "apiKey": "仅在使用云端服务时需要填写",
+      "ollamaModel": "输入模型名称，如 qwen2.5:1.5b, llama3.2:latest",
+      "ollamaUrl": "API 服务地址，默认为本地 Ollama 服务",
+      "ttsRate": "语速调整，如 +0%、+20%、-10%",
+      "autoTTS": "AI 回复后自动朗读",
+      "theme": "点击图标切换：浅色 → 深色 → 跟随系统",
+      "language": "点击图标切换语言：中文 ↔ English",
+      "ptt": "按住开始录音，松开停止并发送",
+      "servicesRunning": "所有服务正常运行",
+      "clearHistory": "清空所有历史记录（不可恢复）"
+    },
+    "tts": {
+      "engines": {
+        "edge": "Edge TTS (在线)",
+        "piper": "Piper (离线)"
+      },
+      "preview": "预览语音",
+      "previewText": "你好，这是语音预览测试。"
+    },
+    "connection": {
+      "test": "测试连接",
+      "testing": "测试中...",
+      "success": "✓ 连接成功！模型可用。",
+      "failed": "✗ 连接失败。请检查地址和模型名称。",
+      "serviceError": "Ollama 服务不可用。",
+      "modelError": "模型未安装。",
+      "networkError": "网络错误或地址无效。"
+    },
+    "audio": {
+      "previewSuccess": "音频预览播放成功",
+      "previewFailed": "音频播放失败",
+      "generationFailed": "语音生成失败",
+      "unknownError": "未知错误"
+    },
+    "service": {
+      "status": "服务状态",
+      "running": "运行中",
+      "allServicesNormal": "所有服务正常运行"
+    },
+    "danger": {
+      "title": "危险操作",
+      "clearHistory": "清空历史记录",
+      "clearHistoryConfirm": "确定要清空所有历史记录吗？此操作不可恢复。"
+    },
+    "about": {
+      "version": "版本",
+      "description": "一款由 AI 驱动的智能语音助手"
+    }
+  },
+  "history": {
+    "title": "历史记录",
+    "newSession": "新建会话",
+    "timeGroups": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "thisWeek": "本周",
+      "thisMonth": "本月",
+      "earlier": "更早"
+    },
+    "empty": {
+      "title": "还没有对话记录",
+      "description": "开始对话后会自动保存"
+    },
+    "actions": {
+      "load": "加载此对话",
+      "delete": "删除",
+      "confirm": "确认",
+      "cancel": "取消"
+    }
+  },
+  "session": {
+    "newSession": {
+      "title": "新建会话",
+      "description": "为新会话设置一个标题，留空将在发送第一条消息时自动命名。",
+      "placeholder": "输入标题...",
+      "characterLimit": "{{count}}/{{max}}"
+    }
+  }
+}

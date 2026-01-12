@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import {
   Bot,
   Mic,
@@ -35,6 +36,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from '@/i18n';
 
 interface SettingsProps {
   isOpen: boolean;
@@ -61,6 +63,7 @@ export function Settings({
   onRecordModeChange,
   onClearHistory,
 }: SettingsProps) {
+  const { t } = useTranslation();
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>({});
   const [isSaving, setIsSaving] = React.useState(false);
   const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>('assistant');
@@ -127,7 +130,7 @@ export function Settings({
       } else {
         console.error('[Settings] Connection test failed:', result.error);
         setConnectionStatus('error');
-        setConnectionError(result.error || '未知错误');
+        setConnectionError(result.error || t('settings.audio.unknownError'));
       }
     } catch (error) {
       console.error('[Settings] Connection test error:', error);
@@ -160,7 +163,7 @@ export function Settings({
         audio_path?: string;
         error?: string;
       }>('generate_tts', {
-        text: '你好，这是语音预览测试。'
+        text: t('settings.tts.previewText')
       });
 
       if (result.success && result.audio_path) {
@@ -194,7 +197,7 @@ export function Settings({
           if (!hasStartedPlaying) {
             setIsPreviewingTTS(false);
             setConnectionStatus('error');
-            setConnectionError('音频播放失败');
+            setConnectionError(t('settings.audio.previewFailed'));
             setPreviewAudio(null);
           } else {
             // 如果已经开始播放，清除加载状态但不显示错误
@@ -209,7 +212,7 @@ export function Settings({
         console.error('[Settings] TTS generation failed:', result.error);
         setIsPreviewingTTS(false);
         setConnectionStatus('error');
-        setConnectionError(result.error || '语音生成失败');
+        setConnectionError(result.error || t('settings.audio.generationFailed'));
       }
     } catch (error) {
       console.error('[Settings] TTS preview error:', error);
@@ -219,24 +222,24 @@ export function Settings({
     }
   };
 
-  const categories = [
-    { id: 'assistant' as const, label: '助手设置', icon: Bot },
-    { id: 'voice-recognition' as const, label: '语音识别', icon: Mic },
-    { id: 'ai-model' as const, label: 'AI 模型', icon: Brain },
-    { id: 'tts' as const, label: '语音合成', icon: Volume2 },
-    { id: 'shortcuts' as const, label: '快捷键', icon: Keyboard },
-    { id: 'appearance' as const, label: '外观设置', icon: Palette },
-    { id: 'advanced' as const, label: '高级设置', icon: Zap },
-  ];
+  const categories = React.useMemo(() => [
+    { id: 'assistant' as const, label: t('settings.categories.assistant'), icon: Bot },
+    { id: 'voice-recognition' as const, label: t('settings.categories.voiceRecognition'), icon: Mic },
+    { id: 'ai-model' as const, label: t('settings.categories.aiModel'), icon: Brain },
+    { id: 'tts' as const, label: t('settings.categories.tts'), icon: Volume2 },
+    { id: 'shortcuts' as const, label: t('settings.categories.shortcuts'), icon: Keyboard },
+    { id: 'appearance' as const, label: t('settings.categories.appearance'), icon: Palette },
+    { id: 'advanced' as const, label: t('settings.categories.advanced'), icon: Zap },
+  ], [t]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[900px] w-[95vw] h-[680px] max-h-[90vh] p-0 gap-0 bg-muted border-border flex flex-col">
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b border-border">
-          <DialogTitle className="text-xl font-semibold text-foreground">设置</DialogTitle>
+          <DialogTitle className="text-xl font-semibold text-foreground">{t('settings.title')}</DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            配置语音助手的各项参数
+            {t('settings.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -275,44 +278,44 @@ export function Settings({
             <div className="flex-shrink-0 px-8 pt-8 pb-4 border-b border-border/50 bg-gradient-to-br from-background to-muted">
               {activeCategory === 'assistant' && (
                 <>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">助手设置</h3>
-                  <p className="text-sm text-muted-foreground">配置 AI 助手的行为和对话参数</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">{t('settings.categories.assistant')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('settings.descriptions.assistant')}</p>
                 </>
               )}
               {activeCategory === 'voice-recognition' && (
                 <>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">语音识别</h3>
-                  <p className="text-sm text-muted-foreground">配置录音模式和语音检测参数</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">{t('settings.categories.voiceRecognition')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('settings.descriptions.voiceRecognition')}</p>
                 </>
               )}
               {activeCategory === 'ai-model' && (
                 <>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">AI 模型</h3>
-                  <p className="text-sm text-muted-foreground">选择 AI 服务商和模型配置</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">{t('settings.categories.aiModel')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('settings.descriptions.aiModel')}</p>
                 </>
               )}
               {activeCategory === 'tts' && (
                 <>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">语音合成</h3>
-                  <p className="text-sm text-muted-foreground">配置文本转语音引擎和参数</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">{t('settings.categories.tts')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('settings.descriptions.tts')}</p>
                 </>
               )}
               {activeCategory === 'shortcuts' && (
                 <>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">快捷键</h3>
-                  <p className="text-sm text-muted-foreground">查看和配置快捷键</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">{t('settings.categories.shortcuts')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('settings.descriptions.shortcuts')}</p>
                 </>
               )}
               {activeCategory === 'appearance' && (
                 <>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">外观设置</h3>
-                  <p className="text-sm text-muted-foreground">自定义界面外观和主题</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">{t('settings.categories.appearance')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('settings.descriptions.appearance')}</p>
                 </>
               )}
               {activeCategory === 'advanced' && (
                 <>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">高级设置</h3>
-                  <p className="text-sm text-muted-foreground">危险操作和系统信息</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">{t('settings.categories.advanced')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('settings.descriptions.advanced')}</p>
                 </>
               )}
             </div>
@@ -324,24 +327,24 @@ export function Settings({
                 <div className="space-y-6">
 
                   <div className="space-y-2">
-                    <Label htmlFor="system-prompt" className="text-foreground">系统提示词</Label>
+                    <Label htmlFor="system-prompt" className="text-foreground">{t('settings.fields.systemPrompt')}</Label>
                     <textarea
                       id="system-prompt"
                       value={localConfig.system_prompt || ''}
                       onChange={(e) => updateConfig('system_prompt', e.target.value)}
-                      placeholder="你是一个有帮助的语音助手..."
+                      placeholder={t('settings.placeholders.systemPrompt')}
                       className="flex min-h-[120px] w-full rounded-lg border border-border bg-muted/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     />
                     <p className="text-xs text-muted-foreground">
-                      自定义 AI 助手的行为和角色
+                      {t('settings.hints.systemPrompt')}
                     </p>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-foreground">最大历史记录</Label>
+                      <Label className="text-foreground">{t('settings.fields.maxHistory')}</Label>
                       <span className="text-sm text-muted-foreground">
-                        {localConfig.max_history || 10} 条
+                        {localConfig.max_history || 10} {t('settings.fields.items')}
                       </span>
                     </div>
                     <Slider
@@ -353,7 +356,7 @@ export function Settings({
                       className="w-full [&_[role=slider]]:bg-gradient-to-r [&_[role=slider]]:from-blue-500 [&_[role=slider]]:to-purple-600 [&_[role=slider]]:border-0"
                     />
                     <p className="text-xs text-muted-foreground">
-                      保留的对话历史条数
+                      {t('settings.hints.maxHistory')}
                     </p>
                   </div>
                 </div>
@@ -363,7 +366,7 @@ export function Settings({
               {activeCategory === 'voice-recognition' && (
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <Label className="text-foreground">录音模式</Label>
+                    <Label className="text-foreground">{t('settings.fields.recordingMode')}</Label>
                     <Select
                       value={recordMode}
                       onValueChange={(v) => onRecordModeChange?.(v as 'push-to-talk' | 'continuous')}
@@ -372,20 +375,20 @@ export function Settings({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-muted border-border">
-                        <SelectItem value="push-to-talk">按键录音 (推荐)</SelectItem>
-                        <SelectItem value="continuous">自动检测</SelectItem>
+                        <SelectItem value="push-to-talk">{t('settings.fields.pushToTalk')}</SelectItem>
+                        <SelectItem value="continuous">{t('settings.fields.continuous')}</SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       {recordMode === 'push-to-talk'
-                        ? '按住 Cmd+Alt 开始录音，松开停止'
-                        : '自动检测语音开始和结束'}
+                        ? t('settings.hints.recordingMode')
+                        : t('settings.hints.autoDetection')}
                     </p>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-foreground">VAD 灵敏度</Label>
+                      <Label className="text-foreground">{t('settings.fields.vadThreshold')}</Label>
                       <span className="text-sm text-muted-foreground">
                         {(localConfig.vad_threshold || 0.5).toFixed(2)}
                       </span>
@@ -399,15 +402,15 @@ export function Settings({
                       className="w-full [&_[role=slider]]:bg-gradient-to-r [&_[role=slider]]:from-blue-500 [&_[role=slider]]:to-purple-600 [&_[role=slider]]:border-0"
                     />
                     <p className="text-xs text-muted-foreground">
-                      语音活动检测灵敏度，值越低越敏感
+                      {t('settings.hints.vadThreshold')}
                     </p>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-foreground">静音检测时长</Label>
+                      <Label className="text-foreground">{t('settings.fields.silenceTimeout')}</Label>
                       <span className="text-sm text-muted-foreground">
-                        {localConfig.silence_timeout || 1.5}s
+                        {localConfig.silence_timeout || 1.5}{t('settings.fields.seconds')}
                       </span>
                     </div>
                     <Slider
@@ -419,7 +422,7 @@ export function Settings({
                       className="w-full [&_[role=slider]]:bg-gradient-to-r [&_[role=slider]]:from-blue-500 [&_[role=slider]]:to-purple-600 [&_[role=slider]]:border-0"
                     />
                     <p className="text-xs text-muted-foreground">
-                      检测到静音后等待的时间
+                      {t('settings.hints.silenceTimeout')}
                     </p>
                   </div>
                 </div>
@@ -429,16 +432,16 @@ export function Settings({
               {activeCategory === 'ai-model' && (
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="llm-backend" className="text-foreground">服务商</Label>
+                    <Label htmlFor="llm-backend" className="text-foreground">{t('settings.fields.llmBackend')}</Label>
                     <Select
                       value={localConfig.llm_backend || 'ollama'}
                       onValueChange={(value) => updateConfig('llm_backend', value)}
                     >
                       <SelectTrigger id="llm-backend" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
-                        <SelectValue placeholder="选择 LLM 后端" />
+                        <SelectValue placeholder={t('settings.placeholders.selectLlmBackend')} />
                       </SelectTrigger>
                       <SelectContent className="bg-muted border-border">
-                        <SelectItem value="ollama">Ollama (本地)</SelectItem>
+                        <SelectItem value="ollama">Ollama (Local)</SelectItem>
                         <SelectItem value="openai">OpenAI</SelectItem>
                         <SelectItem value="anthropic">Anthropic</SelectItem>
                       </SelectContent>
@@ -446,14 +449,14 @@ export function Settings({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="api-key" className="text-foreground">API Key</Label>
+                    <Label htmlFor="api-key" className="text-foreground">{t('settings.fields.apiKey')}</Label>
                     <div className="relative">
                       <Input
                         id="api-key"
                         type={showApiKey ? 'text' : 'password'}
                         value={localConfig.api_key || ''}
                         onChange={(e) => updateConfig('api_key', e.target.value)}
-                        placeholder="sk-..."
+                        placeholder={t('settings.placeholders.apiKey')}
                         className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                       />
                       <button
@@ -465,35 +468,35 @@ export function Settings({
                       </button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      仅在使用云端服务时需要填写
+                      {t('settings.hints.apiKey')}
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="model-name" className="text-foreground">模型名称</Label>
+                    <Label htmlFor="model-name" className="text-foreground">{t('settings.fields.ollamaModel')}</Label>
                     <Input
                       id="model-name"
                       value={localConfig.ollama_model || ''}
                       onChange={(e) => updateConfig('ollama_model', e.target.value)}
-                      placeholder="qwen2.5:1.5b"
+                      placeholder={t('settings.placeholders.ollamaModel')}
                       className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                     />
                     <p className="text-xs text-muted-foreground">
-                      输入模型名称，如 qwen2.5:1.5b, llama3.2:latest
+                      {t('settings.hints.ollamaModel')}
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="ollama-base-url" className="text-foreground">API URL</Label>
+                    <Label htmlFor="ollama-base-url" className="text-foreground">{t('settings.fields.ollamaUrl')}</Label>
                     <Input
                       id="ollama-base-url"
                       value={localConfig.ollama_base_url || ''}
                       onChange={(e) => updateConfig('ollama_base_url', e.target.value)}
-                      placeholder="http://localhost:11434"
+                      placeholder={t('settings.placeholders.ollamaUrl')}
                       className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                     />
                     <p className="text-xs text-muted-foreground">
-                      API 服务地址，默认为本地 Ollama 服务
+                      {t('settings.hints.ollamaUrl')}
                     </p>
                   </div>
 
@@ -506,20 +509,20 @@ export function Settings({
                       {isTestingConnection ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          测试中...
+                          {t('settings.connection.testing')}
                         </>
                       ) : connectionStatus === 'success' ? (
                         <>
                           <CheckCircle2 className="h-4 w-4 mr-2 text-green-400" />
-                          连接成功
+                          {t('settings.connection.success')}
                         </>
                       ) : connectionStatus === 'error' ? (
                         <>
                           <XCircle className="h-4 w-4 mr-2 text-red-400" />
-                          连接失败
+                          {t('settings.connection.failed')}
                         </>
                       ) : (
-                        '测试连接'
+                        t('settings.connection.test')
                       )}
                     </Button>
                     {connectionStatus === 'error' && connectionError && (
@@ -535,23 +538,23 @@ export function Settings({
               {activeCategory === 'tts' && (
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="tts-backend" className="text-foreground">TTS 引擎</Label>
+                    <Label htmlFor="tts-backend" className="text-foreground">{t('settings.fields.ttsEngine')}</Label>
                     <Select
                       value={localConfig.tts_backend || 'piper'}
                       onValueChange={(value) => updateConfig('tts_backend', value)}
                     >
                       <SelectTrigger id="tts-backend" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
-                        <SelectValue placeholder="选择 TTS 后端" />
+                        <SelectValue placeholder={t('settings.placeholders.selectTtsBackend')} />
                       </SelectTrigger>
                       <SelectContent className="bg-muted border-border">
-                        <SelectItem value="piper">Piper (离线)</SelectItem>
-                        <SelectItem value="edge">Edge TTS (在线)</SelectItem>
+                        <SelectItem value="piper">{t('settings.tts.engines.piper')}</SelectItem>
+                        <SelectItem value="edge">{t('settings.tts.engines.edge')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="tts-rate" className="text-foreground">语速调整</Label>
+                    <Label htmlFor="tts-rate" className="text-foreground">{t('settings.fields.ttsRate')}</Label>
                     <Input
                       id="tts-rate"
                       value={localConfig.tts_rate || '+0%'}
@@ -560,15 +563,15 @@ export function Settings({
                       className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                     />
                     <p className="text-xs text-muted-foreground">
-                      语速调整，如 +0%、+20%、-10%
+                      {t('settings.hints.ttsRate')}
                     </p>
                   </div>
 
                   <div className="flex items-center justify-between py-2 px-3 rounded-lg border border-border bg-muted">
                     <div className="space-y-0.5">
-                      <Label htmlFor="auto-tts" className="text-foreground">自动播放</Label>
+                      <Label htmlFor="auto-tts" className="text-foreground">{t('settings.fields.autoTTS')}</Label>
                       <p className="text-xs text-muted-foreground">
-                        AI 回复后自动朗读
+                        {t('settings.hints.autoTTS')}
                       </p>
                     </div>
                     <Switch
@@ -588,12 +591,12 @@ export function Settings({
                       {isPreviewingTTS ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          播放中...
+                          {t('status.loading')}
                         </>
                       ) : (
                         <>
                           <Volume2 className="h-4 w-4 mr-2" />
-                          预览语音
+                          {t('settings.tts.preview')}
                         </>
                       )}
                     </Button>
@@ -612,13 +615,13 @@ export function Settings({
                   <div className="space-y-3">
                     <div className="p-4 rounded-lg border border-border bg-muted">
                       <div className="flex items-center justify-between mb-2">
-                        <Label className="text-foreground">按键录音 (PTT)</Label>
+                        <Label className="text-foreground">{t('settings.fields.pushToTalk')}</Label>
                         <kbd className="px-3 py-1.5 text-xs font-mono font-semibold text-foreground bg-muted/80 border border-border rounded-md shadow-sm">
                           Cmd + Alt
                         </kbd>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        按住开始录音，松开停止并发送
+                        {t('settings.hints.ptt')}
                       </p>
                     </div>
                   </div>
@@ -631,15 +634,30 @@ export function Settings({
                   <div className="p-4 rounded-lg border border-border bg-muted">
                     <div className="flex items-center justify-between mb-2">
                       <div className="space-y-0.5">
-                        <Label className="text-foreground">主题模式</Label>
+                        <Label className="text-foreground">{t('settings.fields.theme')}</Label>
                         <p className="text-xs text-muted-foreground">
-                          选择界面外观主题
+                          Choose interface theme
                         </p>
                       </div>
                       <ThemeToggle />
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      点击图标切换：浅色 → 深色 → 跟随系统
+                      {t('settings.hints.theme')}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-lg border border-border bg-muted">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="space-y-0.5">
+                        <Label className="text-foreground">{t('settings.fields.language')}</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Select interface language
+                        </p>
+                      </div>
+                      <LanguageSwitcher />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {t('settings.hints.language')}
                     </p>
                   </div>
                 </div>
@@ -650,31 +668,31 @@ export function Settings({
                 <div className="space-y-6">
                   <div className="p-4 rounded-lg border border-border bg-muted">
                     <div className="flex items-center justify-between mb-2">
-                      <Label className="text-foreground">服务状态</Label>
+                      <Label className="text-foreground">{t('settings.fields.serviceStatus')}</Label>
                       <span className="flex items-center gap-2 text-sm">
                         <span className="h-2 w-2 rounded-full bg-green-400"></span>
-                        <span className="text-muted-foreground">运行中</span>
+                        <span className="text-muted-foreground">{t('settings.fields.running')}</span>
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      所有服务正常运行
+                      {t('settings.service.allServicesNormal')}
                     </p>
                   </div>
 
                   <div className="pt-4 border-t border-border">
-                    <h4 className="text-sm font-medium text-foreground mb-3">危险操作</h4>
+                    <h4 className="text-sm font-medium text-foreground mb-3">{t('settings.danger.title')}</h4>
                     <Button
                       variant="outline"
                       className="w-full justify-start bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/30"
                       onClick={() => {
-                        if (confirm('确定要清空所有历史记录吗？此操作不可恢复。')) {
+                        if (confirm(t('settings.danger.clearHistoryConfirm'))) {
                           onClearHistory?.();
                           onClose();
                         }
                       }}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      清空历史记录
+                      {t('settings.danger.clearHistory')}
                     </Button>
                   </div>
                 </div>
@@ -686,14 +704,14 @@ export function Settings({
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-gradient-to-t from-background to-background/95 backdrop-blur-sm">
           <Button variant="outline" onClick={onClose} className="bg-transparent border-border text-muted-foreground hover:bg-muted hover:text-foreground">
-            取消
+            {t('buttons.cancel')}
           </Button>
           <Button
             onClick={handleSave}
             disabled={isSaving}
             className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-foreground border-0"
           >
-            {isSaving ? '保存中...' : '保存设置'}
+            {isSaving ? t('status.loading') : t('buttons.saveSettings')}
           </Button>
         </div>
       </DialogContent>

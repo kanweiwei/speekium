@@ -1,0 +1,21 @@
+{
+  "title": "History",
+  "newSession": "New Session",
+  "timeGroups": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This Week",
+    "thisMonth": "This Month",
+    "earlier": "Earlier"
+  },
+  "empty": {
+    "title": "No conversation history",
+    "description": "Conversations will be saved automatically"
+  },
+  "actions": {
+    "load": "Load this conversation",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  }
+}

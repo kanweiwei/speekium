@@ -3,6 +3,7 @@ import { X, Clock, Trash2, MessageSquare, ChevronLeft, PenSquare } from 'lucide-
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { historyAPI, Session, HistoryMessage } from '../useTauriAPI';
+import { useTranslation } from '@/i18n';
 
 interface Props {
   isOpen: boolean;
@@ -27,15 +28,8 @@ function groupSessionsByDate(sessions: Session[]) {
   };
 }
 
-const timeLabels: Record<string, string> = {
-  today: '今天',
-  yesterday: '昨天',
-  thisWeek: '本周',
-  thisMonth: '本月',
-  earlier: '更早',
-};
-
 export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: Props) {
+  const { t } = useTranslation();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -147,7 +141,7 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
                 className="flex items-center gap-2 px-2 py-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-all duration-200"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span className="text-sm">返回</span>
+                <span className="text-sm">{t('buttons.back')}</span>
               </button>
               <span className="text-sm font-medium text-foreground truncate max-w-[140px]">
                 {selectedSession.title}
@@ -156,7 +150,7 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
           ) : (
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-blue-500" />
-              <h2 className="text-lg font-semibold text-foreground">历史记录</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t('history.title')}</h2>
             </div>
           )}
           <div className="flex items-center gap-1">
@@ -167,7 +161,7 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
                 size="icon"
                 className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 onClick={onNewSession}
-                title="新建会话"
+                title={t('history.newSession')}
               >
                 <PenSquare className="w-5 h-5" />
               </Button>
@@ -211,7 +205,7 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
                   onClick={handleLoadSession}
                   className="w-full mt-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg shadow-blue-500/20"
                 >
-                  加载此对话
+                  {t('history.actions.load')}
                 </Button>
               )}
             </div>
@@ -230,8 +224,8 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-muted to-muted-foreground/20 flex items-center justify-center shadow-lg mb-4">
                 <MessageSquare className="w-8 h-8 text-muted-foreground" />
               </div>
-              <p className="text-muted-foreground mb-2">还没有对话记录</p>
-              <p className="text-sm text-muted-foreground">开始对话后会自动保存</p>
+              <p className="text-muted-foreground mb-2">{t('history.empty.title')}</p>
+              <p className="text-sm text-muted-foreground">{t('history.empty.description')}</p>
             </div>
           ) : (
             // Session list
@@ -242,7 +236,7 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
                 return (
                   <div key={key} className="mb-4">
                     <h3 className="text-xs font-medium text-muted-foreground px-3 py-2 bg-muted/50 rounded-lg mb-2">
-                      {timeLabels[key]}
+                      {t(`timeGroups.${key}`)}
                     </h3>
                     <div className="space-y-1">
                       {sessionList.map((session) => (
@@ -269,13 +263,13 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
                                 onClick={() => handleDeleteSession(session.id)}
                                 className="p-1.5 rounded bg-red-600 text-white text-xs"
                               >
-                                确认
+                                {t('history.actions.confirm')}
                               </button>
                               <button
                                 onClick={() => setDeleteConfirm(null)}
                                 className="p-1.5 rounded bg-muted text-muted-foreground text-xs"
                               >
-                                取消
+                                {t('history.actions.cancel')}
                               </button>
                             </div>
                           ) : (

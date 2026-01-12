@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/i18n';
 
 interface Props {
   isOpen: boolean;
@@ -19,6 +20,7 @@ interface Props {
 const MAX_TITLE_LENGTH = 30;
 
 export function NewSessionDialog({ isOpen, onClose, onCreate }: Props) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
 
   // Reset title when dialog opens
@@ -45,9 +47,9 @@ export function NewSessionDialog({ isOpen, onClose, onCreate }: Props) {
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="bg-gradient-to-br from-muted to-background border-border/50 sm:max-w-[400px]">
         <DialogHeader>
-          <DialogTitle className="text-foreground">新建会话</DialogTitle>
+          <DialogTitle className="text-foreground">{t('session.newSession.title')}</DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            为新会话设置一个标题，留空将在发送第一条消息时自动命名。
+            {t('session.newSession.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -56,12 +58,12 @@ export function NewSessionDialog({ isOpen, onClose, onCreate }: Props) {
             value={title}
             onChange={(e) => setTitle(e.target.value.slice(0, MAX_TITLE_LENGTH))}
             onKeyDown={handleKeyDown}
-            placeholder="输入标题..."
+            placeholder={t('session.newSession.placeholder')}
             className="bg-background border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500"
             autoFocus
           />
           <p className="text-xs text-muted-foreground mt-2 text-right">
-            {title.length}/{MAX_TITLE_LENGTH}
+            {t('session.newSession.characterLimit', { count: title.length, max: MAX_TITLE_LENGTH })}
           </p>
         </div>
 
@@ -71,13 +73,13 @@ export function NewSessionDialog({ isOpen, onClose, onCreate }: Props) {
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
           >
-            取消
+            {t('buttons.cancel')}
           </Button>
           <Button
             onClick={handleCreate}
             className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg shadow-blue-500/20"
           >
-            创建
+            {t('buttons.create')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,9 +1,11 @@
 import { Moon, Sun, Monitor } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n';
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const { t } = useTranslation();
 
   const cycleTheme = () => {
     if (theme === 'light') {
@@ -26,9 +28,9 @@ export function ThemeToggle() {
   };
 
   const getLabel = () => {
-    if (theme === 'light') return '浅色模式';
-    if (theme === 'dark') return '深色模式';
-    return '跟随系统';
+    if (theme === 'light') return t('themes.lightMode');
+    if (theme === 'dark') return t('themes.darkMode');
+    return t('themes.systemMode');
   };
 
   return (

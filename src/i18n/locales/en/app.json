@@ -1,0 +1,12 @@
+{
+  "title": "Speekium",
+  "emptyState": {
+    "title": "Start Your Voice Journey",
+    "description": "Click the microphone button or press spacebar to start talking"
+  },
+  "messages": {
+    "placeholder": "Type your message...",
+    "user": "You",
+    "assistant": "Assistant"
+  }
+}

@@ -24,14 +24,17 @@ import {
   PenSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n';
 
 // Empty state component
 function EmptyState() {
+  const { t } = useTranslation();
+
   const examplePrompts = [
-    { icon: Sparkles, text: "介绍一下自己", gradient: "from-blue-500 to-purple-500" },
-    { icon: MessageSquare, text: "今天天气怎么样？", gradient: "from-purple-500 to-pink-500" },
-    { icon: Zap, text: "讲个笑话", gradient: "from-pink-500 to-orange-500" },
-    { icon: Wand2, text: "推荐一本书", gradient: "from-orange-500 to-yellow-500" },
+    { icon: Sparkles, text: t('app.emptyState.prompts.introduce'), gradient: "from-blue-500 to-purple-500" },
+    { icon: MessageSquare, text: t('app.emptyState.prompts.weather'), gradient: "from-purple-500 to-pink-500" },
+    { icon: Zap, text: t('app.emptyState.prompts.joke'), gradient: "from-pink-500 to-orange-500" },
+    { icon: Wand2, text: t('app.emptyState.prompts.book'), gradient: "from-orange-500 to-yellow-500" },
   ];
 
   return (
@@ -45,17 +48,17 @@ function EmptyState() {
       </div>
 
       {/* 标题 */}
-      <h2 className="text-2xl font-semibold text-foreground mb-2">开始对话</h2>
-      <p className="text-muted-foreground mb-8">输入消息或使用语音助手</p>
+      <h2 className="text-2xl font-semibold text-foreground mb-2">{t('app.emptyState.title')}</h2>
+      <p className="text-muted-foreground mb-8">{t('app.emptyState.description')}</p>
 
       {/* 快捷键提示 */}
       <div className="flex items-center gap-2 mb-8 px-4 py-2 rounded-full bg-muted border border-border/50">
         <Mic className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">按住</span>
-        <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">⌘ Cmd</kbd>
+        <span className="text-sm text-muted-foreground">{t('app.emptyState.shortcutHint')}</span>
+        <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">{t('app.emptyState.shortcutKey1')}</kbd>
         <span className="text-sm text-muted-foreground">+</span>
-        <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">⌥ Alt</kbd>
-        <span className="text-sm text-muted-foreground">说话</span>
+        <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">{t('app.emptyState.shortcutKey2')}</kbd>
+        <span className="text-sm text-muted-foreground">{t('app.emptyState.shortcutAction')}</span>
       </div>
 
       {/* 示例提示卡片 */}
@@ -84,6 +87,8 @@ function EmptyState() {
 
 // PTT state overlay component
 function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'error' }) {
+  const { t } = useTranslation();
+
   if (state === 'idle' || state === 'error') return null;
 
   return (
@@ -111,8 +116,8 @@ function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'e
               />
             ))}
           </div>
-          <p className="mt-6 text-lg font-medium text-red-400">录音中...</p>
-          <p className="mt-2 text-sm text-muted-foreground">松开停止录音</p>
+          <p className="mt-6 text-lg font-medium text-red-400">{t('app.ptt.recording')}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{t('app.ptt.recordingHint')}</p>
         </div>
       )}
 
@@ -127,8 +132,8 @@ function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'e
             </div>
             <div className="absolute inset-0 rounded-full border-2 border-amber-500/50 animate-pulse" />
           </div>
-          <p className="mt-6 text-lg font-medium text-amber-400">思考中...</p>
-          <p className="mt-2 text-sm text-muted-foreground">正在处理您的消息</p>
+          <p className="mt-6 text-lg font-medium text-amber-400">{t('app.ptt.processing')}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{t('app.ptt.processingHint')}</p>
         </div>
       )}
     </div>
@@ -136,6 +141,7 @@ function PTTOverlay({ state }: { state: 'idle' | 'recording' | 'processing' | 'e
 }
 
 function App() {
+  const { t } = useTranslation();
   const [textInput, setTextInput] = React.useState<string>('');
   const [autoTTS, setAutoTTS] = React.useState<boolean>(true);
   const [isSpeaking, setIsSpeaking] = React.useState<boolean>(false);
@@ -303,7 +309,7 @@ function App() {
       const unlistenError = await listen<string>('ptt-error', (event) => {
         setIsWaitingForLLM(false);  // Reset waiting state on error
         setIsStreaming(false);
-        setError(`PTT 错误: ${event.payload}`);
+        setError(`${t('app.errors.pttError')}: ${event.payload}`);
       });
 
       return () => {
@@ -344,7 +350,7 @@ function App() {
         try {
           const result = await startRecording('continuous', 'auto', true, autoTTS);
           if (!result.success) {
-            setError(result.error || '监听失败');
+            setError(result.error || t('app.errors.listenFailed'));
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         } catch (error) {
@@ -447,16 +453,16 @@ function App() {
         try {
           const ttsResult = await generateTTS(result.content);
           if (!ttsResult.success) {
-            setError(`TTS 失败: ${ttsResult.error}`);
+            setError(`${t('app.errors.ttsFailed')}: ${ttsResult.error}`);
           }
         } catch (ttsError) {
-          setError(`TTS 错误: ${ttsError}`);
+          setError(`${t('app.errors.ttsError')}: ${ttsError}`);
         } finally {
           setIsSpeaking(false);
         }
       }
     } catch (error) {
-      setError(`对话失败: ${error}`);
+      setError(`${t('app.errors.chatFailed')}: ${error}`);
     }
   };
 
@@ -480,7 +486,7 @@ function App() {
             onClick={() => setIsHistoryOpen(!isHistoryOpen)}
           >
             <Clock className="w-4 h-4 mr-2" />
-            历史
+            {t('app.header.history')}
           </Button>
 
           <Button
@@ -489,10 +495,10 @@ function App() {
             className="text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200 active:scale-[0.98]"
             onClick={() => setIsNewSessionDialogOpen(true)}
             disabled={isProcessing}
-            aria-label="新建会话"
+            aria-label={t('app.header.newSession')}
           >
             <PenSquare className="w-4 h-4 mr-2" />
-            新建
+            {t('app.header.newSession')}
           </Button>
         </div>
 
@@ -512,7 +518,7 @@ function App() {
             onClick={() => setIsSettingsOpen(true)}
           >
             <SettingsIcon className="w-4 h-4 mr-2" />
-            设置
+            {t('app.header.settings')}
           </Button>
         </div>
       </header>
@@ -568,7 +574,7 @@ function App() {
                         {isVoice && (
                           <div className="flex items-center gap-1.5 mb-1.5 opacity-70">
                             <Mic className="h-3 w-3" />
-                            <span className="text-xs">语音消息</span>
+                            <span className="text-xs">{t('app.messages.voiceLabel')}</span>
                           </div>
                         )}
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">
@@ -589,13 +595,13 @@ function App() {
                               if (!isSpeaking) {
                                 setIsSpeaking(true);
                                 generateTTS(message.content)
-                                  .catch(err => setError(`TTS 失败: ${err}`))
+                                  .catch(err => setError(`${t('app.errors.ttsFailed')}: ${err}`))
                                   .finally(() => setIsSpeaking(false));
                               }
                             }}
                           >
                             <Play className="w-3 h-3" />
-                            <span>{isSpeaking ? '播放中...' : '播放'}</span>
+                            <span>{isSpeaking ? t('app.messages.playing') : t('app.messages.play')}</span>
                           </button>
                         )}
                       </div>
@@ -635,7 +641,7 @@ function App() {
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="输入消息..."
+              placeholder={t('app.messages.placeholder')}
               disabled={isProcessing}
               className="flex-1 bg-muted border-border/50 text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500"
             />
@@ -655,7 +661,7 @@ function App() {
           {/* PTT 提示 */}
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <Mic className="w-3 h-3" />
-            <span>按住 <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono border border-border">⌘+⌥</kbd> 说话</span>
+            <span>{t('app.ptt.hint')} <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono border border-border">{t('app.ptt.shortcutKey')}</kbd> {t('app.ptt.hintAction')}</span>
           </div>
         </div>
       </div>
