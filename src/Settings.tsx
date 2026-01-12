@@ -546,7 +546,6 @@ export function Settings({
                       <SelectContent className="bg-muted border-border">
                         <SelectItem value="piper">Piper (离线)</SelectItem>
                         <SelectItem value="edge">Edge TTS (在线)</SelectItem>
-                        <SelectItem value="openai">OpenAI TTS</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

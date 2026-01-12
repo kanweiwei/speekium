@@ -607,10 +607,6 @@ class VoiceAssistant:
 
         if tts_backend == "piper":
             return await self._generate_audio_piper(text, detected_lang)
-        elif tts_backend == "openai":
-            # OpenAI TTS not yet implemented, fallback to Edge
-            logger.warning("openai_tts_not_implemented", fallback="edge")
-            return await self._generate_audio_edge(text, detected_lang)
         else:  # edge or any other value defaults to edge
             return await self._generate_audio_edge(text, detected_lang)
 
@@ -903,8 +899,6 @@ class VoiceAssistant:
         tts_info = tts_backend
         if tts_backend == "piper":
             tts_info = "piper (offline)"
-        elif tts_backend == "openai":
-            tts_info = "openai (online)"
         else:
             tts_info = "edge (online)"
         logger.info("tts_backend_info", backend=tts_info)
