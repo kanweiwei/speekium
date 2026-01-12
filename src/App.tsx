@@ -186,10 +186,43 @@ function App() {
 
   React.useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
+    // Persist session ID to localStorage
+    if (currentSessionId) {
+      localStorage.setItem('speekium_current_session_id', currentSessionId);
+    } else {
+      localStorage.removeItem('speekium_current_session_id');
+    }
   }, [currentSessionId]);
 
   React.useEffect(() => {
     loadConfig();
+
+    // Restore last session from localStorage
+    const restoreSession = async () => {
+      const savedSessionId = localStorage.getItem('speekium_current_session_id');
+      if (savedSessionId) {
+        try {
+          const session = await historyAPI.getSession(savedSessionId);
+          setCurrentSessionId(session.id);
+          setCurrentSessionTitle(session.title);
+
+          // Load session messages
+          const messagesResult = await historyAPI.getSessionMessages(savedSessionId, 1, 1000);
+          messagesResult.items.forEach(msg => {
+            // Skip system messages
+            if (msg.role === 'user' || msg.role === 'assistant') {
+              addMessage(msg.role, msg.content);
+            }
+          });
+        } catch (error) {
+          console.error('Failed to restore session:', error);
+          // If restore fails, clear the invalid session ID
+          localStorage.removeItem('speekium_current_session_id');
+        }
+      }
+    };
+
+    restoreSession();
   }, []);
 
   // Auto scroll to bottom when messages change
