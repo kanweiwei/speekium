@@ -32,7 +32,7 @@ from logger import configure_logging, get_logger
 configure_logging(level="INFO", format="json", colored=False)
 logger = get_logger(__name__)
 
-# 确保输出立即刷新
+# Ensure immediate output flush
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -98,7 +98,7 @@ class SpeekiumDaemon:
         # Event loop reference for PTT callbacks (set during initialization)
         self.loop = None
 
-        # 输出启动日志
+        # Output startup log
         logger.info("daemon_initializing")
 
     def _log(self, message: str):
@@ -223,16 +223,16 @@ class SpeekiumDaemon:
             self._log(f"🎤 开始录音 (mode={mode}, duration={duration}s)...")
 
             if mode == "continuous":
-                # 使用 VAD 自动检测 - 检测到语音时发送 recording 事件
+                # Use VAD auto-detection - send recording event when voice detected
                 def on_speech():
                     self._emit_ptt_event("recording")
                 audio = self.assistant.record_with_vad(on_speech_detected=on_speech)
             else:
-                # 按键录音模式 - 发送 recording 事件
+                # Push-to-talk recording mode - send recording event
                 self._emit_ptt_event("recording")
                 audio = sd.rec(int(duration * 16000), samplerate=16000, channels=1, dtype="float32")
                 sd.wait()
-                audio = audio[:, 0]  # 转为 1D 数组
+                audio = audio[:, 0]  # Convert to 1D array
 
             if audio is None or len(audio) == 0:
                 self._emit_ptt_event("idle")
@@ -431,21 +431,21 @@ class SpeekiumDaemon:
 
             backend = self.assistant.load_llm()
 
-            # 检查是否支持流式
+            # Check if streaming is supported
             if not hasattr(backend, "chat_stream"):
-                # 不支持流式，返回完整响应
+                # Streaming not supported, return complete response
                 response = backend.chat(text)
                 print(json.dumps({"type": "chunk", "content": response}), flush=True)
                 print(json.dumps({"type": "done"}), flush=True)
                 return
 
-            # 流式生成
+            # Stream generation
             async for sentence in backend.chat_stream(text):
                 if sentence:
                     self._log(f"📤 流式输出: {sentence[:30]}...")
                     print(json.dumps({"type": "chunk", "content": sentence}), flush=True)
 
-            # 发送完成标记
+            # Send completion marker
             print(json.dumps({"type": "done"}), flush=True)
             self._log("✅ 流式对话完成")
 
@@ -642,7 +642,7 @@ class SpeekiumDaemon:
             ConfigManager.save(config)
             self._log("✅ 配置已保存")
 
-            # 验证保存
+            # Verify save
             saved_config = ConfigManager.load()
 
             return {"success": True}
@@ -682,11 +682,11 @@ class SpeekiumDaemon:
         elif command == "chat":
             return await self.handle_chat(args.get("text", ""))
         elif command == "chat_stream":
-            # 流式命令：直接输出到 stdout，不返回 dict
+            # Streaming command: output directly to stdout, do not return dict
             await self.handle_chat_stream(args.get("text", ""))
-            return None  # 表示已处理，但无返回值
+            return None  # Indicates processed but no return value
         elif command == "chat_tts_stream":
-            # 流式对话 + TTS：直接输出到 stdout，不返回 dict
+            # Streaming chat + TTS: output directly to stdout, do not return dict
             await self.handle_chat_tts_stream(args.get("text", ""), args.get("auto_play", True))
             return None
         elif command == "tts":
@@ -694,7 +694,7 @@ class SpeekiumDaemon:
         elif command == "config":
             return await self.handle_config()
         elif command == "save_config":
-            # args 直接是 config 对象（Rust 端已经处理）
+            # args is directly the config object (Rust side has processed it)
             return await self.handle_save_config(args)
         elif command == "health":
             return await self.handle_health()
@@ -707,23 +707,23 @@ class SpeekiumDaemon:
 
     async def run_daemon(self):
         """守护进程主循环"""
-        # 初始化
+        # Initialize
         if not await self.initialize():
             self._log("❌ 初始化失败，退出")
             return
 
         self._log("✅ 守护进程就绪，等待命令...")
 
-        # 主循环：监听 stdin 命令
+        # Main loop: listen for stdin commands
         loop = asyncio.get_event_loop()
 
         while self.running:
             try:
-                # 从 stdin 读取一行（阻塞操作，需要在 executor 中运行）
+                # Read one line from stdin (blocking operation, must run in executor)
                 line = await loop.run_in_executor(None, sys.stdin.readline)
 
                 if not line:
-                    # stdin 关闭，退出
+                    # stdin closed, exit
                     self._log("📪 stdin 关闭，退出守护进程")
                     break
 
@@ -731,7 +731,7 @@ class SpeekiumDaemon:
                 if not line:
                     continue
 
-                # 解析 JSON 命令
+                # Parse JSON command
                 try:
                     request = json.loads(line)
                     command = request.get("command")
@@ -739,11 +739,11 @@ class SpeekiumDaemon:
 
                     self._log(f"📥 收到命令: {command}")
 
-                    # 处理命令
+                    # Handle command
                     result = await self.handle_command(command, args)
 
-                    # 输出结果到 stdout
-                    # 注意：流式命令 (chat_stream) 返回 None，因为已经直接输出了
+                    # Output result to stdout
+                    # Note: streaming commands (chat_stream) return None because they already output directly
                     if result is not None:
                         print(json.dumps(result), flush=True)
 
@@ -763,7 +763,7 @@ class SpeekiumDaemon:
 
 def main():
     """主入口"""
-    # 检查是否以守护模式运行
+    # Check if running in daemon mode
     if len(sys.argv) > 1 and sys.argv[1] == "daemon":
         daemon = SpeekiumDaemon()
         asyncio.run(daemon.run_daemon())

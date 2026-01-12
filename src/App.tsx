@@ -102,7 +102,7 @@ function App() {
   const [isStreaming, setIsStreaming] = React.useState<boolean>(false);
   const [isWaitingForLLM, setIsWaitingForLLM] = React.useState<boolean>(false);
 
-  // Work Mode Toast 状态
+  // Work Mode Toast state
   const [toast, setToast] = React.useState<{
     show: boolean;
     mode: WorkMode;
@@ -204,11 +204,11 @@ function App() {
       const unlistenUserMessage = await listen<string>('ptt-user-message', async (event) => {
         const userText = event.payload;
 
-        // 根据工作模式决定行为
+        // Determine behavior based on work mode
         if (workMode === 'text') {
-          // 文字输入模式：调用 type_text_command 输入文字到焦点框，并记录到会话历史
+          // Text input mode: call type_text_command to input text to focused field and log to session history
 
-          // 先记录到会话历史和数据库
+          // First log to session history and database
           addMessage('user', userText);
 
           // Save to database
@@ -228,10 +228,10 @@ function App() {
             console.error('Failed to save user message:', error);
           }
 
-          // 然后调用 type_text_command 粘贴文字到焦点框
+          // Then call type_text_command to paste text to focused field
           try {
             const result = await invoke<string>('type_text_command', { text: userText });
-            // 显示简短通知
+            // Show brief notification
             setError(`✓ ${result}`);
             setTimeout(() => setError(null), 2000);
           } catch (error) {
@@ -240,7 +240,7 @@ function App() {
             setTimeout(() => setError(null), 3000);
           }
         } else {
-          // 对话模式：显示用户消息并等待 LLM 响应
+          // Conversation mode: display user message and wait for LLM response
           addMessage('user', userText);
           pttAssistantResponseRef.current = '';
           pttAssistantAddedRef.current = false;
@@ -458,7 +458,7 @@ function App() {
     }
   };
 
-  // 处理快速提示卡片点击
+  // Handle quick prompt card click
   const handlePromptClick = async (prompt: string) => {
     await handleSendText(prompt);
   };

@@ -7,7 +7,7 @@ APP_NAME = "speekium"
 
 
 def get_config_dir() -> str:
-    """获取应用配置目录（跨平台）
+    """Get application config directory (cross-platform)
 
     - macOS: ~/Library/Application Support/speekium/
     - Windows: C:/Users/<user>/AppData/Roaming/speekium/
@@ -25,7 +25,7 @@ def get_config_dir() -> str:
 
     config_dir = os.path.join(base, APP_NAME)
 
-    # 确保目录存在
+    # Ensure directory exists
     os.makedirs(config_dir, exist_ok=True)
 
     return config_dir
@@ -48,7 +48,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 class ConfigManager:
     @staticmethod
     def load() -> dict[str, Any]:
-        """加载配置文件"""
+        """Load configuration file"""
         if not os.path.exists(CONFIG_PATH):
             ConfigManager.save(DEFAULT_CONFIG)
             return DEFAULT_CONFIG.copy()
@@ -58,20 +58,20 @@ class ConfigManager:
                 config = json.load(f)
                 return {**DEFAULT_CONFIG, **config}
         except Exception as e:
-            print(f"加载配置失败: {e}", file=sys.stderr)
+            print(f"Failed to load configuration: {e}", file=sys.stderr)
             return DEFAULT_CONFIG.copy()
 
     @staticmethod
     def save(config: dict[str, Any]) -> None:
-        """保存配置文件"""
+        """Save configuration file"""
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存配置失败: {e}", file=sys.stderr)
+            print(f"Failed to save configuration: {e}", file=sys.stderr)
             raise
 
     @staticmethod
     def get_path() -> str:
-        """获取配置文件路径"""
+        """Get configuration file path"""
         return CONFIG_PATH

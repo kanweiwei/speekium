@@ -74,7 +74,7 @@ impl PythonDaemon {
             .arg("daemon")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())  // 捕获 stderr 用于 PTT 事件
+            .stderr(Stdio::piped())  // Capture stderr for PTT events
             .spawn()
             .map_err(|e| format!("Failed to start daemon: {}", e))?;
 
@@ -88,14 +88,14 @@ impl PythonDaemon {
             child.stderr.take().ok_or("Failed to get stderr")?
         );
 
-        // 存储 stderr 到全局变量，供 PTT 事件读取器使用
+        // Store stderr in global variable for PTT event reader
         {
             let mut ptt_stderr = PTT_STDERR.lock().unwrap();
             *ptt_stderr = Some(stderr);
         }
 
-        // 等待守护进程初始化完成 - 读取 stdout 直到看到带 "就绪" 消息的事件
-        // 守护进程加载模型需要约 7 秒，设置 15 秒超时
+        // Wait for daemon initialization - read stdout until "ready" event
+        // Daemon takes ~7s to load models, set 15s timeout
         use std::time::{Duration, Instant};
         let start = Instant::now();
         let timeout = Duration::from_secs(15);
@@ -107,17 +107,17 @@ impl PythonDaemon {
             let mut line = String::new();
             match stdout.read_line(&mut line) {
                 Ok(0) => {
-                    // EOF - 守护进程意外退出
+                    // EOF - daemon exited unexpectedly
                     println!("❌ 守护进程在初始化期间退出");
                     return Err("Daemon exited during initialization".to_string());
                 }
                 Ok(_) => {
-                    // 解析 JSON 日志事件
+                    // Parse JSON log events
                     if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
                         if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
                             println!("📋 守护进程事件: {}", event_type);
 
-                            // 检查是否是带"就绪"消息的 daemon_success 事件（最后一个初始化事件）
+                            // Check if this is the "ready" daemon_success event (last init event)
                             if event_type == "daemon_success" {
                                 if let Some(message) = event.get("message").and_then(|v| v.as_str()) {
                                     if message.contains("就绪") || message.contains("ready") {
@@ -152,7 +152,7 @@ impl PythonDaemon {
     }
 
     fn send_command(&mut self, command: &str, args: serde_json::Value) -> Result<serde_json::Value, String> {
-        // 构造请求
+        // Build request
         let request = serde_json::json!({
             "command": command,
             "args": args
@@ -160,7 +160,7 @@ impl PythonDaemon {
 
         println!("📤 发送命令: {}", command);
 
-        // 发送到 stdin
+        // Send to stdin
         writeln!(self.stdin, "{}", request.to_string())
             .map_err(|e| format!("Failed to write command: {}", e))?;
 
@@ -169,8 +169,8 @@ impl PythonDaemon {
 
         println!("⏳ 等待响应...");
 
-        // 从 stdout 读取响应，跳过日志事件
-        // 守护进程的日志事件有 "event" 字段，命令响应有 "success" 字段
+        // Read response from stdout, skip log events
+        // Daemon log events have "event" field, command responses have "success" field
         loop {
             let mut line = String::new();
             self.stdout.read_line(&mut line)
@@ -179,20 +179,20 @@ impl PythonDaemon {
                     format!("Failed to read response: {}", e)
                 })?;
 
-            // 解析 JSON
+            // Parse JSON
             let result: serde_json::Value = serde_json::from_str(&line)
                 .map_err(|e| {
                     println!("❌ JSON 解析失败: {} | 原始内容: {}", e, line);
                     format!("Failed to parse JSON: {}", e)
                 })?;
 
-            // 检查是否是日志事件（有 "event" 字段）
+            // Check if this is a log event (has "event" field)
             if result.get("event").is_some() {
                 println!("📋 跳过日志事件: {}", result.get("event").unwrap().as_str().unwrap_or("unknown"));
-                continue;  // 跳过日志，继续读取下一行
+                continue;  // Skip log, continue reading next line
             }
 
-            // 这是命令响应（有 "success" 字段或其他响应字段）
+            // This is a command response (has "success" field or other response fields)
             println!("📥 收到命令响应: {}", line.trim());
             return Ok(result);
         }
@@ -221,36 +221,36 @@ impl PythonDaemon {
     }
 }
 
-// 全局守护进程实例
+// Global daemon instance
 static DAEMON: Mutex<Option<PythonDaemon>> = Mutex::new(None);
 
 // PTT stderr reader handle
 static PTT_STDERR: Mutex<Option<BufReader<ChildStderr>>> = Mutex::new(None);
 
-// 流式操作标志 - 防止健康检查干扰流式操作
+// Streaming operation flag - prevent health checks from interfering
 static STREAMING_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 fn ensure_daemon_running() -> Result<(), String> {
     let mut daemon = DAEMON.lock().unwrap();
 
-    // 如果守护进程已存在，先检查健康状态
+    // If daemon exists, check health first
     if let Some(ref mut d) = *daemon {
-        // 流式操作期间跳过健康检查
+        // Skip health check during streaming
         if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
             println!("⏸️ 流式操作进行中，跳过 ensure_daemon 健康检查");
             return Ok(());
         }
 
         if d.health_check() {
-            return Ok(());  // 健康，直接返回
+            return Ok(());  // Healthy, return directly
         }
 
-        // 不健康，终止并重启
+        // Unhealthy, terminate and restart
         println!("⚠️ 守护进程不健康，正在重启...");
         let _ = d.process.kill();
     }
 
-    // 启动新的守护进程
+    // Start new daemon
     *daemon = Some(PythonDaemon::new()?);
 
     Ok(())
@@ -265,14 +265,14 @@ fn call_daemon(command: &str, args: serde_json::Value) -> Result<serde_json::Val
     daemon.send_command(command, args)
 }
 
-/// 启动 PTT (Push-to-Talk) 事件读取器
-/// 在后台线程中监听 Python daemon 的 stderr，解析 PTT 事件并转发到前端
+/// Start PTT (Push-to-Talk) event reader
+/// Listen to Python daemon stderr in background thread, parse PTT events and forward to frontend
 fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
     std::thread::spawn(move || {
         println!("🎧 PTT 事件读取器启动");
 
         loop {
-            // 获取 stderr 读取器
+            // Get stderr reader
             let line = {
                 let mut ptt_stderr = PTT_STDERR.lock().unwrap();
                 if let Some(ref mut stderr) = *ptt_stderr {
@@ -289,7 +289,7 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                         }
                     }
                 } else {
-                    // stderr 尚未就绪，等待一下
+                    // stderr not ready yet, wait a bit
                     drop(ptt_stderr);
                     std::thread::sleep(std::time::Duration::from_millis(100));
                     continue;
@@ -302,16 +302,16 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                     continue;
                 }
 
-                // 尝试解析为 JSON PTT 事件
+                // Try to parse as JSON PTT event
                 if let Ok(event) = serde_json::from_str::<serde_json::Value>(line) {
                     if let Some(ptt_event) = event.get("ptt_event").and_then(|v| v.as_str()) {
                         println!("🎤 PTT 事件: {}", ptt_event);
 
-                        // 获取主窗口和浮动窗口
+                        // Get main window and floating window
                         let main_window = app_handle.get_webview_window("main");
                         let overlay_window = app_handle.get_webview_window("ptt-overlay");
 
-                        // 发送状态到浮动窗口并控制显示/隐藏
+                        // Send state to floating window and control visibility
                         if let Some(ref overlay) = overlay_window {
                             match ptt_event {
                                 "recording" => {
@@ -329,7 +329,7 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                             }
                         }
 
-                        // 发送完整事件到主窗口
+                        // Send full event to main window
                         if let Some(window) = main_window {
                             match ptt_event {
                                 "recording" => {
@@ -342,7 +342,7 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     let _ = window.emit("ptt-state", "idle");
                                 }
                                 "user_message" => {
-                                    // 用户语音识别结果 - 隐藏覆盖层，显示消息
+                                    // User speech recognition result - hide overlay, show message
                                     let _ = window.emit("ptt-state", "idle");
                                     if let Some(ref overlay) = overlay_window {
                                         let _ = overlay.hide();
@@ -353,7 +353,7 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     }
                                 }
                                 "assistant_chunk" => {
-                                    // LLM 流式响应片段 - 确保覆盖层已隐藏
+                                    // LLM streaming response chunk - ensure overlay is hidden
                                     let _ = window.emit("ptt-state", "idle");
                                     if let Some(ref overlay) = overlay_window {
                                         let _ = overlay.hide();
@@ -363,7 +363,7 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     }
                                 }
                                 "assistant_done" => {
-                                    // LLM 响应完成 - 确保覆盖层已隐藏
+                                    // LLM response complete - ensure overlay is hidden
                                     let _ = window.emit("ptt-state", "idle");
                                     if let Some(ref overlay) = overlay_window {
                                         let _ = overlay.hide();
@@ -373,7 +373,7 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     }
                                 }
                                 "audio_chunk" => {
-                                    // TTS 音频片段
+                                    // TTS audio chunk
                                     let audio_path = event.get("audio_path").and_then(|v| v.as_str());
                                     let text = event.get("text").and_then(|v| v.as_str());
                                     if let (Some(path), Some(txt)) = (audio_path, text) {
@@ -396,7 +396,7 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                         }
                     }
                 } else {
-                    // 不是 PTT 事件 JSON，作为普通日志输出
+                    // Not a PTT event JSON, output as regular log
                     println!("📋 daemon stderr: {}", line);
                 }
             }
@@ -482,16 +482,16 @@ fn type_text(text: &str) -> Result<(), String> {
 
     println!("⌨️  使用剪贴板输入文字: {}", text);
 
-    // 1. 保存当前剪贴板内容
+    // 1. Save current clipboard content
     let pasteboard: id = unsafe { msg_send![class!(NSPasteboard), generalPasteboard] };
 
-    // 使用 NSPasteboardTypeString 常量
+    // Use NSPasteboardTypeString constant
     let pasteboard_type = unsafe { CFString::alloc(nil).init_str("public.utf8-plain-text") };
     let old_content: id = unsafe { msg_send![pasteboard, stringForType: pasteboard_type] };
 
     println!("📋 已保存旧剪贴板内容");
 
-    // 定义恢复剪贴板的函数
+    // Define clipboard restoration function
     let restore_clipboard = || -> Result<(), String> {
         if old_content != nil {
             unsafe {
@@ -510,7 +510,7 @@ fn type_text(text: &str) -> Result<(), String> {
         Ok(())
     };
 
-    // 2. 设置新内容到剪贴板
+    // 2. Set new content to clipboard
     let ns_string = unsafe { CFString::alloc(nil).init_str(text) };
 
     unsafe {
@@ -521,7 +521,7 @@ fn type_text(text: &str) -> Result<(), String> {
 
         if !success {
             println!("⚠️  剪贴板设置失败");
-            // 尝试恢复剪贴板
+            // Attempt to restore clipboard
             let _ = restore_clipboard();
             return Err("Failed to set clipboard content".to_string());
         }
@@ -529,47 +529,47 @@ fn type_text(text: &str) -> Result<(), String> {
 
     println!("✅ 已设置新剪贴板内容");
 
-    // 3. 创建事件源
+    // 3. Create event source
     let event_source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
         .map_err(|e| format!("Failed to create event source: {:?}", e))?;
 
-    // 4. 模拟 Cmd+V 按键
-    // Cmd 键码是 55 (kVK_Command)
+    // 4. Simulate Cmd+V keypress
+    // Cmd key code is 55 (kVK_Command)
     let cmd_key_code: u16 = 55;
-    // V 键码是 9 (kVK_ANSI_V)
+    // V key code is 9 (kVK_ANSI_V)
     let v_key_code: u16 = 9;
 
-    // 按下 Cmd
+    // Press Cmd
     let cmd_down = CGEvent::new_keyboard_event(event_source.clone(), cmd_key_code, true)
         .map_err(|e| format!("Failed to create Cmd key down event: {:?}", e))?;
     cmd_down.set_flags(CGEventFlags::CGEventFlagCommand);
     cmd_down.post(CGEventTapLocation::Session);
     println!("⌨️  按下 Cmd");
 
-    // 按下 V (带 Cmd 标志)
+    // Press V (with Cmd flag)
     let v_down = CGEvent::new_keyboard_event(event_source.clone(), v_key_code, true)
         .map_err(|e| format!("Failed to create V key down event: {:?}", e))?;
     v_down.set_flags(CGEventFlags::CGEventFlagCommand);
     v_down.post(CGEventTapLocation::Session);
     println!("⌨️  按下 V");
 
-    // 释放 V
+    // Release V
     let v_up = CGEvent::new_keyboard_event(event_source.clone(), v_key_code, false)
         .map_err(|e| format!("Failed to create V key up event: {:?}", e))?;
     v_up.set_flags(CGEventFlags::CGEventFlagCommand);
     v_up.post(CGEventTapLocation::Session);
     println!("⌨️  释放 V");
 
-    // 释放 Cmd
+    // Release Cmd
     let cmd_up = CGEvent::new_keyboard_event(event_source.clone(), cmd_key_code, false)
         .map_err(|e| format!("Failed to create Cmd key up event: {:?}", e))?;
     cmd_up.post(CGEventTapLocation::Session);
     println!("⌨️  释放 Cmd");
 
-    // 等待粘贴完成
+    // Wait for paste to complete
     std::thread::sleep(std::time::Duration::from_millis(50));
 
-    // 5. 恢复原剪贴板内容
+    // 5. Restore original clipboard content
     restore_clipboard()?;
 
     println!("⌨️  文字输入完成");
@@ -675,7 +675,7 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Option<String>) -> Result<RecordResult, String> {
-    // 处理 duration 参数：支持数字字符串、"auto" 或空值
+    // Handle duration parameter: support numeric string, "auto", or empty
     let duration_val = match duration {
         Some(d) => {
             if d == "auto" {
@@ -694,36 +694,36 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
 
     println!("🎤 调用守护进程: record {}", args);
 
-    // 发送录音开始状态到所有窗口（统一状态同步）
+    // Send recording start state to all windows (unified state sync)
     emit_ptt_state(&app_handle, "recording");
 
     let result = call_daemon("record", args);
 
-    // 发送处理中状态
+    // Send processing state
     emit_ptt_state(&app_handle, "processing");
 
-    // 处理结果
+    // Handle result
     let parsed_result = result.and_then(|r| {
         serde_json::from_value(r)
             .map_err(|e| format!("Failed to parse result: {}", e))
     });
 
-    // 发送空闲状态
+    // Send idle state
     emit_ptt_state(&app_handle, "idle");
 
     parsed_result
 }
 
-/// 发送 PTT 状态到所有窗口
+/// Send PTT state to all windows
 fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
-    // 发送到主窗口
+    // Send to main window
     if let Some(main_window) = app_handle.get_webview_window("main") {
         let _ = main_window.emit("ptt-state", state);
     }
-    // 发送到浮动窗口
+    // Send to floating window
     if let Some(overlay) = app_handle.get_webview_window("ptt-overlay") {
         let _ = overlay.emit("ptt-state", state);
-        // 控制浮动窗口显示/隐藏
+        // Control floating window visibility
         match state {
             "recording" | "processing" => {
                 // Recalculate position before showing (in case screen config changed)
@@ -768,10 +768,10 @@ async fn chat_llm_stream(
 ) -> Result<(), String> {
     println!("💬 调用守护进程: chat_stream");
 
-    // 设置流式操作标志
+    // Set streaming operation flag
     STREAMING_IN_PROGRESS.store(true, Ordering::SeqCst);
 
-    // 在单独的线程中处理流式响应
+    // Handle streaming response in separate thread
     std::thread::spawn(move || {
         let mut daemon = DAEMON.lock().unwrap();
         let daemon = match daemon.as_mut() {
@@ -783,7 +783,7 @@ async fn chat_llm_stream(
             }
         };
 
-        // 发送流式命令
+        // Send streaming command
         let request = serde_json::json!({
             "command": "chat_stream",
             "args": {"text": text}
@@ -801,20 +801,20 @@ async fn chat_llm_stream(
             return;
         }
 
-        // 循环读取流式输出
+        // Loop to read streaming output
         loop {
             let mut line = String::new();
             match daemon.stdout.read_line(&mut line) {
                 Ok(0) => {
-                    // EOF - 守护进程可能崩溃
+                    // EOF - daemon may have crashed
                     let _ = window.emit("chat-error", "Daemon connection lost");
                     STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                     break;
                 }
                 Ok(_) => {
-                    // 解析 JSON
+                    // Parse JSON
                     if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(&line) {
-                        // 跳过日志事件（有 "event" 字段）
+                        // Skip log events (have "event" field)
                         if chunk.get("event").is_some() {
                             continue;
                         }
@@ -823,19 +823,19 @@ async fn chat_llm_stream(
 
                         match chunk_type {
                             "chunk" => {
-                                // 发送文本片段到前端
+                                // Send text chunk to frontend
                                 if let Some(content) = chunk.get("content").and_then(|v| v.as_str()) {
                                     let _ = window.emit("chat-chunk", content);
                                 }
                             }
                             "done" => {
-                                // 流式响应完成
+                                // Streaming response complete
                                 let _ = window.emit("chat-done", ());
                                 STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                                 break;
                             }
                             "error" => {
-                                // 错误
+                                // Error
                                 if let Some(error) = chunk.get("error").and_then(|v| v.as_str()) {
                                     let _ = window.emit("chat-error", error);
                                 }
@@ -868,10 +868,10 @@ async fn chat_tts_stream(
 ) -> Result<(), String> {
     println!("💬🔊 调用守护进程: chat_tts_stream");
 
-    // 设置流式操作标志
+    // Set streaming operation flag
     STREAMING_IN_PROGRESS.store(true, Ordering::SeqCst);
 
-    // 在单独的线程中处理流式响应
+    // Handle streaming response in separate thread
     std::thread::spawn(move || {
         println!("🧵 TTS 流式线程启动");
         let mut daemon = DAEMON.lock().unwrap();
@@ -887,7 +887,7 @@ async fn chat_tts_stream(
 
         println!("🔒 TTS 流式线程：已获取守护进程锁");
 
-        // 发送流式命令
+        // Send streaming command
         let request = serde_json::json!({
             "command": "chat_tts_stream",
             "args": {
@@ -914,12 +914,12 @@ async fn chat_tts_stream(
 
         println!("✅ TTS 流式线程：命令已发送，开始读取响应...");
 
-        // 循环读取流式输出
+        // Loop to read streaming output
         loop {
             let mut line = String::new();
             match daemon.stdout.read_line(&mut line) {
                 Ok(0) => {
-                    // EOF - 守护进程可能崩溃
+                    // EOF - daemon may have crashed
                     println!("❌ TTS 流式线程：读到 EOF");
                     let _ = window.emit("tts-error", "Daemon connection lost");
                     STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
@@ -928,11 +928,11 @@ async fn chat_tts_stream(
                 Ok(n) => {
                     println!("📥 TTS 流式线程：读到 {} 字节: {}", n, line.trim());
 
-                    // 解析 JSON
+                    // Parse JSON
                     if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(&line) {
                         println!("✅ TTS 流式线程：JSON 解析成功: {:?}", chunk);
 
-                        // 跳过日志事件（有 "event" 字段）
+                        // Skip log events (have "event" field)
                         if chunk.get("event").is_some() {
                             println!("⏭️ TTS 流式线程：跳过日志事件");
                             continue;
@@ -943,13 +943,13 @@ async fn chat_tts_stream(
 
                         match chunk_type {
                             "text_chunk" => {
-                                // 发送文本片段到前端
+                                // Send text chunk to frontend
                                 if let Some(content) = chunk.get("content").and_then(|v| v.as_str()) {
                                     let _ = window.emit("tts-text-chunk", content);
                                 }
                             }
                             "audio_chunk" => {
-                                // 发送音频片段到前端
+                                // Send audio chunk to frontend
                                 if let Some(audio_path) = chunk.get("audio_path").and_then(|v| v.as_str()) {
                                     let text = chunk.get("text").and_then(|v| v.as_str()).unwrap_or("");
                                     let _ = window.emit("tts-audio-chunk", serde_json::json!({
@@ -959,13 +959,13 @@ async fn chat_tts_stream(
                                 }
                             }
                             "done" => {
-                                // 流式响应完成
+                                // Streaming response complete
                                 let _ = window.emit("tts-done", ());
                                 STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                                 break;
                             }
                             "error" => {
-                                // 错误
+                                // Error
                                 if let Some(error) = chunk.get("error").and_then(|v| v.as_str()) {
                                     let _ = window.emit("tts-error", error);
                                 }
@@ -1021,15 +1021,15 @@ async fn load_config() -> Result<ConfigResult, String> {
 async fn save_config(config: serde_json::Value) -> Result<serde_json::Value, String> {
     println!("💾 调用守护进程: save_config, work_mode = {}", config.get("work_mode").and_then(|v| v.as_str()).unwrap_or("MISSING"));
 
-    // 直接传递 config，不要重复包装
-    // 前端已经传递了 { config: updatedConfig }
-    // 这里直接将 config 作为参数传递给 Python daemon
+    // Pass config directly, do not re-wrap
+    // Frontend already passed { config: updatedConfig }
+    // Pass config directly as parameter to Python daemon
     call_daemon("save_config", config)
 }
 
 #[tauri::command]
 async fn daemon_health() -> Result<HealthResult, String> {
-    // 检查是否有流式操作正在进行
+    // Check if there is an ongoing streaming operation
     if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
         println!("⏸️ 流式操作进行中，跳过健康检查");
         return Ok(HealthResult {
@@ -1053,13 +1053,13 @@ async fn daemon_health() -> Result<HealthResult, String> {
 async fn test_ollama_connection(base_url: String, model: String) -> Result<serde_json::Value, String> {
     println!("🔗 测试 Ollama 连接: {} ({})", base_url, model);
 
-    // 使用 reqwest 直接测试 Ollama 连接
+    // Use reqwest to test Ollama connection directly
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    // 测试 1: 检查 Ollama 服务是否运行
+    // Test 1: Check if Ollama service is running
     let tags_url = format!("{}/api/tags", base_url);
     let response = client
         .get(&tags_url)
@@ -1071,7 +1071,7 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
             if resp.status().is_success() {
                 println!("✅ Ollama 服务运行正常");
 
-                // 测试 2: 检查指定模型是否存在
+                // Test 2: Check if specified model exists
                 let models = resp.json::<serde_json::Value>()
                     .await
                     .map_err(|e| format!("Failed to parse models list: {}", e))?;
@@ -1128,7 +1128,7 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
 fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
-    // 注册显示/隐藏窗口快捷键: Command+Shift+Space
+    // Register show/hide window shortcut: Command+Shift+Space
     let toggle_shortcut: Shortcut = "CommandOrControl+Shift+Space".parse().unwrap();
 
     let app_handle = app.clone();
@@ -1143,8 +1143,8 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
         }
     }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register toggle shortcut: {}", e)))?;
 
-    // PTT 快捷键现在由 Python daemon 的 HotkeyManager 处理 (支持 Cmd+Alt)
-    // 不再需要在 Tauri 中注册
+    // PTT shortcut is now handled by Python daemon's HotkeyManager (supports Cmd+Alt)
+    // No longer need to register in Tauri
 
     println!("✅ 全局快捷键已注册:");
     println!("   • Command+Shift+Space - 显示/隐藏窗口");
@@ -1198,7 +1198,7 @@ fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
                 }
             }
             "quit" => {
-                // 清理守护进程
+                // Clean up daemon
                 cleanup_daemon();
                 app.exit(0);
             }
@@ -1231,10 +1231,10 @@ fn cleanup_daemon() {
 
     let mut daemon = DAEMON.lock().unwrap();
     if let Some(mut d) = daemon.take() {
-        // 发送退出命令
+        // Send exit command
         let _ = d.send_command("exit", serde_json::json!({}));
 
-        // 等待进程退出
+        // Wait for process to exit
         let _ = d.process.wait();
 
         println!("✅ 守护进程已关闭");
@@ -1281,7 +1281,7 @@ fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<d
     // Calculate initial position
     let (x, y) = calculate_overlay_position(app)?;
 
-    // 创建 PTT 浮动窗口（透明窗口）
+    // Create PTT floating window (transparent window)
     let _overlay = WebviewWindowBuilder::new(
         app,
         "ptt-overlay",
@@ -1297,7 +1297,7 @@ fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<d
     .focused(false)
     .visible(false)
     .transparent(true)
-    .shadow(false)  // 禁用窗口阴影，有助于透明效果
+    .shadow(false)  // Disable window shadow for better transparency
     .build()?;
 
     println!("✅ PTT 浮动窗口已创建 ({}x{} @ {}, {})", OVERLAY_WIDTH, OVERLAY_HEIGHT, x, y);
@@ -1337,7 +1337,7 @@ pub fn run() {
             db_delete_message
         ])
         .setup(|app| {
-            // 初始化数据库
+            // Initialize database
             let db_path = database::get_database_path(app.handle())
                 .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to get database path: {}", e)))?;
 
@@ -1347,20 +1347,20 @@ pub fn run() {
             app.manage(AppState { db });
             println!("✅ 数据库已初始化");
 
-            // 创建托盘图标
+            // Create tray icon
             create_tray(app.handle())?;
 
-            // 注册快捷键
+            // Register shortcuts
             register_shortcuts(app.handle())?;
 
-            // 启动守护进程
+            // Start daemon
             ensure_daemon_running()
                 .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to start daemon: {}", e)))?;
 
-            // 启动 PTT 事件读取器 (监听 Python daemon 的 stderr)
+            // Start PTT event reader (listen to Python daemon stderr)
             start_ptt_reader(app.handle().clone());
 
-            // 创建 PTT 浮动状态窗口
+            // Create PTT floating state window
             if let Err(e) = create_ptt_overlay(app.handle()) {
                 println!("⚠️ 创建 PTT 浮动窗口失败: {}", e);
             }
@@ -1372,7 +1372,7 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // 阻止窗口关闭，改为隐藏
+                // Prevent window close, hide instead
                 api.prevent_close();
                 window.hide().unwrap();
             }
@@ -1382,14 +1382,14 @@ pub fn run() {
         .run(|app_handle, event| {
             match event {
                 tauri::RunEvent::Reopen { .. } => {
-                    // macOS: 点击 dock 图标时显示主窗口
+                    // macOS: Show main window when dock icon is clicked
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
                 }
                 tauri::RunEvent::ExitRequested { .. } => {
-                    // 应用退出时清理守护进程
+                    // Clean up daemon on app exit
                     cleanup_daemon();
                 }
                 _ => {}

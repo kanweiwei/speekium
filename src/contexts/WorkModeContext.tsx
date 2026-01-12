@@ -1,8 +1,7 @@
 /**
- * 工作模式 Context Provider
  * Work Mode Context Provider
  *
- * 管理工作模式的全局状态，提供模式切换和持久化功能
+ * Manages global state for work mode, provides mode switching and persistence functionality
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -14,36 +13,36 @@ import {
 } from '@/types/workMode';
 
 /**
- * WorkModeContext 接口定义
+ * WorkModeContext interface definition
  */
 interface WorkModeContextValue {
-  /** 当前工作模式 */
+  /** Current work mode */
   workMode: WorkMode;
-  /** 设置工作模式 */
+  /** Set work mode */
   setWorkMode: (mode: WorkMode, source?: WorkModeChangeEvent['source']) => void;
-  /** 切换到对话模式 */
+  /** Switch to conversation mode */
   switchToConversation: () => void;
-  /** 切换到文字输入模式 */
+  /** Switch to text input mode */
   switchToText: () => void;
-  /** 是否是对话模式 */
+  /** Whether it's conversation mode */
   isConversationMode: boolean;
-  /** 是否是文字输入模式 */
+  /** Whether it's text input mode */
   isTextInputMode: boolean;
 }
 
 /**
- * 创建 Context
+ * Create Context
  */
 const WorkModeContext = createContext<WorkModeContextValue | undefined>(undefined);
 
 /**
- * WorkModeProvider 组件
+ * WorkModeProvider component
  *
- * 提供工作模式的全局状态管理
+ * Provides global state management for work mode
  */
 export function WorkModeProvider({ children }: { children: React.ReactNode }) {
   const [workMode, setWorkModeState] = useState<WorkMode>(() => {
-    // 从 localStorage 读取保存的模式，如果没有则使用默认值
+    // Read saved mode from localStorage, use default value if not exists
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(WORK_MODE_STORAGE_KEY);
       if (saved === 'conversation' || saved === 'text') {
@@ -54,18 +53,18 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
   });
 
   /**
-   * 从 localStorage 和配置文件加载工作模式
+   * Load work mode from localStorage and config file
    */
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // 首先从 localStorage 读取（快速加载）
+    // First read from localStorage (fast loading)
     const saved = localStorage.getItem(WORK_MODE_STORAGE_KEY);
     if (saved === 'conversation' || saved === 'text') {
       setWorkModeState(saved);
     }
 
-    // 然后从配置文件同步（确保与后端一致）
+    // Then sync from config file (ensure consistency with backend)
     const syncFromConfig = async () => {
       try {
         const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
@@ -75,7 +74,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem(WORK_MODE_STORAGE_KEY, configWorkMode);
         }
       } catch (error) {
-        console.error('[WorkMode] 从配置文件加载失败:', error);
+        console.error('[WorkMode] Failed to load from config file:', error);
       }
     };
 
@@ -83,68 +82,68 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /**
-   * 设置工作模式并持久化到 localStorage 和配置文件
+   * Set work mode and persist to localStorage and config file
    */
   const setWorkMode = useCallback(async (mode: WorkMode, source: WorkModeChangeEvent['source'] = 'settings') => {
-    // 更新状态
+    // Update state
     setWorkModeState(mode);
 
-    // 持久化到 localStorage
+    // Persist to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(WORK_MODE_STORAGE_KEY, mode);
     }
 
-    // 保存到配置文件（Python daemon 从这里读取）
+    // Save to config file (Python daemon reads from here)
     try {
-      // 先加载完整配置
+      // First load complete configuration
       const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
 
       if (result.success && result.config) {
-        // 更新 work_mode 字段
+        // Update work_mode field
         const updatedConfig = {
           ...result.config,
           work_mode: mode,
         };
 
-        // 保存完整配置并检查返回值
+        // Save complete configuration and check return value
         const saveResult = await invoke<{ success: boolean; error?: string }>('save_config', {
           config: updatedConfig,
         });
 
         if (saveResult.success) {
-          // 配置保存成功
+          // Configuration saved successfully
         } else {
-          console.error(`[WorkMode] ❌ 保存配置失败: ${saveResult.error}`);
+          console.error(`[WorkMode] Failed to save configuration: ${saveResult.error}`);
         }
       } else {
-        console.error('[WorkMode] 加载配置失败:', result);
+        console.error('[WorkMode] Failed to load configuration:', result);
       }
     } catch (error) {
-      console.error('[WorkMode] 保存配置失败:', error);
+      console.error('[WorkMode] Failed to save configuration:', error);
     }
   }, [workMode]);
 
   /**
-   * 切换到对话模式
+   * Switch to conversation mode
    */
   const switchToConversation = useCallback(() => {
     setWorkMode('conversation', 'api');
   }, [setWorkMode]);
 
   /**
-   * 切换到文字输入模式
+   * Switch to text input mode
    */
   const switchToText = useCallback(() => {
     setWorkMode('text', 'api');
   }, [setWorkMode]);
 
   /**
-   * 计算属性：是否是对话模式
+   * Computed property: whether it's conversation mode
    */
   const isConversationMode = workMode === 'conversation';
 
   /**
-   * 计算属性：是否是文字输入模式
+   * Computed property: whether it's text input mode
    */
   const isTextInputMode = workMode === 'text';
 
@@ -167,7 +166,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
 /**
  * useWorkMode Hook
  *
- * 用于在组件中访问工作模式状态和方法
+ * Used to access work mode state and methods in components
  *
  * @example
  * ```tsx

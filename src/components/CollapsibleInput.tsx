@@ -6,15 +6,15 @@ import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
 
 interface CollapsibleInputProps {
-  /** 输入框值 */
+  /** Input value */
   value: string;
-  /** 值变化回调 */
+  /** Value change callback */
   onChange: (value: string) => void;
-  /** 发送回调 */
+  /** Send callback */
   onSend: () => void;
-  /** 是否处理中 */
+  /** Whether processing */
   isProcessing?: boolean;
-  /** 是否流式输出中 */
+  /** Whether streaming output */
   isStreaming?: boolean;
 }
 
@@ -34,7 +34,7 @@ export function CollapsibleInput({
   const expandButtonRef = useRef<HTMLButtonElement>(null);
   const collapseTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 检测屏幕高度
+  // Detect screen height
   useEffect(() => {
     const checkScreenSize = () => {
       setIsSmallScreen(window.innerHeight < 800);
@@ -46,7 +46,7 @@ export function CollapsibleInput({
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  // 失焦后开始倒计时
+  // Start countdown after blur
   const handleBlur = () => {
     if (isExpanded && !value.trim()) {
       const warningTimer = setTimeout(() => {
@@ -63,7 +63,7 @@ export function CollapsibleInput({
     }
   };
 
-  // 用户交互时取消倒计时
+  // Cancel countdown on user interaction
   const handleInteraction = () => {
     if (collapseTimerRef.current) {
       clearTimeout(collapseTimerRef.current);
@@ -72,17 +72,17 @@ export function CollapsibleInput({
     setShowWarning(false);
   };
 
-  // 展开
+  // Expand
   const handleExpand = () => {
     setIsExpanded(true);
     setShowWarning(false);
-    // 延迟聚焦,等待动画完成
+    // Delay focus, wait for animation to complete
     setTimeout(() => {
       inputRef.current?.focus();
     }, 300);
   };
 
-  // 折叠
+  // Collapse
   const handleCollapse = () => {
     setIsExpanded(false);
     setShowWarning(false);
@@ -93,13 +93,13 @@ export function CollapsibleInput({
     expandButtonRef.current?.focus();
   };
 
-  // 取消折叠
+  // Cancel collapse
   const handleCancelCollapse = () => {
     handleInteraction();
     inputRef.current?.focus();
   };
 
-  // 键盘事件
+  // Keyboard events
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -109,7 +109,7 @@ export function CollapsibleInput({
     }
   };
 
-  // 发送
+  // Send
   const handleSend = () => {
     if (!value.trim() || isProcessing) return;
     onSend();

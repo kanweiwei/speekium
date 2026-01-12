@@ -1,55 +1,54 @@
 /**
- * 工作模式类型定义
  * Work Mode Type Definitions
  */
 
 /**
- * 工作模式枚举
- * - conversation: 对话模式 (语音 → AI 对话 → TTS 播放)
- * - text: 文字输入模式 (语音 → 直接输入文字到焦点框)
+ * Work mode enumeration
+ * - conversation: Conversation mode (Voice → AI dialogue → TTS playback)
+ * - text: Text input mode (Voice → Direct text input to focused field)
  */
 export type WorkMode = 'conversation' | 'text';
 
 /**
- * 工作模式配置接口
+ * Work mode configuration interface
  */
 export interface WorkModeConfig {
-  /** 当前工作模式 */
+  /** Current work mode */
   currentMode: WorkMode;
-  /** 最后修改时间戳 */
+  /** Last modified timestamp */
   lastModified: number;
 }
 
 /**
- * 工作模式切换事件接口
+ * Work mode change event interface
  */
 export interface WorkModeChangeEvent {
-  /** 新的工作模式 */
+  /** New work mode */
   mode: WorkMode;
-  /** 事件时间戳 */
+  /** Event timestamp */
   timestamp: number;
-  /** 事件来源 */
+  /** Event source */
   source: 'settings' | 'tray' | 'hotkey' | 'api';
 }
 
 /**
- * 工作模式显示信息接口
+ * Work mode display information interface
  */
 export interface WorkModeDisplayInfo {
-  /** 模式标识 */
+  /** Mode identifier */
   mode: WorkMode;
-  /** 显示名称 */
+  /** Display label */
   label: string;
-  /** 描述信息 */
+  /** Description */
   description: string;
-  /** 图标名称 (Lucide React) */
+  /** Icon name (Lucide React) */
   icon: 'MessageCircle' | 'Type';
-  /** 主题颜色 */
+  /** Theme color */
   color: 'blue' | 'green';
 }
 
 /**
- * 工作模式元数据映射
+ * Work mode metadata mapping
  */
 export const WORK_MODE_INFO: Record<WorkMode, WorkModeDisplayInfo> = {
   conversation: {
@@ -69,11 +68,11 @@ export const WORK_MODE_INFO: Record<WorkMode, WorkModeDisplayInfo> = {
 };
 
 /**
- * 默认工作模式配置
+ * Default work mode
  */
 export const DEFAULT_WORK_MODE: WorkMode = 'conversation';
 
 /**
- * LocalStorage 键名
+ * LocalStorage key name
  */
 export const WORK_MODE_STORAGE_KEY = 'speekium-work-mode';
