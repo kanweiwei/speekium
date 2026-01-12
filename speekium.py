@@ -98,7 +98,9 @@ ASR_MODEL = "iic/SenseVoiceSmall"  # SenseVoice model
 USE_STREAMING = True  # Stream output (speak while generating)
 
 # ===== TTS Backend =====
-TTS_BACKEND = "edge"  # Options: "edge" (online, high quality), "piper" (offline, fast)
+# TTS_BACKEND is now loaded from config, not hardcoded
+# Default fallback if config loading fails
+TTS_BACKEND = "edge"
 TTS_RATE = "+0%"  # Speed for Edge TTS: negative=slower, positive=faster, 0%=normal
 
 # ===== Edge TTS Voices (online, auto-selected based on detected language) =====
@@ -152,6 +154,27 @@ class VoiceAssistant:
         self.was_interrupted = False  # Track if last playback was interrupted
         self.mode_manager = ModeManager(RecordingMode.CONTINUOUS)  # 默认自由对话模式
         self.interrupt_audio_buffer = []  # Buffer for interrupt audio
+        self._tts_backend = None  # Cache TTS backend setting
+        self._load_tts_config()  # Load TTS config on initialization
+
+    def _load_tts_config(self):
+        """Load TTS backend and rate from config file."""
+        try:
+            from config_manager import ConfigManager
+            config = ConfigManager.load()
+            self._tts_backend = config.get("tts_backend", "edge")
+            # Update global TTS_RATE as well (used in _generate_audio_edge)
+            global TTS_RATE
+            TTS_RATE = config.get("tts_rate", "+0%")
+            logger.info("tts_config_loaded", backend=self._tts_backend, rate=TTS_RATE)
+        except Exception as e:
+            logger.warning("tts_config_load_failed", error=str(e), fallback="edge")
+            self._tts_backend = "edge"
+
+    def get_tts_backend(self):
+        """Get current TTS backend from config (refreshes on each call)."""
+        self._load_tts_config()  # Refresh to get latest config
+        return self._tts_backend
 
     def load_asr(self):
         if self.asr_model is None:
@@ -579,9 +602,16 @@ class VoiceAssistant:
         # Auto-detect language from text content for better TTS matching
         detected_lang = self.detect_text_language(text)
 
-        if TTS_BACKEND == "piper":
+        # Get TTS backend from config (not hardcoded)
+        tts_backend = self.get_tts_backend()
+
+        if tts_backend == "piper":
             return await self._generate_audio_piper(text, detected_lang)
-        else:
+        elif tts_backend == "openai":
+            # OpenAI TTS not yet implemented, fallback to Edge
+            logger.warning("openai_tts_not_implemented", fallback="edge")
+            return await self._generate_audio_edge(text, detected_lang)
+        else:  # edge or any other value defaults to edge
             return await self._generate_audio_edge(text, detected_lang)
 
     async def _generate_audio_edge(self, text, language):
@@ -868,9 +898,13 @@ class VoiceAssistant:
         if LLM_BACKEND == "ollama":
             llm_info = f"ollama ({OLLAMA_MODEL})"
         logger.info("llm_backend_info", backend=llm_info)
-        tts_info = TTS_BACKEND
-        if TTS_BACKEND == "piper":
+        # Get TTS backend from config instead of global variable
+        tts_backend = self.get_tts_backend()
+        tts_info = tts_backend
+        if tts_backend == "piper":
             tts_info = "piper (offline)"
+        elif tts_backend == "openai":
+            tts_info = "openai (online)"
         else:
             tts_info = "edge (online)"
         logger.info("tts_backend_info", backend=tts_info)
@@ -879,7 +913,7 @@ class VoiceAssistant:
         logger.info("memory_config", max_history=MAX_HISTORY)
         logger.info("clear_history_hint")
         logger.info("exit_hint")
-        
+
         # Preload models
         self.load_vad()
         self.load_asr()
