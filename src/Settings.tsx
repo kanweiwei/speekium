@@ -45,44 +45,29 @@ const OPENAI_MODELS = [
   'gpt-4o-mini',
   'gpt-4o',
   'gpt-4-turbo',
-  'gpt-4',
   'gpt-3.5-turbo',
-  'o1-mini',
-  'o1-preview',
 ];
 
 const OPENROUTER_MODELS = [
   'google/gemini-2.0-flash-exp:free',
-  'google/gemini-2.0-flash-thinking-exp:free',
   'google/gemini-2.5-flash',
-  'google/gemini-2.5-pro-preview-03-25',
   'anthropic/claude-3.5-sonnet',
   'anthropic/claude-3.5-haiku',
   'openai/gpt-4o-mini',
   'openai/gpt-4o',
-  'meta-llama/llama-3.1-70b-instruct',
-  'meta-llama/llama-3.1-8b-instruct',
 ];
 
 const OLLAMA_MODELS = [
   'qwen2.5:1.5b',
-  'qwen2.5:3b',
   'qwen2.5:7b',
-  'qwen2.5:14b',
-  'qwen2.5:32b',
   'llama3.1:8b',
-  'llama3.1:70b',
   'mistral:7b',
-  'deepseek-coder:6.7b',
 ];
 
 const CUSTOM_MODELS = [
   'gpt-3.5-turbo',
   'gpt-4',
   'llama-2-7b',
-  'llama-2-13b',
-  'vicuna-7b',
-  'wizardlm-7b',
 ];
 
 interface SettingsProps {
