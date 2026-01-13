@@ -116,6 +116,7 @@ export function Settings({
     custom: false,
   });
   const [ollamaModels, setOllamaModels] = React.useState<string[]>(OLLAMA_MODELS);
+  const [isLoadingOllamaModels, setIsLoadingOllamaModels] = React.useState(false);
 
   React.useEffect(() => {
     if (config) {
@@ -855,6 +856,7 @@ export function Settings({
                             variant="ghost"
                             size="sm"
                             onClick={async () => {
+                              setIsLoadingOllamaModels(true);
                               try {
                                 const models = await invoke<string[]>('list_ollama_models', {
                                   base_url: localConfig.ollama_base_url || 'http://localhost:11434'
@@ -865,11 +867,14 @@ export function Settings({
                               } catch (error) {
                                 console.error('[Settings] Failed to load models:', error);
                                 alert('Failed to load Ollama models. Make sure Ollama is running.');
+                              } finally {
+                                setIsLoadingOllamaModels(false);
                               }
                             }}
+                            disabled={isLoadingOllamaModels}
                             className="h-7 px-2 text-xs"
                           >
-                            <Loader2 className="h-3 w-3 mr-1" />
+                            <Loader2 className={`h-3 w-3 mr-1 ${isLoadingOllamaModels ? 'animate-spin' : ''}`} />
                             Refresh
                           </Button>
                         </div>
