@@ -117,16 +117,48 @@ export function Settings({
     setConnectionStatus('idle');
     setConnectionError('');
 
+    const backend = localConfig.llm_backend || 'ollama';
+
     try {
-      // 调用 Rust 后端的测试连接命令
-      const result = await invoke<{
-        success: boolean;
-        message?: string;
-        error?: string;
-      }>('test_ollama_connection', {
-        baseUrl: localConfig.ollama_base_url || 'http://localhost:11434',
-        model: localConfig.ollama_model || 'qwen2.5:1.5b'
-      });
+      let result: { success: boolean; message?: string; error?: string };
+
+      // 根据不同的后端类型调用不同的测试命令
+      if (backend === 'ollama') {
+        result = await invoke<{
+          success: boolean;
+          message?: string;
+          error?: string;
+        }>('test_ollama_connection', {
+          baseUrl: localConfig.ollama_base_url || 'http://localhost:11434',
+          model: localConfig.ollama_model || 'qwen2.5:1.5b'
+        });
+      } else if (backend === 'openai') {
+        result = await invoke<{
+          success: boolean;
+          message?: string;
+          error?: string;
+        }>('test_openai_connection', {
+          apiKey: localConfig.openai_api_key || '',
+          model: localConfig.openai_model || 'gpt-4o-mini'
+        });
+      } else if (backend === 'openrouter') {
+        result = await invoke<{
+          success: boolean;
+          message?: string;
+          error?: string;
+        }>('test_openrouter_connection', {
+          apiKey: localConfig.openrouter_api_key || '',
+          model: localConfig.openrouter_model || 'google/gemini-2.5-flash'
+        });
+      } else if (backend === 'claude') {
+        // Claude Code CLI 不需要测试连接，直接返回成功
+        result = {
+          success: true,
+          message: 'Claude Code CLI is available locally'
+        };
+      } else {
+        throw new Error(`Unknown backend: ${backend}`);
+      }
 
       if (result.success) {
         setConnectionStatus('success');

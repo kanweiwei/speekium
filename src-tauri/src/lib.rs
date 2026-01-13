@@ -1173,6 +1173,134 @@ async fn list_ollama_models(base_url: String) -> Result<Vec<String>, String> {
     Ok(model_names)
 }
 
+/// Test OpenAI API connection
+#[tauri::command]
+async fn test_openai_connection(api_key: String, model: String) -> Result<serde_json::Value, String> {
+    println!("🔗 测试 OpenAI 连接: model={}", model);
+
+    if api_key.is_empty() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "error": "API Key is empty. Please enter your OpenAI API key."
+        }));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let payload = serde_json::json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hi"
+            }
+        ],
+        "max_tokens": 1
+    });
+
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                println!("✅ OpenAI API 连接成功");
+                return Ok(serde_json::json!({
+                    "success": true,
+                    "message": "OpenAI API connection successful"
+                }));
+            } else {
+                let status = resp.status();
+                let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                println!("❌ OpenAI API 错误: {} - {}", status, error_text);
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": format!("API error: {} - {}", status, error_text)
+                }));
+            }
+        }
+        Err(e) => {
+            println!("❌ 连接失败: {}", e);
+            return Ok(serde_json::json!({
+                "success": false,
+                "error": format!("Connection failed: {}", e)
+            }));
+        }
+    }
+}
+
+/// Test OpenRouter API connection
+#[tauri::command]
+async fn test_openrouter_connection(api_key: String, model: String) -> Result<serde_json::Value, String> {
+    println!("🔗 测试 OpenRouter 连接: model={}", model);
+
+    if api_key.is_empty() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "error": "API Key is empty. Please enter your OpenRouter API key."
+        }));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let payload = serde_json::json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hi"
+            }
+        ],
+        "max_tokens": 1
+    });
+
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                println!("✅ OpenRouter API 连接成功");
+                return Ok(serde_json::json!({
+                    "success": true,
+                    "message": "OpenRouter API connection successful"
+                }));
+            } else {
+                let status = resp.status();
+                let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                println!("❌ OpenRouter API 错误: {} - {}", status, error_text);
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": format!("API error: {} - {}", status, error_text)
+                }));
+            }
+        }
+        Err(e) => {
+            println!("❌ 连接失败: {}", e);
+            return Ok(serde_json::json!({
+                "success": false,
+                "error": format!("Connection failed: {}", e)
+            }));
+        }
+    }
+}
+
 // ============================================================================
 // Global Shortcuts
 // ============================================================================
@@ -1378,6 +1506,8 @@ pub fn run() {
             daemon_health,
             test_ollama_connection,
             list_ollama_models,
+            test_openai_connection,
+            test_openrouter_connection,
             type_text_command,
             // Database commands
             db_create_session,
