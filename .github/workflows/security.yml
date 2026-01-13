@@ -73,7 +73,7 @@ jobs:
           uv run safety check --json -o safety-report.json 2>/dev/null || true
 
           # Safety 3.7.0 may not output proper JSON, check exit code and output
-          if uv run safety check 2>&1 | grep -q "No known security vulnerabilities found"; then
+          if uv run safety check 2>&1 | grep -q "No known security vulnerabilities"; then
             echo "✅ No vulnerabilities found"
             echo "safety_vulnerabilities=0" >> $GITHUB_OUTPUT
             exit 0
