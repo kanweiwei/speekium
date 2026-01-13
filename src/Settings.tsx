@@ -869,7 +869,8 @@ export function Settings({
                             }}
                             className="h-7 px-2 text-xs"
                           >
-                            🔄 Refresh
+                            <Loader2 className="h-3 w-3 mr-1" />
+                            Refresh
                           </Button>
                         </div>
                         {customModelInput.ollama ? (
