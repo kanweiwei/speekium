@@ -12,7 +12,6 @@ import { historyAPI } from './useTauriAPI';
 import { useWorkMode } from './contexts/WorkModeContext';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Mic,
   Settings as SettingsIcon,
@@ -127,14 +126,12 @@ function App() {
   const {
     isRecording,
     isProcessing,
-    config,
     messages,
     startRecording,
     forceStopRecording,
     chatGenerator,
     clearHistory,
     loadConfig,
-    saveConfig,
     generateTTS,
     addMessage,
     updateLastAssistantMessage,
@@ -633,7 +630,6 @@ function App() {
         onChange={setTextInput}
         onSend={handleSendText}
         isProcessing={isProcessing}
-        isStreaming={isStreaming}
       />
 
       {/* 设置弹窗 */}

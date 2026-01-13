@@ -4,7 +4,6 @@
  * Displays the current save status with visual feedback
  */
 
-import React from 'react';
 import { Check, AlertCircle, Loader2, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

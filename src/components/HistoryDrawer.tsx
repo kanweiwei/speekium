@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Clock, Trash2, MessageSquare, ChevronLeft, PenSquare, Star, StarOff, Filter } from 'lucide-react';
+import { X, Clock, Trash2, MessageSquare, ChevronLeft, PenSquare, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { historyAPI, Session, HistoryMessage } from '../useTauriAPI';
@@ -49,10 +49,11 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
       console.log('[History] Sessions:', result?.items);
       setSessions(result?.items || []);
       console.log('[History] ===== Load completed successfully');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[History] ===== Load failed with error:', error);
-      console.error('[History] Error type:', error?.constructor?.name);
-      console.error('[History] Error message:', error?.message);
+      const err = error as Error;
+      console.error('[History] Error type:', err?.constructor?.name);
+      console.error('[History] Error message:', err?.message);
       console.error('[History] Error details:', JSON.stringify(error));
       setSessions([]);
     } finally {
@@ -112,11 +113,12 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
         );
       }
       console.log('[Favorite] ===== Toggle completed successfully');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Favorite] ===== Toggle failed with error:', error);
-      console.error('[Favorite] Error type:', error?.constructor?.name);
-      console.error('[Favorite] Error message:', error?.message);
-      console.error('[Favorite] Error stack:', error?.stack);
+      const err = error as Error;
+      console.error('[Favorite] Error type:', err?.constructor?.name);
+      console.error('[Favorite] Error message:', err?.message);
+      console.error('[Favorite] Error stack:', err?.stack);
     }
   };
 
