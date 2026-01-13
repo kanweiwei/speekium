@@ -50,31 +50,36 @@ class HotkeyManager:
         """
         from pynput import keyboard
 
-        modifiers = config.get('modifiers', [])
-        key_code = config.get('key', 'Digit1')
+        modifiers = config.get("modifiers", [])
+        key_code = config.get("key", "Digit1")
 
         # Determine main modifier key
         modifier_key = None
-        if 'CmdOrCtrl' in modifiers:
+        if "CmdOrCtrl" in modifiers:
             modifier_key = keyboard.Key.cmd if self.is_macos else keyboard.Key.ctrl
-        elif 'Shift' in modifiers:
+        elif "Shift" in modifiers:
             modifier_key = keyboard.Key.shift
-        elif 'Alt' in modifiers:
+        elif "Alt" in modifiers:
             modifier_key = keyboard.Key.alt
 
         # Parse main key
         main_key_char = None
-        if key_code.startswith('Digit'):
-            main_key_char = key_code.replace('Digit', '')
-        elif key_code.startswith('Key'):
-            main_key_char = key_code.replace('Key', '').lower()
+        if key_code.startswith("Digit"):
+            main_key_char = key_code.replace("Digit", "")
+        elif key_code.startswith("Key"):
+            main_key_char = key_code.replace("Key", "").lower()
         else:
             # Special key
             main_key_char = key_code.lower()
 
         return (modifier_key, main_key_char)
 
-    def start(self, hotkey_config: dict | None = None, on_press: Callable | None = None, on_release: Callable | None = None):
+    def start(
+        self,
+        hotkey_config: dict | None = None,
+        on_press: Callable | None = None,
+        on_release: Callable | None = None,
+    ):
         """
         Start global hotkey listener
 
@@ -90,11 +95,7 @@ class HotkeyManager:
 
             # Set default hotkey config if not provided
             if hotkey_config is None:
-                hotkey_config = {
-                    'modifiers': ['CmdOrCtrl'],
-                    'key': 'Digit1',
-                    'displayName': '⌘1'
-                }
+                hotkey_config = {"modifiers": ["CmdOrCtrl"], "key": "Digit1", "displayName": "⌘1"}
 
             self.current_hotkey_config = hotkey_config
             self.on_hotkey_press = on_press
@@ -104,20 +105,21 @@ class HotkeyManager:
                 from pynput import keyboard
 
                 # Parse hotkey configuration
-                self.active_modifier_key, self.active_main_key = self.parse_hotkey_config(hotkey_config)
+                self.active_modifier_key, self.active_main_key = self.parse_hotkey_config(
+                    hotkey_config
+                )
 
                 def on_key_press(key):
                     try:
                         # Update modifier key state
                         is_modifier = False
-                        if self.active_modifier_key:
-                            if key == self.active_modifier_key:
-                                self.modifier_pressed = True
-                                is_modifier = True
+                        if self.active_modifier_key and key == self.active_modifier_key:
+                            self.modifier_pressed = True
+                            is_modifier = True
 
                         # Update main key state
                         is_main_key = False
-                        if hasattr(key, 'char') and key.char == self.active_main_key:
+                        if hasattr(key, "char") and key.char == self.active_main_key:
                             self.main_key_pressed = True
                             is_main_key = True
 
@@ -130,8 +132,10 @@ class HotkeyManager:
                 def on_key_release(key):
                     try:
                         # Update modifier key state
-                        released_modifier = self.active_modifier_key and key == self.active_modifier_key
-                        released_main = hasattr(key, 'char') and key.char == self.active_main_key
+                        released_modifier = (
+                            self.active_modifier_key and key == self.active_modifier_key
+                        )
+                        released_main = hasattr(key, "char") and key.char == self.active_main_key
 
                         if released_modifier:
                             self.modifier_pressed = False

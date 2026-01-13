@@ -51,6 +51,10 @@
   "lint-staged": {
     "*.{ts,tsx}": [
       "bash -c 'npx tsc --noEmit'"
+    ],
+    "*.py": [
+      "uv run ruff check --fix",
+      "uv run ruff format"
     ]
   }
 }

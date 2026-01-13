@@ -143,14 +143,14 @@ class SpeekiumDaemon:
 
         # Read config to check work mode
         from config_manager import ConfigManager
+
         config = ConfigManager.load()
         work_mode = config.get("work_mode", "conversation")
-
 
         # Determine auto_chat based on work_mode
         # conversation mode: auto_chat=True (trigger LLM + TTS)
         # text mode: auto_chat=False (only return ASR text)
-        auto_chat = (work_mode == "conversation")
+        auto_chat = work_mode == "conversation"
 
         self._log(f"🎤 PTT: Work mode = {work_mode}, auto_chat = {auto_chat}")
 
@@ -159,8 +159,7 @@ class SpeekiumDaemon:
             return
 
         future = asyncio.run_coroutine_threadsafe(
-            self.handle_record_stop(auto_chat=auto_chat, use_tts=True),
-            self.loop
+            self.handle_record_stop(auto_chat=auto_chat, use_tts=True), self.loop
         )
 
         # Handle result in another thread to not block
@@ -203,17 +202,16 @@ class SpeekiumDaemon:
 
                 # Load hotkey config from settings
                 config = ConfigManager.load()
-                hotkey_config = config.get('push_to_talk_hotkey', {
-                    'modifiers': ['CmdOrCtrl'],
-                    'key': 'Digit1',
-                    'displayName': '⌘1'
-                })
+                hotkey_config = config.get(
+                    "push_to_talk_hotkey",
+                    {"modifiers": ["CmdOrCtrl"], "key": "Digit1", "displayName": "⌘1"},
+                )
 
                 self.hotkey_manager = HotkeyManager()
                 self.hotkey_manager.start(
                     hotkey_config=hotkey_config,
                     on_press=self._on_hotkey_press,
-                    on_release=self._on_hotkey_release
+                    on_release=self._on_hotkey_release,
                 )
                 self._log(f"✅ PTT 快捷键监听已启动 ({hotkey_config.get('displayName', '⌘1')})")
             except Exception as e:
@@ -237,6 +235,7 @@ class SpeekiumDaemon:
                 # Use VAD auto-detection - send recording event when voice detected
                 def on_speech():
                     self._emit_ptt_event("recording")
+
                 audio = self.assistant.record_with_vad(on_speech_detected=on_speech)
             else:
                 # Push-to-talk recording mode - send recording event
@@ -287,7 +286,7 @@ class SpeekiumDaemon:
                 channels=1,
                 dtype="float32",
                 callback=audio_callback,
-                blocksize=512
+                blocksize=512,
             )
             self.ptt_stream.start()
 
@@ -321,6 +320,7 @@ class SpeekiumDaemon:
                 return {"success": False, "error": "No audio recorded"}
 
             import numpy as np
+
             audio = np.concatenate(self.ptt_audio_frames, axis=0)
             audio = audio[:, 0]  # Convert to 1D array
 
@@ -336,7 +336,12 @@ class SpeekiumDaemon:
             self._log(f"✅ 识别完成: '{text}' ({language})")
 
             if not text or not text.strip():
-                return {"success": True, "text": "", "language": language, "message": "No speech detected"}
+                return {
+                    "success": True,
+                    "text": "",
+                    "language": language,
+                    "message": "No speech detected",
+                }
 
             # Emit user message for frontend display
             self._emit_ptt_event("user_message", {"text": text})
@@ -355,7 +360,7 @@ class SpeekiumDaemon:
                 try:
                     self.ptt_stream.stop()
                     self.ptt_stream.close()
-                except:
+                except Exception:
                     pass
                 self.ptt_stream = None
             traceback.print_exc(file=sys.stderr)
@@ -380,7 +385,9 @@ class SpeekiumDaemon:
                 if use_tts:
                     audio_path = await self.assistant.generate_audio(response)
                     if audio_path:
-                        self._emit_ptt_event("audio_chunk", {"audio_path": audio_path, "text": response})
+                        self._emit_ptt_event(
+                            "audio_chunk", {"audio_path": audio_path, "text": response}
+                        )
                         await self._play_audio(audio_path)
             else:
                 # Stream LLM + TTS generation
@@ -398,7 +405,9 @@ class SpeekiumDaemon:
                                 audio_path = await self.assistant.generate_audio(sentence)
                                 if audio_path:
                                     self._log(f"🔊 TTS completed: {audio_path}")
-                                    self._emit_ptt_event("audio_chunk", {"audio_path": audio_path, "text": sentence})
+                                    self._emit_ptt_event(
+                                        "audio_chunk", {"audio_path": audio_path, "text": sentence}
+                                    )
                                     await self._play_audio(audio_path)
                             except Exception as tts_error:
                                 self._log(f"⚠️ TTS generation failed: {tts_error}")
@@ -555,9 +564,10 @@ class SpeekiumDaemon:
             if system == "Darwin":  # macOS
                 # Use afplay (built-in macOS command)
                 process = await asyncio.create_subprocess_exec(
-                    "afplay", audio_path,
+                    "afplay",
+                    audio_path,
                     stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL
+                    stderr=asyncio.subprocess.DEVNULL,
                 )
                 self._log(f"🔊 Playing audio: {audio_path}")
                 await process.wait()  # Wait for playback to complete
@@ -566,18 +576,23 @@ class SpeekiumDaemon:
                 # Try mpg123 or ffplay
                 try:
                     process = await asyncio.create_subprocess_exec(
-                        "mpg123", "-q", audio_path,
+                        "mpg123",
+                        "-q",
+                        audio_path,
                         stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL
+                        stderr=asyncio.subprocess.DEVNULL,
                     )
                     self._log(f"🔊 Playing audio: {audio_path}")
                     await process.wait()
                 except FileNotFoundError:
                     # Fallback to ffplay if mpg123 is not available
                     process = await asyncio.create_subprocess_exec(
-                        "ffplay", "-nodisp", "-autoexit", audio_path,
+                        "ffplay",
+                        "-nodisp",
+                        "-autoexit",
+                        audio_path,
                         stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL
+                        stderr=asyncio.subprocess.DEVNULL,
                     )
                     self._log(f"🔊 Playing audio: {audio_path}")
                     await process.wait()
@@ -585,7 +600,7 @@ class SpeekiumDaemon:
             elif system == "Windows":
                 # Use Windows Media Player with duration detection
                 # Convert Unix path to Windows path if needed
-                win_path = os.path.abspath(audio_path).replace('/', '\\')
+                win_path = os.path.abspath(audio_path).replace("/", "\\")
 
                 # PowerShell script to play audio and wait for completion
                 ps_script = (
@@ -602,9 +617,11 @@ class SpeekiumDaemon:
                 )
 
                 process = await asyncio.create_subprocess_exec(
-                    "powershell", "-c", ps_script,
+                    "powershell",
+                    "-c",
+                    ps_script,
                     stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL
+                    stderr=asyncio.subprocess.DEVNULL,
                 )
                 self._log(f"🔊 Playing audio: {audio_path}")
                 await process.wait()
@@ -668,7 +685,7 @@ class SpeekiumDaemon:
                 self._log("❌ HotkeyManager not initialized")
                 return {"success": False, "error": "HotkeyManager not initialized"}
 
-            display_name = hotkey_config.get('displayName', 'unknown')
+            display_name = hotkey_config.get("displayName", "unknown")
             self._log(f"📥 收到热键更新请求: {display_name}")
 
             # Call HotkeyManager update_hotkey method
@@ -682,6 +699,7 @@ class SpeekiumDaemon:
                 return {"success": False, "error": error_message}
         except Exception as e:
             import traceback
+
             self._log(f"❌ 热键更新失败: {e}")
             self._log(f"❌ Stack trace: {traceback.format_exc()}")
             return {"success": False, "error": str(e)}
@@ -712,8 +730,7 @@ class SpeekiumDaemon:
             return await self.handle_record_start()
         elif command == "record_stop":
             return await self.handle_record_stop(
-                args.get("auto_chat", True),
-                args.get("use_tts", True)
+                args.get("auto_chat", True), args.get("use_tts", True)
             )
         elif command == "chat":
             return await self.handle_chat(args.get("text", ""))

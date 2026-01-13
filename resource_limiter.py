@@ -136,9 +136,7 @@ class ResourceLimiter:
             )
             return False
         except Exception as e:
-            logger.error(
-                "resource_limits_failed", error=str(e), error_type=type(e).__name__
-            )
+            logger.error("resource_limits_failed", error=str(e), error_type=type(e).__name__)
             return False
 
     @staticmethod
@@ -213,7 +211,9 @@ class ResourceLimiter:
         return decorator
 
     @staticmethod
-    async def with_timeout_async(coro: Any, seconds: int, operation_name: str = "async_operation") -> Any:
+    async def with_timeout_async(
+        coro: Any, seconds: int, operation_name: str = "async_operation"
+    ) -> Any:
         """
         异步函数超时保护（跨平台）
 
@@ -237,7 +237,7 @@ class ResourceLimiter:
         """
         try:
             return await asyncio.wait_for(coro, timeout=seconds)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as err:
             logger.error(
                 "async_operation_timeout",
                 operation=operation_name,
@@ -245,7 +245,7 @@ class ResourceLimiter:
             )
             raise TimeoutError(
                 f"Async operation '{operation_name}' timed out after {seconds} seconds"
-            )
+            ) from err
 
     @staticmethod
     def get_current_usage() -> dict[str, Any]:
@@ -274,9 +274,7 @@ class ResourceLimiter:
                 "cpu_time_total": usage.ru_utime + usage.ru_stime,
             }
         except Exception as e:
-            logger.warning(
-                "resource_usage_unavailable", error=str(e), error_type=type(e).__name__
-            )
+            logger.warning("resource_usage_unavailable", error=str(e), error_type=type(e).__name__)
             return {}
 
 

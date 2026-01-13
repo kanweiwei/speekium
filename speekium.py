@@ -164,6 +164,7 @@ class VoiceAssistant:
         """Load TTS backend and rate from config file."""
         try:
             from config_manager import ConfigManager
+
             config = ConfigManager.load()
             self._tts_backend = config.get("tts_backend", "edge")
             # Update global TTS_RATE as well (used in _generate_audio_edge)
@@ -181,7 +182,8 @@ class VoiceAssistant:
 
     def load_asr(self):
         if self.asr_model is None:
-            set_component("ASR"); logger.info("model_loading", model="SenseVoice")
+            set_component("ASR")
+            logger.info("model_loading", model="SenseVoice")
             from funasr import AutoModel
 
             self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
@@ -190,7 +192,8 @@ class VoiceAssistant:
 
     def load_vad(self):
         if self.vad_model is None:
-            set_component("VAD"); logger.info("model_loading", model="VAD")
+            set_component("VAD")
+            logger.info("model_loading", model="VAD")
             # Security note: trust_repo=True is required for official Silero VAD model
             # This is a verified, official PyTorch Hub repository
             self.vad_model, _ = torch.hub.load(  # nosec B614
@@ -204,7 +207,8 @@ class VoiceAssistant:
 
     def load_llm(self):
         if self.llm_backend is None:
-            set_component("LLM"); logger.info("backend_initializing", backend=LLM_BACKEND)
+            set_component("LLM")
+            logger.info("backend_initializing", backend=LLM_BACKEND)
             if LLM_BACKEND == "ollama":
                 self.llm_backend = create_backend(
                     LLM_BACKEND,
@@ -415,7 +419,8 @@ class VoiceAssistant:
 
     def transcribe(self, audio):
         """Transcribe audio and detect language. Returns (text, language)."""
-        set_component("ASR"); logger.info("asr_processing")
+        set_component("ASR")
+        logger.info("asr_processing")
         model = self.load_asr()
 
         # Security: Use secure temp file
