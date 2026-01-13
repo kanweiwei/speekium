@@ -561,13 +561,13 @@ export function Settings({
                         <Label htmlFor="openrouter-model" className="text-foreground">Model</Label>
                         <Input
                           id="openrouter-model"
-                          value={localConfig.openrouter_model || 'anthropic/claude-3.5-sonnet'}
+                          value={localConfig.openrouter_model || 'google/gemini-2.5-flash'}
                           onChange={(e) => updateConfig('openrouter_model', e.target.value)}
-                          placeholder="anthropic/claude-3.5-sonnet"
+                          placeholder="google/gemini-2.5-flash"
                           className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Any model from OpenRouter (e.g. anthropic/claude-3.5-sonnet)
+                          Any model from OpenRouter (e.g. google/gemini-2.5-flash)
                         </p>
                       </div>
                     </>

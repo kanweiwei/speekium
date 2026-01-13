@@ -88,7 +88,7 @@ OPENAI_MODEL = "gpt-4o-mini"  # Model: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
 
 # OpenRouter config (only used when LLM_BACKEND="openrouter")
 OPENROUTER_API_KEY = ""  # Get from https://openrouter.ai/keys
-OPENROUTER_MODEL = "anthropic/claude-3.5-sonnet"  # Any model from OpenRouter
+OPENROUTER_MODEL = "google/gemini-2.5-flash"  # Any model from OpenRouter
 
 # ===== Conversation Memory =====
 MAX_HISTORY = 10  # Max conversation turns to keep (each turn = user + assistant)
