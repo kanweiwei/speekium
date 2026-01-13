@@ -124,6 +124,7 @@
       "autoTTS": "Auto Play",
       "language": "Language",
       "theme": "Theme",
+      "toggleWindow": "Show/Hide Window",
       "serviceStatus": "Service Status",
       "running": "Running"
     },
@@ -159,6 +160,7 @@
       "theme": "Click icon to switch: Light → Dark → System",
       "language": "Click icon to switch language: 中文 ↔ English",
       "ptt": "Press and hold to record, release to stop and send",
+      "toggleWindow": "Global shortcut to show or hide main window",
       "servicesRunning": "All services are running normally",
       "clearHistory": "Clear all history (irreversible)"
     },

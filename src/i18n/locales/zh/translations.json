@@ -124,6 +124,7 @@
       "autoTTS": "自动播放",
       "language": "语言",
       "theme": "主题",
+      "toggleWindow": "显示/隐藏窗口",
       "serviceStatus": "服务状态",
       "running": "运行中"
     },
@@ -159,6 +160,7 @@
       "theme": "点击图标切换：浅色 → 深色 → 跟随系统",
       "language": "点击图标切换语言：中文 ↔ English",
       "ptt": "按住开始录音，松开停止并发送",
+      "toggleWindow": "全局快捷键，用于显示或隐藏主窗口",
       "servicesRunning": "所有服务正常运行",
       "clearHistory": "清空所有历史记录（不可恢复）"
     },

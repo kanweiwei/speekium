@@ -1055,7 +1055,7 @@ export function Settings({
                       <div className="space-y-0.5">
                         <Label className="text-foreground">{t('settings.fields.toggleWindow')}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Global shortcut to show or hide main window
+                          {t('settings.hints.toggleWindow')}
                         </p>
                       </div>
                       <kbd className="px-3 py-1.5 text-xs font-mono font-semibold text-foreground bg-muted/80 border border-border rounded-md shadow-sm">
