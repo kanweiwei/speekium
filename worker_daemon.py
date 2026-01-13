@@ -199,12 +199,23 @@ class SpeekiumDaemon:
             # Initialize and start hotkey manager for PTT
             try:
                 from hotkey_manager import HotkeyManager
+                from config_manager import ConfigManager
+
+                # Load hotkey config from settings
+                config = ConfigManager.load()
+                hotkey_config = config.get('push_to_talk_hotkey', {
+                    'modifiers': ['CmdOrCtrl'],
+                    'key': 'Digit1',
+                    'displayName': '⌘1'
+                })
+
                 self.hotkey_manager = HotkeyManager()
                 self.hotkey_manager.start(
+                    hotkey_config=hotkey_config,
                     on_press=self._on_hotkey_press,
                     on_release=self._on_hotkey_release
                 )
-                self._log("✅ PTT 快捷键监听已启动 (Cmd+1)")
+                self._log(f"✅ PTT 快捷键监听已启动 ({hotkey_config.get('displayName', '⌘1')})")
             except Exception as e:
                 self._log(f"⚠️ PTT 快捷键监听启动失败: {e}")
                 # Continue without hotkey - can still use commands
