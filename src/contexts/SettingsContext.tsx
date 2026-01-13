@@ -184,7 +184,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   /**
    * Update hotkey configuration
    */
-  const updateHotkey = useCallback((hotkey: HotkeyConfig) => {
+  const updateHotkey = useCallback(async (hotkey: HotkeyConfig) => {
     setConfig(prev => {
       if (!prev) return prev;
 
@@ -195,6 +195,17 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
       // Trigger auto-save
       debouncedSave(newConfig);
+
+      // Also update hotkey in backend immediately
+      invoke('update_hotkey', { hotkeyConfig: hotkey })
+        .then((result: { success: boolean; error?: string }) => {
+          if (!result.success) {
+            console.error('[Settings] Failed to update hotkey:', result.error);
+          }
+        })
+        .catch((error) => {
+          console.error('[Settings] Failed to update hotkey:', error);
+        });
 
       return newConfig;
     });

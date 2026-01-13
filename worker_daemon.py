@@ -650,6 +650,22 @@ class SpeekiumDaemon:
             self._log(f"❌ 配置保存失败: {e}")
             return {"success": False, "error": str(e)}
 
+    async def handle_update_hotkey(self, hotkey_config: dict) -> dict:
+        """更新热键配置"""
+        try:
+            if not self.hotkey_manager:
+                return {"success": False, "error": "HotkeyManager not initialized"}
+
+            self._log(f"📥 收到热键更新请求: {hotkey_config.get('displayName', 'unknown')}")
+
+            # 调用 HotkeyManager 的 update_hotkey 方法
+            self.hotkey_manager.update_hotkey(hotkey_config)
+
+            return {"success": True}
+        except Exception as e:
+            self._log(f"❌ 热键更新失败: {e}")
+            return {"success": False, "error": str(e)}
+
     async def handle_health(self) -> dict:
         """健康检查"""
         return {
@@ -696,6 +712,8 @@ class SpeekiumDaemon:
         elif command == "save_config":
             # args is directly the config object (Rust side has processed it)
             return await self.handle_save_config(args)
+        elif command == "update_hotkey":
+            return await self.handle_update_hotkey(args)
         elif command == "health":
             return await self.handle_health()
         elif command == "exit":

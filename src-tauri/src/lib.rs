@@ -1037,6 +1037,16 @@ async fn save_config(config: serde_json::Value) -> Result<serde_json::Value, Str
 }
 
 #[tauri::command]
+async fn update_hotkey(hotkey_config: serde_json::Value) -> Result<serde_json::Value, String> {
+    println!("⌨️  调用守护进程: update_hotkey, hotkey = {}", hotkey_config.get("displayName").and_then(|v| v.as_str()).unwrap_or("unknown"));
+
+    let result = call_daemon("update_hotkey", hotkey_config)?;
+
+    serde_json::from_value(result)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+#[tauri::command]
 async fn daemon_health() -> Result<HealthResult, String> {
     // Check if there is an ongoing streaming operation
     if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
@@ -1580,6 +1590,7 @@ pub fn run() {
             generate_tts,
             load_config,
             save_config,
+            update_hotkey,
             daemon_health,
             test_ollama_connection,
             list_ollama_models,
