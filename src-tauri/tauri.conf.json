@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Speerium",
+  "productName": "Speekium",
   "version": "0.1.0",
   "identifier": "com.speekium.app",
   "build": {
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Speerium",
+        "title": "Speekium",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
@@ -43,11 +43,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "publisher": "Speerium",
-    "copyright": "Copyright © 2025 Speekium",
+    "publisher": "Speekium",
+    "copyright": "Copyright © 2026 Speekium",
     "category": "Productivity",
     "shortDescription": "AI-powered voice assistant",
-    "longDescription": "Speerium is an intelligent voice assistant powered by AI, featuring speech recognition, text-to-speech, and natural language conversations.",
+    "longDescription": "Speekium is an open-source voice assistant that respects your privacy, featuring speech recognition, text-to-speech, and AI-powered conversations.",
     "macOS": {
       "minimumSystemVersion": "10.13",
       "entitlements": null,
