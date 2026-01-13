@@ -1653,19 +1653,18 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app_handle, event| {
-            match event {
-                tauri::RunEvent::Reopen { .. } => {
-                    // macOS: Show main window when dock icon is clicked
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+            // macOS: Show main window when dock icon is clicked
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = &event {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
-                tauri::RunEvent::ExitRequested { .. } => {
-                    // Clean up daemon on app exit
-                    cleanup_daemon();
-                }
-                _ => {}
+            }
+
+            // Clean up daemon on app exit
+            if let tauri::RunEvent::ExitRequested { .. } = &event {
+                cleanup_daemon();
             }
         });
 }
