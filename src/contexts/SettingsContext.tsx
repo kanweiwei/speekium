@@ -23,6 +23,8 @@ interface SettingsContextValue {
   updateConfigBatch: (updates: Record<string, any>) => void;
   /** Manually save current config */
   saveConfig: () => Promise<void>;
+  /** Update hotkey configuration and auto-save */
+  updateHotkey: (hotkey: HotkeyConfig) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
@@ -179,6 +181,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [config]);
 
+  /**
+   * Update hotkey configuration
+   */
+  const updateHotkey = useCallback((hotkey: HotkeyConfig) => {
+    setConfig(prev => {
+      if (!prev) return prev;
+
+      const newConfig = {
+        ...prev,
+        push_to_talk_hotkey: hotkey,
+      };
+
+      // Trigger auto-save
+      debouncedSave(newConfig);
+
+      return newConfig;
+    });
+  }, [debouncedSave]);
+
   const contextValue: SettingsContextValue = {
     config,
     saveStatus,
@@ -186,6 +207,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     updateConfig,
     updateConfigBatch,
     saveConfig,
+    updateHotkey,
   };
 
   return (
