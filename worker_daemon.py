@@ -80,7 +80,7 @@ set_resource_limits()
 
 
 class SpeekiumDaemon:
-    """Speekium 守护进程核心类"""
+    """Speekium daemon core class"""
 
     def __init__(self):
         self.assistant = None
@@ -177,7 +177,7 @@ class SpeekiumDaemon:
         future.add_done_callback(handle_result)
 
     async def initialize(self):
-        """预加载所有模型（只在启动时执行一次）"""
+        """Preload all models (only executed once at startup)"""
         try:
             # Store event loop reference for PTT callbacks (called from different thread)
             self.loop = asyncio.get_running_loop()
@@ -229,7 +229,7 @@ class SpeekiumDaemon:
             return False
 
     async def handle_record(self, mode: str = "push-to-talk", duration: float = 3.0) -> dict:
-        """处理录音命令"""
+        """Handle recording command"""
         try:
             self._log(f"🎤 开始录音 (mode={mode}, duration={duration}s)...")
 
@@ -413,7 +413,7 @@ class SpeekiumDaemon:
             self._emit_ptt_event("error", {"error": str(e)})
 
     async def handle_chat(self, text: str) -> dict:
-        """处理 LLM 对话命令（非流式）"""
+        """Handle LLM chat command (non-streaming)"""
         try:
             self._log(f"💬 LLM 对话: {text[:50]}...")
 
@@ -430,7 +430,7 @@ class SpeekiumDaemon:
             return {"success": False, "error": str(e)}
 
     async def handle_chat_stream(self, text: str) -> None:
-        """处理 LLM 流式对话命令
+        """Handle LLM streaming chat command
 
         流式响应格式：
         - 每个句子一行 JSON：{"type": "chunk", "content": "句子内容"}
@@ -616,7 +616,7 @@ class SpeekiumDaemon:
             self._log(f"⚠️ Audio playback failed: {e}")
 
     async def handle_tts(self, text: str, language: str | None = None) -> dict:
-        """处理 TTS 生成命令"""
+        """Handle TTS generation command"""
         try:
             self._log(f"🔊 TTS 生成: {text[:50]}...")
 
@@ -634,7 +634,7 @@ class SpeekiumDaemon:
             return {"success": False, "error": str(e)}
 
     async def handle_config(self) -> dict:
-        """处理配置获取命令"""
+        """Handle get config command"""
         try:
             from config_manager import ConfigManager
 
@@ -645,7 +645,7 @@ class SpeekiumDaemon:
             return {"success": False, "error": str(e)}
 
     async def handle_save_config(self, config: dict) -> dict:
-        """保存配置"""
+        """Save configuration"""
         try:
             from config_manager import ConfigManager
 
@@ -662,7 +662,7 @@ class SpeekiumDaemon:
             return {"success": False, "error": str(e)}
 
     async def handle_update_hotkey(self, hotkey_config: dict) -> dict:
-        """更新热键配置"""
+        """Update hotkey configuration"""
         try:
             if not self.hotkey_manager:
                 self._log("❌ HotkeyManager not initialized")
@@ -671,7 +671,7 @@ class SpeekiumDaemon:
             display_name = hotkey_config.get('displayName', 'unknown')
             self._log(f"📥 收到热键更新请求: {display_name}")
 
-            # 调用 HotkeyManager 的 update_hotkey 方法
+            # Call HotkeyManager update_hotkey method
             success, error_message = self.hotkey_manager.update_hotkey(hotkey_config)
 
             if success:
@@ -687,7 +687,7 @@ class SpeekiumDaemon:
             return {"success": False, "error": str(e)}
 
     async def handle_health(self) -> dict:
-        """健康检查"""
+        """Health check"""
         return {
             "success": True,
             "status": "healthy",
@@ -700,7 +700,7 @@ class SpeekiumDaemon:
         }
 
     async def handle_command(self, command: str, args: dict) -> dict:
-        """路由命令到对应的处理函数
+        """Route commands to corresponding handler functions
 
         注意：chat_stream 是特殊命令，不返回 dict，而是直接输出流式数据
         """
@@ -744,7 +744,7 @@ class SpeekiumDaemon:
             return {"success": False, "error": f"Unknown command: {command}"}
 
     async def run_daemon(self):
-        """守护进程主循环"""
+        """Daemon main loop"""
         # Initialize
         if not await self.initialize():
             self._log("❌ 初始化失败，退出")
@@ -800,7 +800,7 @@ class SpeekiumDaemon:
 
 
 def main():
-    """主入口"""
+    """Main entry point"""
     # Check if running in daemon mode
     if len(sys.argv) > 1 and sys.argv[1] == "daemon":
         daemon = SpeekiumDaemon()

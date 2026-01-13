@@ -647,7 +647,7 @@ function App() {
         workMode={workMode}
         onWorkModeChange={(mode) => {
           setWorkMode(mode, 'settings');
-          // 显示 Toast 通知
+          // Show toast notification
           setToast({
             show: true,
             mode,
