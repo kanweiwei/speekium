@@ -10,6 +10,7 @@ import { WorkModeToast } from './components/WorkModeToast';
 import { CollapsibleInput } from './components/CollapsibleInput';
 import { historyAPI } from './useTauriAPI';
 import { useWorkMode } from './contexts/WorkModeContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -462,7 +463,8 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
+    <SettingsProvider>
+      <div className="flex flex-col h-screen bg-background text-foreground">
       {/* 顶栏 */}
       <header className="h-14 border-b border-border/50 bg-background/80 backdrop-blur-xl flex items-center justify-between px-4 sticky top-0 z-40">
         {/* 左侧按钮组 */}
@@ -630,8 +632,6 @@ function App() {
       <Settings
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        config={config}
-        onSave={saveConfig}
         autoTTS={autoTTS}
         onAutoTTSChange={setAutoTTS}
         recordMode={recordMode}
@@ -673,7 +673,8 @@ function App() {
         onClose={() => setIsNewSessionDialogOpen(false)}
         onCreate={handleNewSession}
       />
-    </div>
+      </div>
+    </SettingsProvider>
   );
 }
 

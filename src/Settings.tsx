@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/select';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { SaveStatusIndicator } from '@/components/SaveStatusIndicator';
+import { useSettings } from '@/contexts/SettingsContext';
 import {
   Bot,
   Mic,
@@ -74,8 +76,6 @@ const CUSTOM_MODELS = [
 interface SettingsProps {
   isOpen: boolean;
   onClose: () => void;
-  config: Record<string, any> | null;
-  onSave: (config: Record<string, any>) => Promise<void>;
   autoTTS?: boolean;
   onAutoTTSChange?: (value: boolean) => void;
   recordMode?: 'push-to-talk' | 'continuous';
@@ -90,8 +90,6 @@ type SettingsCategory = 'assistant' | 'voice-recognition' | 'ai-model' | 'tts' |
 export function Settings({
   isOpen,
   onClose,
-  config,
-  onSave,
   autoTTS,
   onAutoTTSChange,
   recordMode,
@@ -101,8 +99,8 @@ export function Settings({
   onClearHistory,
 }: SettingsProps) {
   const { t } = useTranslation();
+  const { config, updateConfig, saveStatus, saveError } = useSettings();
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>({});
-  const [isSaving, setIsSaving] = React.useState(false);
   const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>('assistant');
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [isTestingConnection, setIsTestingConnection] = React.useState(false);
@@ -135,20 +133,10 @@ export function Settings({
     };
   }, [previewAudio]);
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await onSave(localConfig);
-      onClose();
-    } catch (error) {
-      console.error('Failed to save config:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const updateConfig = (key: string, value: any) => {
+  const updateLocalConfig = (key: string, value: any) => {
     setLocalConfig(prev => ({ ...prev, [key]: value }));
+    // Trigger auto-save through context
+    updateConfig(key, value);
   };
 
   const handleTestConnection = async () => {
@@ -423,7 +411,7 @@ export function Settings({
                     <textarea
                       id="system-prompt"
                       value={localConfig.system_prompt || ''}
-                      onChange={(e) => updateConfig('system_prompt', e.target.value)}
+                      onChange={(e) => updateLocalConfig('system_prompt', e.target.value)}
                       placeholder={t('settings.placeholders.systemPrompt')}
                       className="flex min-h-[120px] w-full rounded-lg border border-border bg-muted/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     />
@@ -441,7 +429,7 @@ export function Settings({
                     </div>
                     <Slider
                       value={[localConfig.max_history || 10]}
-                      onValueChange={([value]) => updateConfig('max_history', Math.round(value))}
+                      onValueChange={([value]) => updateLocalConfig('max_history', Math.round(value))}
                       min={5}
                       max={50}
                       step={5}
@@ -466,7 +454,7 @@ export function Settings({
                       value={localConfig.work_mode || workMode}
                       onValueChange={(v) => {
                         // 同时更新 localConfig 和调用 onWorkModeChange
-                        updateConfig('work_mode', v);
+                        updateLocalConfig('work_mode', v);
                         onWorkModeChange?.(v as 'conversation' | 'text');
                       }}
                     >
@@ -529,7 +517,7 @@ export function Settings({
                     </div>
                     <Slider
                       value={[localConfig.vad_threshold || 0.5]}
-                      onValueChange={([value]) => updateConfig('vad_threshold', value)}
+                      onValueChange={([value]) => updateLocalConfig('vad_threshold', value)}
                       min={0.1}
                       max={0.9}
                       step={0.05}
@@ -549,7 +537,7 @@ export function Settings({
                     </div>
                     <Slider
                       value={[localConfig.silence_timeout || 1.5]}
-                      onValueChange={([value]) => updateConfig('silence_timeout', value)}
+                      onValueChange={([value]) => updateLocalConfig('silence_timeout', value)}
                       min={0.5}
                       max={5.0}
                       step={0.5}
@@ -569,7 +557,7 @@ export function Settings({
                     <Label htmlFor="llm-backend" className="text-foreground">{t('settings.fields.llmBackend')}</Label>
                     <Select
                       value={localConfig.llm_backend || 'ollama'}
-                      onValueChange={(value) => updateConfig('llm_backend', value)}
+                      onValueChange={(value) => updateLocalConfig('llm_backend', value)}
                     >
                       <SelectTrigger id="llm-backend" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
                         <SelectValue placeholder={t('settings.placeholders.selectLlmBackend')} />
@@ -594,7 +582,7 @@ export function Settings({
                             id="openai-api-key"
                             type={showApiKey ? 'text' : 'password'}
                             value={localConfig.openai_api_key || ''}
-                            onChange={(e) => updateConfig('openai_api_key', e.target.value)}
+                            onChange={(e) => updateLocalConfig('openai_api_key', e.target.value)}
                             placeholder={t('settings.placeholders.apiKey')}
                             className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                           />
@@ -618,7 +606,7 @@ export function Settings({
                             <Input
                               id="openai-model"
                               value={localConfig.openai_model || ''}
-                              onChange={(e) => updateConfig('openai_model', e.target.value)}
+                              onChange={(e) => updateLocalConfig('openai_model', e.target.value)}
                               placeholder="Enter custom model name"
                               className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
                             />
@@ -640,7 +628,7 @@ export function Settings({
                                 if (value === '__custom__') {
                                   setCustomModelInput(prev => ({ ...prev, openai: true }));
                                 } else {
-                                  updateConfig('openai_model', value);
+                                  updateLocalConfig('openai_model', value);
                                 }
                               }}
                             >
@@ -677,7 +665,7 @@ export function Settings({
                             id="openrouter-api-key"
                             type={showApiKey ? 'text' : 'password'}
                             value={localConfig.openrouter_api_key || ''}
-                            onChange={(e) => updateConfig('openrouter_api_key', e.target.value)}
+                            onChange={(e) => updateLocalConfig('openrouter_api_key', e.target.value)}
                             placeholder={t('settings.placeholders.apiKey')}
                             className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                           />
@@ -701,7 +689,7 @@ export function Settings({
                             <Input
                               id="openrouter-model"
                               value={localConfig.openrouter_model || ''}
-                              onChange={(e) => updateConfig('openrouter_model', e.target.value)}
+                              onChange={(e) => updateLocalConfig('openrouter_model', e.target.value)}
                               placeholder="Enter custom model name"
                               className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
                             />
@@ -723,7 +711,7 @@ export function Settings({
                                 if (value === '__custom__') {
                                   setCustomModelInput(prev => ({ ...prev, openrouter: true }));
                                 } else {
-                                  updateConfig('openrouter_model', value);
+                                  updateLocalConfig('openrouter_model', value);
                                 }
                               }}
                             >
@@ -760,7 +748,7 @@ export function Settings({
                             id="custom-api-key"
                             type={showApiKey ? 'text' : 'password'}
                             value={localConfig.custom_api_key || ''}
-                            onChange={(e) => updateConfig('custom_api_key', e.target.value)}
+                            onChange={(e) => updateLocalConfig('custom_api_key', e.target.value)}
                             placeholder="Optional - leave empty if not required"
                             className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                           />
@@ -782,7 +770,7 @@ export function Settings({
                         <Input
                           id="custom-base-url"
                           value={localConfig.custom_base_url || ''}
-                          onChange={(e) => updateConfig('custom_base_url', e.target.value)}
+                          onChange={(e) => updateLocalConfig('custom_base_url', e.target.value)}
                           placeholder="http://localhost:8000/v1"
                           className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                         />
@@ -798,7 +786,7 @@ export function Settings({
                             <Input
                               id="custom-model"
                               value={localConfig.custom_model || ''}
-                              onChange={(e) => updateConfig('custom_model', e.target.value)}
+                              onChange={(e) => updateLocalConfig('custom_model', e.target.value)}
                               placeholder="Enter custom model name"
                               className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
                             />
@@ -820,7 +808,7 @@ export function Settings({
                                 if (value === '__custom__') {
                                   setCustomModelInput(prev => ({ ...prev, custom: true }));
                                 } else {
-                                  updateConfig('custom_model', value);
+                                  updateLocalConfig('custom_model', value);
                                 }
                               }}
                             >
@@ -886,7 +874,7 @@ export function Settings({
                             <Input
                               id="ollama-model"
                               value={localConfig.ollama_model || ''}
-                              onChange={(e) => updateConfig('ollama_model', e.target.value)}
+                              onChange={(e) => updateLocalConfig('ollama_model', e.target.value)}
                               placeholder="Enter custom model name"
                               className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
                             />
@@ -907,7 +895,7 @@ export function Settings({
                               if (value === '__custom__') {
                                 setCustomModelInput(prev => ({ ...prev, ollama: true }));
                               } else {
-                                updateConfig('ollama_model', value);
+                                updateLocalConfig('ollama_model', value);
                               }
                             }}
                           >
@@ -936,7 +924,7 @@ export function Settings({
                         <Input
                           id="ollama-base-url"
                           value={localConfig.ollama_base_url || ''}
-                          onChange={(e) => updateConfig('ollama_base_url', e.target.value)}
+                          onChange={(e) => updateLocalConfig('ollama_base_url', e.target.value)}
                           placeholder={t('settings.placeholders.ollamaUrl')}
                           className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                         />
@@ -989,7 +977,7 @@ export function Settings({
                     <Input
                       id="tts-rate"
                       value={localConfig.tts_rate || '+0%'}
-                      onChange={(e) => updateConfig('tts_rate', e.target.value)}
+                      onChange={(e) => updateLocalConfig('tts_rate', e.target.value)}
                       placeholder="+0%"
                       className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                     />
@@ -1133,16 +1121,10 @@ export function Settings({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-gradient-to-t from-background to-background/95 backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border bg-gradient-to-t from-background to-background/95 backdrop-blur-sm">
+          <SaveStatusIndicator status={saveStatus} error={saveError} />
           <Button variant="outline" onClick={onClose} className="bg-transparent border-border text-muted-foreground hover:bg-muted hover:text-foreground">
-            {t('buttons.cancel')}
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-foreground border-0"
-          >
-            {isSaving ? t('status.loading') : t('buttons.saveSettings')}
+            {t('buttons.close')}
           </Button>
         </div>
       </DialogContent>
