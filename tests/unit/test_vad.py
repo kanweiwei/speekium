@@ -37,7 +37,7 @@ class TestVADConfiguration:
     def test_vad_threshold_valid(self):
         """测试 VAD 阈值在有效范围内"""
         assert 0.0 <= VAD_THRESHOLD <= 1.0
-        assert VAD_THRESHOLD == 0.7
+        assert VAD_THRESHOLD == 0.5  # Default: more sensitive detection
 
     def test_vad_consecutive_threshold_positive(self):
         """测试连续检测阈值为正数"""
