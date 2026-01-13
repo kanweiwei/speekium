@@ -577,7 +577,28 @@ export function Settings({
                   {(localConfig.llm_backend || 'ollama') === 'ollama' && (
                     <>
                       <div className="space-y-2">
-                        <Label htmlFor="ollama-model" className="text-foreground">{t('settings.fields.ollamaModel')}</Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="ollama-model" className="text-foreground">{t('settings.fields.ollamaModel')}</Label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const models = await invoke<string[]>('list_ollama_models', {
+                                  base_url: localConfig.ollama_base_url || 'http://localhost:11434'
+                                });
+                                console.log('[Settings] Ollama models:', models);
+                                alert(`Found ${models.length} models:\n\n${models.join('\n')}`);
+                              } catch (error) {
+                                console.error('[Settings] Failed to load models:', error);
+                                alert('Failed to load Ollama models. Make sure Ollama is running.');
+                              }
+                            }}
+                            className="h-7 px-2 text-xs"
+                          >
+                            🔄 Refresh
+                          </Button>
+                        </div>
                         <Input
                           id="ollama-model"
                           value={localConfig.ollama_model || ''}
