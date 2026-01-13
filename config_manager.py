@@ -42,6 +42,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "vad_threshold": 0.7,
     "max_history": 10,
     "work_mode": "conversation",  # conversation | text
+    "push_to_talk_hotkey": {
+        "modifiers": ["CmdOrCtrl"],
+        "key": "Digit1",
+        "displayName": "⌘1",
+    },
 }
 
 

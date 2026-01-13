@@ -6,6 +6,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { HotkeyConfig } from '../types/hotkey';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -75,7 +76,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       try {
         const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
         if (result.success && result.config) {
-          setConfig(result.config);
+          // Ensure push_to_talk_hotkey has default value if not present
+          const configWithDefaults = {
+            ...result.config,
+            push_to_talk_hotkey: result.config.push_to_talk_hotkey || {
+              modifiers: ['CmdOrCtrl'],
+              key: 'Digit1',
+              displayName: '⌘1',
+            },
+          };
+          setConfig(configWithDefaults);
         }
       } catch (error) {
         console.error('[Settings] Failed to load config:', error);
