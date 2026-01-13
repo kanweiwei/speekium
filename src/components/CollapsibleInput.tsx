@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
+import { useSettings } from '@/contexts/SettingsContext';
 
 interface CollapsibleInputProps {
   /** Input value */
@@ -23,11 +24,15 @@ export function CollapsibleInput({
   isProcessing = false,
 }: CollapsibleInputProps) {
   const { t } = useTranslation();
+  const { config } = useSettings();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Get hotkey display name from config
+  const hotkeyDisplay = config?.push_to_talk_hotkey?.displayName || '⌘+⌥';
   const expandButtonRef = useRef<HTMLButtonElement>(null);
   const collapseTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -192,7 +197,7 @@ export function CollapsibleInput({
               <span>
                 {t('app.ptt.hint')}{' '}
                 <kbd className="mx-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono border border-border">
-                  {t('app.ptt.shortcutKey')}
+                  {hotkeyDisplay}
                 </kbd>{' '}
                 {t('app.ptt.hintAction')}
               </span>

@@ -10,7 +10,7 @@ import { WorkModeToast } from './components/WorkModeToast';
 import { CollapsibleInput } from './components/CollapsibleInput';
 import { historyAPI } from './useTauriAPI';
 import { useWorkMode } from './contexts/WorkModeContext';
-import { SettingsProvider } from './contexts/SettingsContext';
+import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -33,6 +33,32 @@ import type { WorkMode } from './types/workMode';
 // Empty state component
 function EmptyState({ onPromptClick }: { onPromptClick: (prompt: string) => void }) {
   const { t } = useTranslation();
+  const { config } = useSettings();
+
+  // Get hotkey display name from config
+  const hotkeyDisplay = config?.push_to_talk_hotkey?.displayName || '⌘⌥';
+  const hotkeyModifiers = config?.push_to_talk_hotkey?.modifiers || [];
+  const hotkeyKey = config?.push_to_talk_hotkey?.key || '';
+
+  // Parse the hotkey to display individual keys
+  let keyParts: string[] = [];
+  if (hotkeyModifiers.includes('CmdOrCtrl')) {
+    keyParts.push('⌘');
+  }
+  if (hotkeyModifiers.includes('Shift')) {
+    keyParts.push('⇧');
+  }
+  if (hotkeyModifiers.includes('Alt')) {
+    keyParts.push('⌥');
+  }
+  // Add the main key
+  if (hotkeyKey.startsWith('Digit')) {
+    keyParts.push(hotkeyKey.replace('Digit', ''));
+  } else if (hotkeyKey.startsWith('Key')) {
+    keyParts.push(hotkeyKey.replace('Key', '').toUpperCase());
+  } else {
+    keyParts.push(hotkeyKey);
+  }
 
   const examplePrompts = [
     { icon: Sparkles, text: t('app.emptyState.prompts.introduce'), gradient: "from-blue-500 to-purple-500" },
@@ -59,9 +85,12 @@ function EmptyState({ onPromptClick }: { onPromptClick: (prompt: string) => void
       <div className="flex items-center gap-2 mb-8 px-4 py-2 rounded-full bg-muted border border-border/50">
         <Mic className="w-4 h-4 text-muted-foreground" />
         <span className="text-sm text-muted-foreground">{t('app.emptyState.shortcutHint')}</span>
-        <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">{t('app.emptyState.shortcutKey1')}</kbd>
-        <span className="text-sm text-muted-foreground">+</span>
-        <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">{t('app.emptyState.shortcutKey2')}</kbd>
+        {keyParts.map((key, index) => (
+          <React.Fragment key={index}>
+            {index > 0 && <span className="text-sm text-muted-foreground">+</span>}
+            <kbd className="px-2 py-1 rounded bg-background text-foreground text-xs font-mono border border-border">{key}</kbd>
+          </React.Fragment>
+        ))}
         <span className="text-sm text-muted-foreground">{t('app.emptyState.shortcutAction')}</span>
       </div>
 
