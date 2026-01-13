@@ -152,14 +152,16 @@ class HotkeyManager:
                 self.listener.start()
                 self.is_running = True
 
-                modifier_name = hotkey_config.get('displayName', f"{hotkey_config.get('modifiers', ['CmdOrCtrl'])[0]}+{hotkey_config.get('key', '1')}")
-                print(f"⌨️  全局快捷键监听已启动: {modifier_name}")
+                # Note: Removed print to avoid interfering with daemon JSON responses
+                # Logger will be added by the caller
 
             except ImportError:
+                # Note: These prints only show on error
                 print("❌ pynput 未安装，无法使用全局快捷键")
                 print("   安装方法: pip install pynput")
                 return
             except Exception as e:
+                # Note: This print only shows on error
                 print(f"❌ 启动快捷键监听失败: {e}")
                 return
 
@@ -182,7 +184,7 @@ class HotkeyManager:
 
         self.start(new_hotkey_config, on_press, on_release)
 
-        print(f"✅ 热键已更新为: {new_hotkey_config.get('displayName', new_hotkey_config.get('key', 'unknown'))}")
+        # Note: Removed print to avoid interfering with daemon JSON responses
 
     def stop(self):
         """停止快捷键监听"""
@@ -194,7 +196,7 @@ class HotkeyManager:
             self.modifier_pressed = False
             self.main_key_pressed = False
             self.was_triggered = False
-            print("⌨️  全局快捷键监听已停止")
+            # Note: Removed print to avoid interfering with daemon JSON responses
 
     def _check_hotkey_combination(self):
         """检查完整的快捷键组合是否被按下"""

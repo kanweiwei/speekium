@@ -664,18 +664,17 @@ class SpeekiumDaemon:
     async def handle_update_hotkey(self, hotkey_config: dict) -> dict:
         """更新热键配置"""
         try:
-            self._log(f"📥 [DEBUG] handle_update_hotkey called with config: {hotkey_config}")
-
             if not self.hotkey_manager:
                 self._log("❌ HotkeyManager not initialized")
                 return {"success": False, "error": "HotkeyManager not initialized"}
 
-            self._log(f"📥 收到热键更新请求: {hotkey_config.get('displayName', 'unknown')}")
+            display_name = hotkey_config.get('displayName', 'unknown')
+            self._log(f"📥 收到热键更新请求: {display_name}")
 
             # 调用 HotkeyManager 的 update_hotkey 方法
             self.hotkey_manager.update_hotkey(hotkey_config)
 
-            self._log("✅ 热键更新完成")
+            self._log(f"✅ 热键已更新为: {display_name}")
             return {"success": True}
         except Exception as e:
             import traceback
