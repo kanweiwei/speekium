@@ -479,64 +479,176 @@ export function Settings({
                         <SelectValue placeholder={t('settings.placeholders.selectLlmBackend')} />
                       </SelectTrigger>
                       <SelectContent className="bg-muted border-border">
+                        <SelectItem value="claude">Claude Code CLI</SelectItem>
                         <SelectItem value="ollama">Ollama (Local)</SelectItem>
                         <SelectItem value="openai">OpenAI</SelectItem>
-                        <SelectItem value="anthropic">Anthropic</SelectItem>
+                        <SelectItem value="gemini">Gemini</SelectItem>
+                        <SelectItem value="openrouter">OpenRouter</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="api-key" className="text-foreground">{t('settings.fields.apiKey')}</Label>
-                    <div className="relative">
-                      <Input
-                        id="api-key"
-                        type={showApiKey ? 'text' : 'password'}
-                        value={localConfig.api_key || ''}
-                        onChange={(e) => updateConfig('api_key', e.target.value)}
-                        placeholder={t('settings.placeholders.apiKey')}
-                        className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {t('settings.hints.apiKey')}
-                    </p>
-                  </div>
+                  {/* OpenAI Configuration */}
+                  {(localConfig.llm_backend || 'ollama') === 'openai' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="openai-api-key" className="text-foreground">OpenAI API Key</Label>
+                        <div className="relative">
+                          <Input
+                            id="openai-api-key"
+                            type={showApiKey ? 'text' : 'password'}
+                            value={localConfig.openai_api_key || ''}
+                            onChange={(e) => updateConfig('openai_api_key', e.target.value)}
+                            placeholder={t('settings.placeholders.apiKey')}
+                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.hints.apiKey')}
+                        </p>
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="model-name" className="text-foreground">{t('settings.fields.ollamaModel')}</Label>
-                    <Input
-                      id="model-name"
-                      value={localConfig.ollama_model || ''}
-                      onChange={(e) => updateConfig('ollama_model', e.target.value)}
-                      placeholder={t('settings.placeholders.ollamaModel')}
-                      className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t('settings.hints.ollamaModel')}
-                    </p>
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="openai-model" className="text-foreground">Model</Label>
+                        <Input
+                          id="openai-model"
+                          value={localConfig.openai_model || 'gpt-4o-mini'}
+                          onChange={(e) => updateConfig('openai_model', e.target.value)}
+                          placeholder="gpt-4o-mini"
+                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Models: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
+                        </p>
+                      </div>
+                    </>
+                  )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="ollama-base-url" className="text-foreground">{t('settings.fields.ollamaUrl')}</Label>
-                    <Input
-                      id="ollama-base-url"
-                      value={localConfig.ollama_base_url || ''}
-                      onChange={(e) => updateConfig('ollama_base_url', e.target.value)}
-                      placeholder={t('settings.placeholders.ollamaUrl')}
-                      className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t('settings.hints.ollamaUrl')}
-                    </p>
-                  </div>
+                  {/* Gemini Configuration */}
+                  {(localConfig.llm_backend || 'ollama') === 'gemini' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="gemini-api-key" className="text-foreground">Gemini API Key</Label>
+                        <div className="relative">
+                          <Input
+                            id="gemini-api-key"
+                            type={showApiKey ? 'text' : 'password'}
+                            value={localConfig.gemini_api_key || ''}
+                            onChange={(e) => updateConfig('gemini_api_key', e.target.value)}
+                            placeholder={t('settings.placeholders.apiKey')}
+                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.hints.apiKey')}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="gemini-model" className="text-foreground">Model</Label>
+                        <Input
+                          id="gemini-model"
+                          value={localConfig.gemini_model || 'gemini-2.0-flash-exp'}
+                          onChange={(e) => updateConfig('gemini_model', e.target.value)}
+                          placeholder="gemini-2.0-flash-exp"
+                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Models: gemini-2.0-flash-exp, gemini-1.5-pro
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* OpenRouter Configuration */}
+                  {(localConfig.llm_backend || 'ollama') === 'openrouter' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="openrouter-api-key" className="text-foreground">OpenRouter API Key</Label>
+                        <div className="relative">
+                          <Input
+                            id="openrouter-api-key"
+                            type={showApiKey ? 'text' : 'password'}
+                            value={localConfig.openrouter_api_key || ''}
+                            onChange={(e) => updateConfig('openrouter_api_key', e.target.value)}
+                            placeholder={t('settings.placeholders.apiKey')}
+                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.hints.apiKey')}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="openrouter-model" className="text-foreground">Model</Label>
+                        <Input
+                          id="openrouter-model"
+                          value={localConfig.openrouter_model || 'anthropic/claude-3.5-sonnet'}
+                          onChange={(e) => updateConfig('openrouter_model', e.target.value)}
+                          placeholder="anthropic/claude-3.5-sonnet"
+                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Any model from OpenRouter (e.g. anthropic/claude-3.5-sonnet)
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Ollama Configuration */}
+                  {(localConfig.llm_backend || 'ollama') === 'ollama' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="ollama-model" className="text-foreground">{t('settings.fields.ollamaModel')}</Label>
+                        <Input
+                          id="ollama-model"
+                          value={localConfig.ollama_model || ''}
+                          onChange={(e) => updateConfig('ollama_model', e.target.value)}
+                          placeholder={t('settings.placeholders.ollamaModel')}
+                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.hints.ollamaModel')}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="ollama-base-url" className="text-foreground">{t('settings.fields.ollamaUrl')}</Label>
+                        <Input
+                          id="ollama-base-url"
+                          value={localConfig.ollama_base_url || ''}
+                          onChange={(e) => updateConfig('ollama_base_url', e.target.value)}
+                          placeholder={t('settings.placeholders.ollamaUrl)}
+                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.hints.ollamaUrl')}
+                        </p>
+                      </div>
+                    </>
+                  )}
 
                   <div className="pt-2 space-y-2">
                     <Button
