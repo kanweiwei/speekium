@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Tauri Invoke</title>
+</head>
+<body>
+    <h1>Test Tauri Commands</h1>
+    <button onclick="testListSessions()">Test listSessions</button>
+    <button onclick="testGetSession()">Test getSession</button>
+    <button onclick="testToggleFavorite()">Test toggleFavorite</button>
+    <pre id="output"></pre>
+
+    <script type="module">
+        const { invoke } = window.__TAURI__.core;
+
+        window.testListSessions = async () => {
+            try {
+                console.log('Testing listSessions...');
+                const result = await invoke('db_list_sessions', {
+                    page: 1,
+                    pageSize: 10
+                });
+                console.log('listSessions result:', result);
+                document.getElementById('output').textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                console.error('listSessions error:', error);
+                document.getElementById('output').textContent = 'Error: ' + JSON.stringify(error, null, 2);
+            }
+        };
+
+        window.testGetSession = async () => {
+            try {
+                const sessionId = '3b422488-cf3a-4e01-8a9d-a0a2a9e5d5e7';
+                console.log('Testing getSession with:', sessionId);
+                const result = await invoke('db_get_session', { sessionId });
+                console.log('getSession result:', result);
+                document.getElementById('output').textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                console.error('getSession error:', error);
+                document.getElementById('output').textContent = 'Error: ' + JSON.stringify(error, null, 2);
+            }
+        };
+
+        window.testToggleFavorite = async () => {
+            try {
+                const sessionId = '3b422488-cf3a-4e01-8a9d-a0a2a9e5d5e7';
+                console.log('Testing toggleFavorite with:', sessionId);
+                const result = await invoke('db_toggle_favorite', { sessionId });
+                console.log('toggleFavorite result:', result);
+                document.getElementById('output').textContent = 'Result: ' + result;
+            } catch (error) {
+                console.error('toggleFavorite error:', error);
+                document.getElementById('output').textContent = 'Error: ' + JSON.stringify(error, null, 2);
+            }
+        };
+    </script>
+</body>
+</html>

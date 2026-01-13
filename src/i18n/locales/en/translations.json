@@ -163,10 +163,6 @@
       "clearHistory": "Clear all history (irreversible)"
     },
     "tts": {
-      "engines": {
-        "edge": "Edge TTS (Online)",
-        "piper": "Piper (Offline)"
-      },
       "preview": "Preview",
       "previewText": "Hello, this is a voice preview test."
     },

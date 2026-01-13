@@ -576,22 +576,6 @@ export function Settings({
               {activeCategory === 'tts' && (
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="tts-backend" className="text-foreground">{t('settings.fields.ttsEngine')}</Label>
-                    <Select
-                      value={localConfig.tts_backend || 'piper'}
-                      onValueChange={(value) => updateConfig('tts_backend', value)}
-                    >
-                      <SelectTrigger id="tts-backend" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
-                        <SelectValue placeholder={t('settings.placeholders.selectTtsBackend')} />
-                      </SelectTrigger>
-                      <SelectContent className="bg-muted border-border">
-                        <SelectItem value="piper">{t('settings.tts.engines.piper')}</SelectItem>
-                        <SelectItem value="edge">{t('settings.tts.engines.edge')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="tts-rate" className="text-foreground">{t('settings.fields.ttsRate')}</Label>
                     <Input
                       id="tts-rate"

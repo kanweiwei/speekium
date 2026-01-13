@@ -61,7 +61,6 @@ dependencies = [
 
 [project.optional-dependencies]
 gui = ["pywebview"]
-piper = ["piper-tts"]  # Offline TTS support
 
 [project.urls]
 Homepage = "https://github.com/kanweiwei/speekium"

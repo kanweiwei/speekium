@@ -164,47 +164,9 @@ Edit `speekium.py`:
 # LLM Backend
 LLM_BACKEND = "claude"  # or "ollama"
 
-# TTS Backend
-TTS_BACKEND = "edge"  # "edge" (online, high quality) or "piper" (offline, fast)
-
 # Voice detection sensitivity
 VAD_THRESHOLD = 0.5  # Lower = more sensitive
 ```
-
-### TTS Options
-
-| Backend | Quality | Speed | Offline | Best For |
-|---------|---------|-------|---------|----------|
-| Edge TTS | High | Medium | ❌ | Normal use |
-| Piper | Medium | Fast | ✅ | Offline / Raspberry Pi |
-
-<details>
-<summary>🔊 Using Piper TTS (Offline)</summary>
-
-**1. Install piper-tts:**
-```bash
-pip install piper-tts
-```
-
-**2. Download voice models:**
-```bash
-# Create model directory
-mkdir -p ~/.local/share/piper-voices
-
-# Download Chinese voice (from Hugging Face)
-# https://huggingface.co/rhasspy/piper-voices/tree/main/zh/zh_CN/huayan/medium
-# Download: zh_CN-huayan-medium.onnx and zh_CN-huayan-medium.onnx.json
-
-# Download English voice
-# https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/amy/medium
-# Download: en_US-amy-medium.onnx and en_US-amy-medium.onnx.json
-```
-
-**3. Configure:**
-```python
-TTS_BACKEND = "piper"
-```
-</details>
 
 <details>
 <summary>🗣️ Available Edge TTS voices</summary>
@@ -225,7 +187,7 @@ List all voices: `edge-tts --list-voices`
 |-----------|------------|
 | Voice Detection | [Silero VAD](https://github.com/snakers4/silero-vad) |
 | Speech Recognition | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) |
-| Text-to-Speech | [Edge TTS](https://github.com/rany2/edge-tts) (online) / [Piper](https://github.com/rhasspy/piper) (offline) |
+| Text-to-Speech | [Edge TTS](https://github.com/rany2/edge-tts) |
 | Audio | sounddevice, scipy, numpy |
 
 ## Roadmap

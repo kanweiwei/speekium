@@ -113,15 +113,6 @@ EDGE_TTS_VOICES = {
     "yue": "zh-HK-HiuGaaiNeural",  # Cantonese female
 }
 
-# ===== Piper TTS Config (offline) =====
-# Models are stored in ~/.local/share/piper-voices/
-# Download from: https://huggingface.co/rhasspy/piper-voices/tree/main
-PIPER_VOICES = {
-    "zh": "zh_CN-huayan-medium",  # Chinese female
-    "en": "en_US-amy-medium",  # English female
-}
-PIPER_DATA_DIR = os.path.expanduser("~/.local/share/piper-voices")
-
 # ===== VAD Config =====
 VAD_THRESHOLD = 0.5  # Voice detection threshold (0.0-1.0, lower = more sensitive)
 VAD_CONSECUTIVE_THRESHOLD = (
@@ -150,7 +141,6 @@ class VoiceAssistant:
         self.asr_model = None
         self.vad_model = None
         self.llm_backend = None
-        self.piper_voices = {}  # Cache for loaded Piper voices
         self.was_interrupted = False  # Track if last playback was interrupted
         self.mode_manager = ModeManager(RecordingMode.CONTINUOUS)  # 默认自由对话模式
         self.interrupt_audio_buffer = []  # Buffer for interrupt audio
@@ -216,37 +206,6 @@ class VoiceAssistant:
                 )
             logger.info("backend_initialized")
         return self.llm_backend
-
-    def load_piper_voice(self, language):
-        """Load Piper voice model for specified language."""
-        if language in self.piper_voices:
-            return self.piper_voices[language]
-
-        voice_name = PIPER_VOICES.get(language, PIPER_VOICES.get("en"))
-        model_path = os.path.join(PIPER_DATA_DIR, f"{voice_name}.onnx")
-
-        if not os.path.exists(model_path):
-            logger.warning(
-                "piper_model_not_found",
-                model_path=model_path,
-                download_url="https://huggingface.co/rhasspy/piper-voices/tree/main"
-            )
-            return None
-
-        try:
-            from piper.voice import PiperVoice
-
-            set_component("TTS"); logger.info("piper_voice_loading", voice=voice_name)
-            voice = PiperVoice.load(model_path)
-            self.piper_voices[language] = voice
-            logger.info("piper_voice_loaded")
-            return voice
-        except ImportError:
-            logger.warning("piper_not_installed", install_command="pip install piper-tts")
-            return None
-        except Exception as e:
-            logger.error("piper_voice_load_failed", error=str(e))
-            return None
 
     def record_with_vad(self, speech_already_started=False, on_speech_detected=None):
         """Use VAD to detect speech, auto start and stop recording.
@@ -602,13 +561,8 @@ class VoiceAssistant:
         # Auto-detect language from text content for better TTS matching
         detected_lang = self.detect_text_language(text)
 
-        # Get TTS backend from config (not hardcoded)
-        tts_backend = self.get_tts_backend()
-
-        if tts_backend == "piper":
-            return await self._generate_audio_piper(text, detected_lang)
-        else:  # edge or any other value defaults to edge
-            return await self._generate_audio_edge(text, detected_lang)
+        # Always use Edge TTS
+        return await self._generate_audio_edge(text, detected_lang)
 
     async def _generate_audio_edge(self, text, language):
         """Generate audio using Edge TTS (online)."""
@@ -622,34 +576,6 @@ class VoiceAssistant:
         except Exception as e:
             logger.error("edge_tts_error", error=str(e))
             return None
-
-    async def _generate_audio_piper(self, text, language):
-        """Generate audio using Piper TTS (offline)."""
-        try:
-            voice = self.load_piper_voice(language)
-            if voice is None:
-                # Fallback to Edge TTS if Piper not available
-                logger.info("fallback_to_edge_tts")
-                return await self._generate_audio_edge(text, language)
-
-            # Security: Use secure temp file
-            tmp_file = create_secure_temp_file(suffix=".wav")
-
-            # Run Piper synthesis in executor (it's blocking)
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._piper_synthesize, voice, text, tmp_file)
-            return tmp_file
-        except Exception as e:
-            logger.error("piper_tts_error", error=str(e))
-            # Fallback to Edge TTS
-            return await self._generate_audio_edge(text, language)
-
-    def _piper_synthesize(self, voice, text, output_path):
-        """Synchronous Piper synthesis."""
-        import wave
-
-        with wave.open(output_path, "w") as wav_file:
-            voice.synthesize(text, wav_file)
 
     async def play_audio(self, tmp_file, delete=True):
         """Play audio file (async, cross-platform), optionally delete after."""
