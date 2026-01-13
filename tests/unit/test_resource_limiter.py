@@ -104,9 +104,7 @@ class TestSyncTimeout:
 
         assert "timed out after 1 seconds" in str(exc_info.value)
 
-    @pytest.mark.skipif(
-        platform.system() != "Windows", reason="Test Windows fallback behavior"
-    )
+    @pytest.mark.skipif(platform.system() != "Windows", reason="Test Windows fallback behavior")
     def test_with_timeout_decorator_windows_fallback(self):
         """测试 Windows 平台超时装饰器降级"""
 
@@ -158,9 +156,7 @@ class TestAsyncTimeout:
             await asyncio.sleep(0.1)
             return "success"
 
-        result = await with_timeout(
-            quick_function(), seconds=2, operation_name="test_operation"
-        )
+        result = await with_timeout(quick_function(), seconds=2, operation_name="test_operation")
         assert result == "success"
 
     @pytest.mark.asyncio
@@ -254,9 +250,7 @@ class TestIntegration:
             await asyncio.sleep(0.5)
             return "IO complete"
 
-        result = await with_timeout(
-            io_operation(), seconds=2, operation_name="io_operation"
-        )
+        result = await with_timeout(io_operation(), seconds=2, operation_name="io_operation")
         assert result == "IO complete"
 
 

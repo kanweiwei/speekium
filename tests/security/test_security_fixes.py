@@ -145,8 +145,7 @@ class TestTempFileSecurity:
         actual_mode = file_stat.st_mode & 0o777
 
         assert actual_mode == 0o600, (
-            f"文件权限错误: {oct(actual_mode)} (期望: 0o600)\n"
-            f"文件: {tmp_file}"
+            f"文件权限错误: {oct(actual_mode)} (期望: 0o600)\n文件: {tmp_file}"
         )
 
     def test_multiple_temp_files(self):
@@ -228,9 +227,7 @@ class TestResourceLimits:
         )
 
         assert result.returncode == 0, (
-            f"worker_daemon导入失败:\n"
-            f"stdout: {result.stdout}\n"
-            f"stderr: {result.stderr}"
+            f"worker_daemon导入失败:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
         assert "ok" in result.stdout
 

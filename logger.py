@@ -69,6 +69,7 @@ def mask_sensitive_processor(logger: Any, method_name: str, event_dict: EventDic
 
 # ===== Context Management =====
 
+
 class LoggerContext:
     """
     Thread-safe context manager for structured logging
@@ -115,6 +116,7 @@ _context = LoggerContext()
 
 
 # ===== Logger Configuration =====
+
 
 def configure_logging(
     level: str = "INFO",
@@ -168,6 +170,7 @@ def configure_logging(
 
 # ===== Logger Factory =====
 
+
 def get_logger(name: str = "speekium") -> structlog.BoundLogger:
     """
     Get a structured logger instance
@@ -189,6 +192,7 @@ def get_logger(name: str = "speekium") -> structlog.BoundLogger:
 
 
 # ===== Context Helpers =====
+
 
 def new_request() -> str:
     """Start a new request, returns request ID"""

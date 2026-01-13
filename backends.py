@@ -409,12 +409,16 @@ class OpenAIBackend(LLMBackend):
             )
 
             if response.status_code != 200:
-                logger.error("openai_api_error", status_code=response.status_code, body=response.text)
+                logger.error(
+                    "openai_api_error", status_code=response.status_code, body=response.text
+                )
                 response.raise_for_status()
 
             result = response.json()
             content = result["choices"][0]["message"]["content"]
-            logger.info("llm_response_received", backend="openai_api", response_preview=content[:100])
+            logger.info(
+                "llm_response_received", backend="openai_api", response_preview=content[:100]
+            )
 
             # Save to history
             self.add_message("user", message)

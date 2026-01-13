@@ -61,10 +61,7 @@ class TestSensitiveDataMasking:
 
     def test_mask_api_key(self):
         """测试 API key 脱敏"""
-        event_dict = {
-            "event": "test",
-            "api_key": "sk-1234567890abcdef"
-        }
+        event_dict = {"event": "test", "api_key": "sk-1234567890abcdef"}
 
         result = mask_sensitive_processor(None, "info", event_dict)
 
@@ -75,10 +72,7 @@ class TestSensitiveDataMasking:
 
     def test_mask_anthropic_api_key(self):
         """测试 Anthropic API key 脱敏"""
-        event_dict = {
-            "event": "test",
-            "anthropic_api_key": "sk-ant-api03-xxxxx"
-        }
+        event_dict = {"event": "test", "anthropic_api_key": "sk-ant-api03-xxxxx"}
 
         result = mask_sensitive_processor(None, "info", event_dict)
         assert "sk-ant-api03-xxxxx" not in result["anthropic_api_key"]
@@ -86,10 +80,7 @@ class TestSensitiveDataMasking:
 
     def test_mask_password(self):
         """测试密码脱敏"""
-        event_dict = {
-            "event": "test",
-            "password": "supersecret123"
-        }
+        event_dict = {"event": "test", "password": "supersecret123"}
 
         result = mask_sensitive_processor(None, "info", event_dict)
         assert "supersecret123" not in result["password"]
@@ -97,10 +88,7 @@ class TestSensitiveDataMasking:
 
     def test_mask_token(self):
         """测试 token 脱敏"""
-        event_dict = {
-            "event": "test",
-            "token": "bearer_token_12345"
-        }
+        event_dict = {"event": "test", "token": "bearer_token_12345"}
 
         result = mask_sensitive_processor(None, "info", event_dict)
         assert "bearer_token_12345" not in result["token"]
@@ -109,10 +97,7 @@ class TestSensitiveDataMasking:
     def test_mask_long_user_text(self):
         """测试用户输入长文本预览"""
         long_text = "a" * 100
-        event_dict = {
-            "event": "test",
-            "text": long_text
-        }
+        event_dict = {"event": "test", "text": long_text}
 
         result = mask_sensitive_processor(None, "info", event_dict)
 
@@ -125,10 +110,7 @@ class TestSensitiveDataMasking:
     def test_preserve_short_text(self):
         """测试短文本保留"""
         short_text = "Hello world"
-        event_dict = {
-            "event": "test",
-            "text": short_text
-        }
+        event_dict = {"event": "test", "text": short_text}
 
         result = mask_sensitive_processor(None, "info", event_dict)
 
@@ -138,10 +120,7 @@ class TestSensitiveDataMasking:
     def test_mask_message_field(self):
         """测试 message 字段长文本预览"""
         long_message = "x" * 80
-        event_dict = {
-            "event": "test",
-            "message": long_message
-        }
+        event_dict = {"event": "test", "message": long_message}
 
         result = mask_sensitive_processor(None, "info", event_dict)
 
@@ -151,10 +130,7 @@ class TestSensitiveDataMasking:
 
     def test_mask_file_paths(self):
         """测试文件路径脱敏"""
-        event_dict = {
-            "event": "test",
-            "file_path": "/Users/user/sensitive/data.txt"
-        }
+        event_dict = {"event": "test", "file_path": "/Users/user/sensitive/data.txt"}
 
         result = mask_sensitive_processor(None, "info", event_dict)
 
@@ -164,10 +140,7 @@ class TestSensitiveDataMasking:
 
     def test_mask_audio_file(self):
         """测试音频文件路径脱敏"""
-        event_dict = {
-            "event": "test",
-            "audio_file": "/tmp/recordings/recording_12345.wav"
-        }
+        event_dict = {"event": "test", "audio_file": "/tmp/recordings/recording_12345.wav"}
 
         result = mask_sensitive_processor(None, "info", event_dict)
 
@@ -180,7 +153,7 @@ class TestSensitiveDataMasking:
             "event": "test_event",
             "component": "VAD",
             "duration": 1.5,
-            "status": "success"
+            "status": "success",
         }
 
         result = mask_sensitive_processor(None, "info", event_dict)
