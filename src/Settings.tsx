@@ -861,7 +861,7 @@ export function Settings({
                               setIsLoadingOllamaModels(true);
                               try {
                                 const models = await invoke<string[]>('list_ollama_models', {
-                                  base_url: localConfig.ollama_base_url || 'http://localhost:11434'
+                                  baseUrl: localConfig.ollama_base_url || 'http://localhost:11434'
                                 });
                                 console.log('[Settings] Ollama models:', models);
                                 setOllamaModels(models);

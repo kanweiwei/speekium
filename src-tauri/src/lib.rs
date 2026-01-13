@@ -1132,15 +1132,15 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
 
 /// Get list of installed Ollama models
 #[tauri::command]
-async fn list_ollama_models(base_url: String) -> Result<Vec<String>, String> {
-    println!("📋 获取 Ollama 模型列表: {}", base_url);
+async fn list_ollama_models(baseUrl: String) -> Result<Vec<String>, String> {
+    println!("📋 获取 Ollama 模型列表: {}", baseUrl);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let tags_url = format!("{}/api/tags", base_url);
+    let tags_url = format!("{}/api/tags", baseUrl);
     let response = client
         .get(&tags_url)
         .send()
