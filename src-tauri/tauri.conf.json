@@ -42,6 +42,24 @@
       "icons/512x512.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Speerium",
+    "copyright": "Copyright © 2025 Speekium",
+    "category": "Productivity",
+    "shortDescription": "AI-powered voice assistant",
+    "longDescription": "Speerium is an intelligent voice assistant powered by AI, featuring speech recognition, text-to-speech, and natural language conversations.",
+    "macOS": {
+      "minimumSystemVersion": "10.13",
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
   }
 }

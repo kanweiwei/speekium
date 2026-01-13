@@ -1,0 +1,271 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+            name: 'macos-universal'
+          - platform: 'windows-latest'
+            args: ''
+            name: 'windows-x86_64'
+
+    runs-on: ${{ matrix.platform }}
+    name: Build on ${{ matrix.name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # GitHub Token for releasing
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+          includeDebug: false
+          includeRelease: true
+
+      # macOS specific steps
+      - name: Upload macOS artifacts (notarized)
+        if: matrix.platform == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal-app
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+
+      # Windows specific steps
+      - name: Upload Windows artifacts
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64-app
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+
+  # Signed builds with code signing
+  build-signed:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+            name: 'macos-universal-signed'
+          - platform: 'windows-latest'
+            args: ''
+            name: 'windows-x86_64-signed'
+
+    runs-on: ${{ matrix.platform }}
+    name: Build (Signed) on ${{ matrix.name }}
+
+    # Only run signed builds on tags or manual dispatch
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Import macOS certificate
+        if: matrix.platform == 'macos-latest'
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # Import certificate from secrets
+          echo -n "$CSC_LINK" | base64 --decode --output $CERTIFICATE_PATH
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH \
+            -P "$CSC_KEY_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k $KEYCHAIN_PATH
+
+          # Set the keychain as default
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # Enable codesigning from the keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            $KEYCHAIN_PATH
+
+          # Add certificate to keychain trust settings
+          security set-trust -1 -p basic -p default $CERTIFICATE_PATH
+
+          # Make variables available for next steps
+          echo "CERTIFICATE_PATH=$CERTIFICATE_PATH" >> $GITHUB_ENV
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Import Windows certificate
+        if: matrix.platform == 'windows-latest'
+        run: |
+          # Import certificate from secrets
+          echo -n "$CSC_LINK" | base64 --decode > certificate.pfx
+
+          # Install certificate to certificate store
+          certutil -f -p "$CSC_KEY_PASSWORD" -importPFX certificate.pfx
+
+          # Remove certificate file
+          Remove-Item -Path certificate.pfx -Force
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        shell: pwsh
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri app (Signed)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # GitHub Token for releasing
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # macOS signing
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Apple notarization
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: ${{ matrix.args }}
+          includeDebug: false
+          includeRelease: true
+
+      - name: Cleanup macOS keychain
+        if: matrix.platform == 'macos-latest'
+        run: |
+          security delete-keychain $KEYCHAIN_PATH || true
+          rm -f $CERTIFICATE_PATH || true
+
+      - name: Upload signed macOS artifacts
+        if: matrix.platform == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal-signed-app
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: error
+
+      - name: Upload signed Windows artifacts
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64-signed-app
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+  # Create GitHub Release
+  release:
+    needs: [build, build-signed]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.app
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
+          body: |
+            ## Speekium Desktop Application
+
+            ### Installation
+            - **macOS**: Download the `.dmg` file and install
+            - **Windows**: Download the `.exe` or `.msi` installer
+
+            ### What's Changed
+            See the release notes below for details.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
