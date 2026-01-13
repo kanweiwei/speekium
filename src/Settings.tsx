@@ -40,6 +40,51 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from '@/i18n';
 
+// Common model lists for each backend
+const OPENAI_MODELS = [
+  'gpt-4o-mini',
+  'gpt-4o',
+  'gpt-4-turbo',
+  'gpt-4',
+  'gpt-3.5-turbo',
+  'o1-mini',
+  'o1-preview',
+];
+
+const OPENROUTER_MODELS = [
+  'google/gemini-2.0-flash-exp:free',
+  'google/gemini-2.0-flash-thinking-exp:free',
+  'google/gemini-2.5-flash',
+  'google/gemini-2.5-pro-preview-03-25',
+  'anthropic/claude-3.5-sonnet',
+  'anthropic/claude-3.5-haiku',
+  'openai/gpt-4o-mini',
+  'openai/gpt-4o',
+  'meta-llama/llama-3.1-70b-instruct',
+  'meta-llama/llama-3.1-8b-instruct',
+];
+
+const OLLAMA_MODELS = [
+  'qwen2.5:1.5b',
+  'qwen2.5:3b',
+  'qwen2.5:7b',
+  'qwen2.5:14b',
+  'qwen2.5:32b',
+  'llama3.1:8b',
+  'llama3.1:70b',
+  'mistral:7b',
+  'deepseek-coder:6.7b',
+];
+
+const CUSTOM_MODELS = [
+  'gpt-3.5-turbo',
+  'gpt-4',
+  'llama-2-7b',
+  'llama-2-13b',
+  'vicuna-7b',
+  'wizardlm-7b',
+];
+
 interface SettingsProps {
   isOpen: boolean;
   onClose: () => void;
@@ -79,6 +124,13 @@ export function Settings({
   const [connectionError, setConnectionError] = React.useState<string>('');
   const [isPreviewingTTS, setIsPreviewingTTS] = React.useState(false);
   const [previewAudio, setPreviewAudio] = React.useState<HTMLAudioElement | null>(null);
+  const [customModelInput, setCustomModelInput] = React.useState<Record<string, boolean>>({
+    openai: false,
+    openrouter: false,
+    ollama: false,
+    custom: false,
+  });
+  const [ollamaModels, setOllamaModels] = React.useState<string[]>(OLLAMA_MODELS);
 
   React.useEffect(() => {
     if (config) {
@@ -574,15 +626,55 @@ export function Settings({
 
                       <div className="space-y-2">
                         <Label htmlFor="openai-model" className="text-foreground">Model</Label>
-                        <Input
-                          id="openai-model"
-                          value={localConfig.openai_model || 'gpt-4o-mini'}
-                          onChange={(e) => updateConfig('openai_model', e.target.value)}
-                          placeholder="gpt-4o-mini"
-                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                        />
+                        {customModelInput.openai ? (
+                          <div className="flex gap-2">
+                            <Input
+                              id="openai-model"
+                              value={localConfig.openai_model || ''}
+                              onChange={(e) => updateConfig('openai_model', e.target.value)}
+                              placeholder="Enter custom model name"
+                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCustomModelInput(prev => ({ ...prev, openai: false }))}
+                              className="h-9 px-3"
+                            >
+                              ← Select
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Select
+                              value={localConfig.openai_model || 'gpt-4o-mini'}
+                              onValueChange={(value) => {
+                                if (value === '__custom__') {
+                                  setCustomModelInput(prev => ({ ...prev, openai: true }));
+                                } else {
+                                  updateConfig('openai_model', value);
+                                }
+                              }}
+                            >
+                              <SelectTrigger id="openai-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1">
+                                <SelectValue placeholder="Select a model" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-muted border-border max-h-60">
+                                {OPENAI_MODELS.map(model => (
+                                  <SelectItem key={model} value={model} className="text-foreground">
+                                    {model}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="__custom__" className="text-foreground">
+                                  Custom model...
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <p className="text-xs text-muted-foreground">
-                          Models: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
+                          Select from common models or enter a custom model name
                         </p>
                       </div>
                     </>
@@ -617,15 +709,55 @@ export function Settings({
 
                       <div className="space-y-2">
                         <Label htmlFor="openrouter-model" className="text-foreground">Model</Label>
-                        <Input
-                          id="openrouter-model"
-                          value={localConfig.openrouter_model || 'google/gemini-2.5-flash'}
-                          onChange={(e) => updateConfig('openrouter_model', e.target.value)}
-                          placeholder="google/gemini-2.5-flash"
-                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                        />
+                        {customModelInput.openrouter ? (
+                          <div className="flex gap-2">
+                            <Input
+                              id="openrouter-model"
+                              value={localConfig.openrouter_model || ''}
+                              onChange={(e) => updateConfig('openrouter_model', e.target.value)}
+                              placeholder="Enter custom model name"
+                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCustomModelInput(prev => ({ ...prev, openrouter: false }))}
+                              className="h-9 px-3"
+                            >
+                              ← Select
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Select
+                              value={localConfig.openrouter_model || 'google/gemini-2.5-flash'}
+                              onValueChange={(value) => {
+                                if (value === '__custom__') {
+                                  setCustomModelInput(prev => ({ ...prev, openrouter: true }));
+                                } else {
+                                  updateConfig('openrouter_model', value);
+                                }
+                              }}
+                            >
+                              <SelectTrigger id="openrouter-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1">
+                                <SelectValue placeholder="Select a model" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-muted border-border max-h-60">
+                                {OPENROUTER_MODELS.map(model => (
+                                  <SelectItem key={model} value={model} className="text-foreground">
+                                    {model}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="__custom__" className="text-foreground">
+                                  Custom model...
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <p className="text-xs text-muted-foreground">
-                          Any model from OpenRouter (e.g. google/gemini-2.5-flash)
+                          Select from popular models or enter any OpenRouter model ID
                         </p>
                       </div>
                     </>
@@ -674,15 +806,55 @@ export function Settings({
 
                       <div className="space-y-2">
                         <Label htmlFor="custom-model" className="text-foreground">Model</Label>
-                        <Input
-                          id="custom-model"
-                          value={localConfig.custom_model || ''}
-                          onChange={(e) => updateConfig('custom_model', e.target.value)}
-                          placeholder="gpt-3.5-turbo"
-                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                        />
+                        {customModelInput.custom ? (
+                          <div className="flex gap-2">
+                            <Input
+                              id="custom-model"
+                              value={localConfig.custom_model || ''}
+                              onChange={(e) => updateConfig('custom_model', e.target.value)}
+                              placeholder="Enter custom model name"
+                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCustomModelInput(prev => ({ ...prev, custom: false }))}
+                              className="h-9 px-3"
+                            >
+                              ← Select
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Select
+                              value={localConfig.custom_model || CUSTOM_MODELS[0]}
+                              onValueChange={(value) => {
+                                if (value === '__custom__') {
+                                  setCustomModelInput(prev => ({ ...prev, custom: true }));
+                                } else {
+                                  updateConfig('custom_model', value);
+                                }
+                              }}
+                            >
+                              <SelectTrigger id="custom-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1">
+                                <SelectValue placeholder="Select a model" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-muted border-border max-h-60">
+                                {CUSTOM_MODELS.map(model => (
+                                  <SelectItem key={model} value={model} className="text-foreground">
+                                    {model}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="__custom__" className="text-foreground">
+                                  Custom model...
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <p className="text-xs text-muted-foreground">
-                          Model name (depends on your self-hosted service)
+                          Select from common models or enter your model name
                         </p>
                       </div>
                     </>
@@ -703,6 +875,7 @@ export function Settings({
                                   base_url: localConfig.ollama_base_url || 'http://localhost:11434'
                                 });
                                 console.log('[Settings] Ollama models:', models);
+                                setOllamaModels(models);
                                 alert(`Found ${models.length} models:\n\n${models.join('\n')}`);
                               } catch (error) {
                                 console.error('[Settings] Failed to load models:', error);
@@ -714,13 +887,51 @@ export function Settings({
                             🔄 Refresh
                           </Button>
                         </div>
-                        <Input
-                          id="ollama-model"
-                          value={localConfig.ollama_model || ''}
-                          onChange={(e) => updateConfig('ollama_model', e.target.value)}
-                          placeholder={t('settings.placeholders.ollamaModel')}
-                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                        />
+                        {customModelInput.ollama ? (
+                          <div className="flex gap-2">
+                            <Input
+                              id="ollama-model"
+                              value={localConfig.ollama_model || ''}
+                              onChange={(e) => updateConfig('ollama_model', e.target.value)}
+                              placeholder="Enter custom model name"
+                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCustomModelInput(prev => ({ ...prev, ollama: false }))}
+                              className="h-9 px-3"
+                            >
+                              ← Select
+                            </Button>
+                          </div>
+                        ) : (
+                          <Select
+                            value={localConfig.ollama_model || ollamaModels[0]}
+                            onValueChange={(value) => {
+                              if (value === '__custom__') {
+                                setCustomModelInput(prev => ({ ...prev, ollama: true }));
+                              } else {
+                                updateConfig('ollama_model', value);
+                              }
+                            }}
+                          >
+                            <SelectTrigger id="ollama-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
+                              <SelectValue placeholder="Select a model" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-muted border-border max-h-60">
+                              {ollamaModels.map(model => (
+                                <SelectItem key={model} value={model} className="text-foreground">
+                                  {model}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="__custom__" className="text-foreground">
+                                Custom model...
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                         <p className="text-xs text-muted-foreground">
                           {t('settings.hints.ollamaModel')}
                         </p>
