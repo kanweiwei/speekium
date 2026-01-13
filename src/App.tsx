@@ -29,36 +29,15 @@ import {
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
 import type { WorkMode } from './types/workMode';
+import { parseHotkeyDisplay } from '@/utils/hotkeyParser';
 
 // Empty state component
 function EmptyState({ onPromptClick }: { onPromptClick: (prompt: string) => void }) {
   const { t } = useTranslation();
   const { config } = useSettings();
 
-  // Get hotkey display name from config
-  const hotkeyDisplay = config?.push_to_talk_hotkey?.displayName || '⌘⌥';
-  const hotkeyModifiers = config?.push_to_talk_hotkey?.modifiers || [];
-  const hotkeyKey = config?.push_to_talk_hotkey?.key || '';
-
-  // Parse the hotkey to display individual keys
-  let keyParts: string[] = [];
-  if (hotkeyModifiers.includes('CmdOrCtrl')) {
-    keyParts.push('⌘');
-  }
-  if (hotkeyModifiers.includes('Shift')) {
-    keyParts.push('⇧');
-  }
-  if (hotkeyModifiers.includes('Alt')) {
-    keyParts.push('⌥');
-  }
-  // Add the main key
-  if (hotkeyKey.startsWith('Digit')) {
-    keyParts.push(hotkeyKey.replace('Digit', ''));
-  } else if (hotkeyKey.startsWith('Key')) {
-    keyParts.push(hotkeyKey.replace('Key', '').toUpperCase());
-  } else {
-    keyParts.push(hotkeyKey);
-  }
+  // Parse hotkey configuration for display
+  const keyParts = parseHotkeyDisplay(config?.push_to_talk_hotkey);
 
   const examplePrompts = [
     { icon: Sparkles, text: t('app.emptyState.prompts.introduce'), gradient: "from-blue-500 to-purple-500" },

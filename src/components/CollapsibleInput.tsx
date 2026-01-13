@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
 import { useSettings } from '@/contexts/SettingsContext';
+import { getHotkeyDisplayName } from '@/utils/hotkeyParser';
 
 interface CollapsibleInputProps {
   /** Input value */
@@ -32,7 +33,7 @@ export function CollapsibleInput({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Get hotkey display name from config
-  const hotkeyDisplay = config?.push_to_talk_hotkey?.displayName || '⌘+⌥';
+  const hotkeyDisplay = getHotkeyDisplayName(config?.push_to_talk_hotkey);
   const expandButtonRef = useRef<HTMLButtonElement>(null);
   const collapseTimerRef = useRef<NodeJS.Timeout | null>(null);
 

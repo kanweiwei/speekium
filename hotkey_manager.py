@@ -165,26 +165,34 @@ class HotkeyManager:
                 print(f"❌ 启动快捷键监听失败: {e}")
                 return
 
-    def update_hotkey(self, new_hotkey_config: dict):
+    def update_hotkey(self, new_hotkey_config: dict) -> tuple[bool, str | None]:
         """
         动态更新热键配置
 
         Args:
             new_hotkey_config: dict with new hotkey configuration
+
+        Returns:
+            tuple[bool, str | None]: (success, error_message)
+                - success: True if update succeeded, False otherwise
+                - error_message: Error message if failed, None otherwise
         """
-        # 保存回调函数（在锁外保存，避免死锁）
-        with self._lock:
-            on_press = self.on_hotkey_press
-            on_release = self.on_hotkey_release
-            is_running = self.is_running
+        try:
+            # 保存回调函数（在锁外保存，避免死锁）
+            with self._lock:
+                on_press = self.on_hotkey_press
+                on_release = self.on_hotkey_release
+                is_running = self.is_running
 
-        # 在锁外停止和启动，避免死锁
-        if is_running:
-            self.stop()
+            # 在锁外停止和启动，避免死锁
+            if is_running:
+                self.stop()
 
-        self.start(new_hotkey_config, on_press, on_release)
+            self.start(new_hotkey_config, on_press, on_release)
 
-        # Note: Removed print to avoid interfering with daemon JSON responses
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
     def stop(self):
         """停止快捷键监听"""

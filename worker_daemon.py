@@ -672,10 +672,14 @@ class SpeekiumDaemon:
             self._log(f"📥 收到热键更新请求: {display_name}")
 
             # 调用 HotkeyManager 的 update_hotkey 方法
-            self.hotkey_manager.update_hotkey(hotkey_config)
+            success, error_message = self.hotkey_manager.update_hotkey(hotkey_config)
 
-            self._log(f"✅ 热键已更新为: {display_name}")
-            return {"success": True}
+            if success:
+                self._log(f"✅ 热键已更新为: {display_name}")
+                return {"success": True}
+            else:
+                self._log(f"❌ 热键更新失败: {error_message}")
+                return {"success": False, "error": error_message}
         except Exception as e:
             import traceback
             self._log(f"❌ 热键更新失败: {e}")
