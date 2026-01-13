@@ -48,6 +48,7 @@ interface HealthResult {
 interface Session {
   id: string;
   title: string;
+  is_favorite?: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -498,11 +499,12 @@ export function useTauriAPI() {
   // History API
   // ============================================================================
 
-  const listSessions = async (page: number = 1, pageSize: number = 20) => {
+  const listSessions = async (page: number = 1, pageSize: number = 20, filterFavorite?: boolean) => {
     try {
       const result = await invoke<PaginatedResult<Session>>('db_list_sessions', {
         page,
         pageSize,
+        filterFavorite,
       });
       return result;
     } catch (error) {
@@ -609,17 +611,33 @@ export type { Session, HistoryMessage, PaginatedResult };
 // ============================================================================
 
 export const historyAPI = {
-  listSessions: async (page: number = 1, pageSize: number = 20) => {
-    const result = await invoke<PaginatedResult<Session>>('db_list_sessions', {
-      page,
-      pageSize,
-    });
+  listSessions: async (page: number = 1, pageSize: number = 20, filterFavorite?: boolean) => {
+    console.log('[historyAPI] listSessions called with:', { page, pageSize, filterFavorite });
+    const params: Record<string, any> = { page, pageSize };
+    if (filterFavorite !== undefined) {
+      params.filterFavorite = filterFavorite;
+    }
+    console.log('[historyAPI] Invoking with params:', params);
+    const result = await invoke<PaginatedResult<Session>>('db_list_sessions', params);
+    console.log('[historyAPI] Invoke result:', result);
     return result;
   },
 
   getSession: async (sessionId: string) => {
     const result = await invoke<Session>('db_get_session', { sessionId });
     return result;
+  },
+
+  toggleFavorite: async (sessionId: string) => {
+    console.log('[historyAPI] toggleFavorite called with sessionId:', sessionId);
+    try {
+      const result = await invoke<boolean>('db_toggle_favorite', { sessionId });
+      console.log('[historyAPI] toggleFavorite result:', result);
+      return result;
+    } catch (error) {
+      console.error('[historyAPI] toggleFavorite error:', error);
+      throw error;
+    }
   },
 
   createSession: async (title: string) => {

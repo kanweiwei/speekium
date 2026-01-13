@@ -14,8 +14,6 @@ interface CollapsibleInputProps {
   onSend: () => void;
   /** Whether processing */
   isProcessing?: boolean;
-  /** Whether streaming output */
-  isStreaming?: boolean;
 }
 
 export function CollapsibleInput({
@@ -23,7 +21,6 @@ export function CollapsibleInput({
   onChange,
   onSend,
   isProcessing = false,
-  isStreaming = false,
 }: CollapsibleInputProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);

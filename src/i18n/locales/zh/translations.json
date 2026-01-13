@@ -203,6 +203,11 @@
   "history": {
     "title": "历史记录",
     "newSession": "新建会话",
+    "filter": {
+      "all": "全部对话",
+      "starredOnly": "仅收藏",
+      "unstarredOnly": "未收藏"
+    },
     "timeGroups": {
       "today": "今天",
       "yesterday": "昨天",
@@ -218,7 +223,9 @@
       "load": "加载此对话",
       "delete": "删除",
       "confirm": "确认",
-      "cancel": "取消"
+      "cancel": "取消",
+      "star": "收藏",
+      "unstar": "取消收藏"
     }
   },
   "session": {

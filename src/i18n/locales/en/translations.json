@@ -203,6 +203,11 @@
   "history": {
     "title": "History",
     "newSession": "New Session",
+    "filter": {
+      "all": "All Conversations",
+      "starredOnly": "Starred Only",
+      "unstarredOnly": "Unstarred Only"
+    },
     "timeGroups": {
       "today": "Today",
       "yesterday": "Yesterday",
@@ -218,7 +223,9 @@
       "load": "Load this conversation",
       "delete": "Delete",
       "confirm": "Confirm",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "star": "Star",
+      "unstar": "Unstar"
     }
   },
   "session": {

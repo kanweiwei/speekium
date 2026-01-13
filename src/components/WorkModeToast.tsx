@@ -5,7 +5,7 @@
  * 屏幕中央顶部显示，简洁风格
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MessageCircle, Type, X } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';

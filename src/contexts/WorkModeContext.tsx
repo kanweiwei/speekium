@@ -6,7 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { WorkMode, WorkModeConfig, WorkModeChangeEvent } from '@/types/workMode';
+import type { WorkMode, WorkModeChangeEvent } from '@/types/workMode';
 import {
   DEFAULT_WORK_MODE,
   WORK_MODE_STORAGE_KEY,
@@ -84,7 +84,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
   /**
    * Set work mode and persist to localStorage and config file
    */
-  const setWorkMode = useCallback(async (mode: WorkMode, source: WorkModeChangeEvent['source'] = 'settings') => {
+  const setWorkMode = useCallback(async (mode: WorkMode, _source: WorkModeChangeEvent['source'] = 'settings') => {
     // Update state
     setWorkModeState(mode);
 

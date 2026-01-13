@@ -204,7 +204,7 @@ class SpeekiumDaemon:
                     on_press=self._on_hotkey_press,
                     on_release=self._on_hotkey_release
                 )
-                self._log("✅ PTT 快捷键监听已启动 (Cmd+Alt)")
+                self._log("✅ PTT 快捷键监听已启动 (Cmd+1)")
             except Exception as e:
                 self._log(f"⚠️ PTT 快捷键监听启动失败: {e}")
                 # Continue without hotkey - can still use commands

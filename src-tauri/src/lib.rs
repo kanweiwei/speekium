@@ -95,10 +95,10 @@ impl PythonDaemon {
         }
 
         // Wait for daemon initialization - read stdout until "ready" event
-        // Daemon takes ~7s to load models, set 15s timeout
+        // Daemon takes ~18s to load all models, set 25s timeout
         use std::time::{Duration, Instant};
         let start = Instant::now();
-        let timeout = Duration::from_secs(15);
+        let timeout = Duration::from_secs(25);
         let mut initialized = false;
 
         println!("⏳ 等待守护进程初始化...");
@@ -138,8 +138,8 @@ impl PythonDaemon {
         }
 
         if !initialized {
-            println!("❌ 守护进程初始化超时 (15 秒)");
-            return Err("Daemon initialization timeout (15 seconds)".to_string());
+            println!("❌ 守护进程初始化超时 (25 秒)");
+            return Err("Daemon initialization timeout (25 seconds)".to_string());
         }
 
         println!("✅ Python 守护进程已启动");
@@ -607,8 +607,9 @@ async fn db_list_sessions(
     state: State<'_, AppState>,
     page: i32,
     page_size: i32,
+    filter_favorite: Option<bool>,
 ) -> Result<PaginatedResult<Session>, String> {
-    state.db.list_sessions(page, page_size)
+    state.db.list_sessions_filtered(page, page_size, filter_favorite)
 }
 
 #[tauri::command]
@@ -617,6 +618,14 @@ async fn db_get_session(
     session_id: String,
 ) -> Result<Session, String> {
     state.db.get_session(&session_id)
+}
+
+#[tauri::command]
+async fn db_toggle_favorite(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<bool, String> {
+    state.db.toggle_favorite(&session_id)
 }
 
 #[tauri::command]
@@ -1143,12 +1152,12 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
         }
     }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register toggle shortcut: {}", e)))?;
 
-    // PTT shortcut is now handled by Python daemon's HotkeyManager (supports Cmd+Alt)
+    // PTT shortcut is now handled by Python daemon's HotkeyManager (supports Cmd+1)
     // No longer need to register in Tauri
 
     println!("✅ 全局快捷键已注册:");
     println!("   • Command+Shift+Space - 显示/隐藏窗口");
-    println!("   • Command+Alt (Python pynput) - Push-to-Talk (按住说话)");
+    println!("   • Command+1 (Python pynput) - Push-to-Talk (按住说话)");
 
     Ok(())
 }
@@ -1330,6 +1339,7 @@ pub fn run() {
             db_create_session,
             db_list_sessions,
             db_get_session,
+            db_toggle_favorite,
             db_update_session,
             db_delete_session,
             db_add_message,
@@ -1366,7 +1376,7 @@ pub fn run() {
             }
 
             println!("✅ Speekium 应用已启动 (守护进程模式)");
-            println!("🎤 PTT 快捷键: Cmd+Alt (按住说话，松开结束)");
+            println!("🎤 PTT 快捷键: Cmd+1 (按住说话，松开结束)");
 
             Ok(())
         })

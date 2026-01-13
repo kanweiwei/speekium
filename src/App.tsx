@@ -8,23 +8,21 @@ import { NewSessionDialog } from './components/NewSessionDialog';
 import { ThemeToggle } from './components/ThemeToggle';
 import { WorkModeToast } from './components/WorkModeToast';
 import { CollapsibleInput } from './components/CollapsibleInput';
-import { WorkModeProvider, useWorkMode } from './contexts/WorkModeContext';
 import { historyAPI } from './useTauriAPI';
+import { useWorkMode } from './contexts/WorkModeContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Mic,
-  Send,
   Settings as SettingsIcon,
-  Clock,
   Play,
   Sparkles,
   Zap,
   MessageSquare,
-  Wand2,
-  Loader2,
   AlertCircle,
   X,
+  Wand2,
+  Clock,
   PenSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -461,13 +459,6 @@ function App() {
   // Handle quick prompt card click
   const handlePromptClick = async (prompt: string) => {
     await handleSendText(prompt);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendText();
-    }
   };
 
   return (

@@ -18,8 +18,8 @@ class HotkeyManager:
 
         # 快捷键状态
         self.ctrl_pressed = False
-        self.alt_pressed = False
         self.cmd_pressed = False  # macOS Command key
+        self.key_1_pressed = False  # 数字键 1
         self.was_triggered = False  # 防止重复触发
 
         # 回调函数
@@ -52,10 +52,10 @@ class HotkeyManager:
                     # 更新修饰键状态
                     if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
                         self.ctrl_pressed = True
-                    elif key == keyboard.Key.alt_l or key == keyboard.Key.alt_r:
-                        self.alt_pressed = True
                     elif key == keyboard.Key.cmd or key == keyboard.Key.cmd_r:
                         self.cmd_pressed = True
+                    elif hasattr(key, 'char') and key.char == '1':
+                        self.key_1_pressed = True
 
                     # 检查完整快捷键组合
                     self._check_hotkey_combination()
@@ -67,17 +67,17 @@ class HotkeyManager:
                 try:
                     # 更新修饰键状态
                     released_cmd = key == keyboard.Key.cmd or key == keyboard.Key.cmd_r
-                    released_alt = key == keyboard.Key.alt_l or key == keyboard.Key.alt_r
+                    released_1 = hasattr(key, 'char') and key.char == '1'
 
                     if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
                         self.ctrl_pressed = False
-                    elif released_alt:
-                        self.alt_pressed = False
+                    elif released_1:
+                        self.key_1_pressed = False
                     elif released_cmd:
                         self.cmd_pressed = False
 
-                    # 如果松开了 Cmd 或 Alt，触发释放回调
-                    if (released_cmd or released_alt) and self.was_triggered:
+                    # 如果松开了 Cmd 或 1，触发释放回调
+                    if (released_cmd or released_1) and self.was_triggered:
                         self._check_hotkey_release()
 
                 except Exception as e:
@@ -91,7 +91,7 @@ class HotkeyManager:
             self.is_running = True
 
             modifier_key = "Cmd" if self.is_macos else "Ctrl"
-            print(f"⌨️  全局快捷键监听已启动: {modifier_key} + Alt")
+            print(f"⌨️  全局快捷键监听已启动: {modifier_key} + 1")
 
         except ImportError:
             print("❌ pynput 未安装，无法使用全局快捷键")
@@ -112,11 +112,11 @@ class HotkeyManager:
 
     def _check_hotkey_combination(self):
         """检查完整的快捷键组合是否被按下"""
-        # macOS: Cmd + Alt
-        # Windows/Linux: Ctrl + Alt
+        # macOS: Cmd + 1
+        # Windows/Linux: Ctrl + 1
         is_hotkey_active = (
             self.cmd_pressed if self.is_macos else self.ctrl_pressed
-        ) and self.alt_pressed
+        ) and self.key_1_pressed
 
         if is_hotkey_active and not self.was_triggered and self.on_hotkey_press:
             try:
@@ -137,4 +137,4 @@ class HotkeyManager:
 
     def is_hotkey_active(self) -> bool:
         """检查快捷键是否当前激活"""
-        return (self.cmd_pressed if self.is_macos else self.ctrl_pressed) and self.alt_pressed
+        return (self.cmd_pressed if self.is_macos else self.ctrl_pressed) and self.key_1_pressed

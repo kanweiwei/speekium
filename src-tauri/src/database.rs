@@ -16,6 +16,8 @@ use tauri::Manager;
 pub struct Session {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub is_favorite: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -121,6 +123,27 @@ impl Database {
             println!("✅ Migration v1 completed");
         }
 
+        // Migration v1 -> v2: Add is_favorite column
+        if version < 2 {
+            println!("🔄 Running migration v1 -> v2: Add is_favorite column");
+
+            conn.execute_batch(
+                "
+                -- Add is_favorite column to sessions table
+                ALTER TABLE sessions ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;
+
+                -- Create index for favorite filtering
+                CREATE INDEX IF NOT EXISTS idx_sessions_favorite ON sessions(is_favorite, updated_at DESC);
+
+                -- Update schema version
+                PRAGMA user_version = 2;
+                ",
+            )
+            .map_err(|e| format!("Migration v2 failed: {}", e))?;
+
+            println!("✅ Migration v2 completed");
+        }
+
         Ok(())
     }
 
@@ -136,14 +159,15 @@ impl Database {
         let now = chrono::Utc::now().timestamp_millis();
 
         conn.execute(
-            "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
-            params![id, title, now, now],
+            "INSERT INTO sessions (id, title, is_favorite, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, title, 0, now, now],
         )
         .map_err(|e| format!("Failed to create session: {}", e))?;
 
         Ok(Session {
             id,
             title,
+            is_favorite: false,
             created_at: now,
             updated_at: now,
         })
@@ -151,23 +175,45 @@ impl Database {
 
     /// List sessions with pagination
     pub fn list_sessions(&self, page: i32, page_size: i32) -> Result<PaginatedResult<Session>, String> {
+        self.list_sessions_filtered(page, page_size, None)
+    }
+
+    /// List sessions with pagination and optional favorite filter
+    pub fn list_sessions_filtered(
+        &self,
+        page: i32,
+        page_size: i32,
+        filter_favorite: Option<bool>,
+    ) -> Result<PaginatedResult<Session>, String> {
         let conn = self.conn.lock().unwrap();
+
+        // Build WHERE clause for filtering
+        let where_clause = match filter_favorite {
+            Some(true) => " WHERE is_favorite = 1",
+            Some(false) => " WHERE is_favorite = 0",
+            None => "",
+        };
 
         // Get total count
         let total: i64 = conn
-            .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
+            .query_row(
+                &format!("SELECT COUNT(*) FROM sessions{}", where_clause),
+                [],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to count sessions: {}", e))?;
 
         // Calculate offset
         let offset = (page - 1) * page_size;
 
         // Query sessions
+        let query = format!(
+            "SELECT id, title, is_favorite, created_at, updated_at FROM sessions{} ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
+            where_clause
+        );
+
         let mut stmt = conn
-            .prepare(
-                "SELECT id, title, created_at, updated_at FROM sessions
-                 ORDER BY updated_at DESC
-                 LIMIT ?1 OFFSET ?2",
-            )
+            .prepare(&query)
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
         let sessions = stmt
@@ -175,8 +221,9 @@ impl Database {
                 Ok(Session {
                     id: row.get(0)?,
                     title: row.get(1)?,
-                    created_at: row.get(2)?,
-                    updated_at: row.get(3)?,
+                    is_favorite: row.get::<_, i32>(2)? == 1,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
                 })
             })
             .map_err(|e| format!("Failed to query sessions: {}", e))?
@@ -199,18 +246,50 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         conn.query_row(
-            "SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?1",
+            "SELECT id, title, is_favorite, created_at, updated_at FROM sessions WHERE id = ?1",
             params![session_id],
             |row| {
                 Ok(Session {
                     id: row.get(0)?,
                     title: row.get(1)?,
-                    created_at: row.get(2)?,
-                    updated_at: row.get(3)?,
+                    is_favorite: row.get::<_, i32>(2)? == 1,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
                 })
             },
         )
         .map_err(|e| format!("Session not found: {}", e))
+    }
+
+    /// Toggle favorite status of a session
+    pub fn toggle_favorite(&self, session_id: &str) -> Result<bool, String> {
+        let conn = self.conn.lock().unwrap();
+
+        // Get current state directly without calling get_session (avoids deadlock)
+        let current_state: i32 = conn
+            .query_row(
+                "SELECT is_favorite FROM sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to query session: {}", e))?;
+
+        let new_state = current_state == 0;
+
+        // Update state
+        let now = chrono::Utc::now().timestamp_millis();
+        let rows_affected = conn
+            .execute(
+                "UPDATE sessions SET is_favorite = ?1, updated_at = ?2 WHERE id = ?3",
+                params![if new_state { 1 } else { 0 }, now, session_id],
+            )
+            .map_err(|e| format!("Failed to toggle favorite: {}", e))?;
+
+        if rows_affected == 0 {
+            return Err("Session not found".to_string());
+        }
+
+        Ok(new_state)
     }
 
     /// Update a session's title
