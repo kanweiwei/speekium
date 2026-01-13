@@ -141,6 +141,11 @@ export function Settings({
       setConnectionError(String(error));
     } finally {
       setIsTestingConnection(false);
+      // 3秒后自动重置状态
+      setTimeout(() => {
+        setConnectionStatus('idle');
+        setConnectionError('');
+      }, 3000);
     }
   };
 
@@ -209,12 +214,22 @@ export function Settings({
         setIsPreviewingTTS(false);
         setConnectionStatus('error');
         setConnectionError(result.error || t('settings.audio.generationFailed'));
+        // 3秒后自动重置状态
+        setTimeout(() => {
+          setConnectionStatus('idle');
+          setConnectionError('');
+        }, 3000);
       }
     } catch (error) {
       console.error('[Settings] TTS preview error:', error);
       setIsPreviewingTTS(false);
       setConnectionStatus('error');
       setConnectionError(String(error));
+      // 3秒后自动重置状态
+      setTimeout(() => {
+        setConnectionStatus('idle');
+        setConnectionError('');
+      }, 3000);
     }
   };
 
