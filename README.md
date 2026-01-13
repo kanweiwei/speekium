@@ -5,243 +5,269 @@
 <h1 align="center">Speekium</h1>
 
 <p align="center">
-  <strong>Talk to AI with your voice. Locally. Privately. Open Source.</strong>
+  <strong>Open-source voice assistant that respects your privacy.</strong>
 </p>
 
 <p align="center">
-  <a href="./README_CN.md">中文文档</a> •
+  <a href="./README_CN.md">中文</a> •
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#why-speekium">Why Speekium</a> •
-  <a href="#roadmap">Roadmap</a> •
-  <a href="./docs/ci_cd_security.md">Security</a>
+  <a href="#configuration">Configuration</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform">
-  <img src="https://img.shields.io/github/license/kanweiwei/speekium" alt="License">
-  <img src="https://img.shields.io/badge/security-0%20vulnerabilities-brightgreen.svg" alt="Security">
-  <img src="https://img.shields.io/github/stars/kanweiwei/speekium?style=social" alt="Stars">
+  <a href="https://github.com/kanweiwei/speekium/releases"><img src="https://img.shields.io/github/v/release/kanweiwei/speekium?style=flat-square&color=blue" alt="Release"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/github/license/kanweiwei/speekium?style=flat-square" alt="License">
+  <a href="https://github.com/kanweiwei/speekium/stargazers"><img src="https://img.shields.io/github/stars/kanweiwei/speekium?style=flat-square" alt="Stars"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Tauri-2.0-blue?style=flat-square&logo=tauri" alt="Tauri">
+  <img src="https://img.shields.io/badge/React-18-61dafb?style=flat-square&logo=react" alt="React">
+  <img src="https://img.shields.io/badge/Rust-1.70+-orange?style=flat-square&logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/Python-3.10+-yellow?style=flat-square&logo=python" alt="Python">
 </p>
 
 ---
 
-> **🎉 NEW: Tauri Desktop App with Advanced Features!**
->
-> A modern desktop application with **daemon mode**, **streaming responses**, and **real-time TTS**.
->
-> **⚡ One-Click Start**: `./start-tauri.sh` (Recommended!)
->
-> Or manual: `npm run tauri dev`
->
-> ### 🚀 Performance Highlights
-> - **18x faster** response time (3.5s → 0.2s after first call)
-> - **10x better perceived speed** (first character in 0.5s vs 5s)
-> - **Edge-to-edge streaming** (LLM + TTS generation while playing)
->
-> 📖 **Quick Start**: [QUICK_START_TTS.md](./QUICK_START_TTS.md)
->
-> 📚 **Technical Docs**: [DAEMON_MODE.md](./DAEMON_MODE.md) | [STREAMING_MODE.md](./STREAMING_MODE.md) | [TTS_STREAMING_MODE.md](./TTS_STREAMING_MODE.md)
-
----
+<p align="center">
+  <img src="./docs/screenshots/main.png" width="600" alt="Speekium Main Interface">
+</p>
 
 ## Why Speekium?
 
 | Feature | Speekium | Siri/Alexa | ChatGPT Voice |
-|---------|----------|------------|---------------|
-| Runs locally | ✅ | ❌ | ❌ |
-| Your data stays private | ✅ | ❌ | ❌ |
-| Choose your own LLM | ✅ | ❌ | ❌ |
-| Open source | ✅ | ❌ | ❌ |
-| No wake word needed | ✅ | ❌ | ✅ |
-| Works offline (with Ollama) | ✅ | ❌ | ❌ |
+|---------|:--------:|:----------:|:-------------:|
+| **Runs locally** | ✅ | ❌ | ❌ |
+| **Your data stays private** | ✅ | ❌ | ❌ |
+| **Choose your own LLM** | ✅ | ❌ | ❌ |
+| **Open source** | ✅ | ❌ | ❌ |
+| **Works offline** | ✅ | ❌ | ❌ |
+| **No subscription required** | ✅ | ✅ | ❌ |
 
-**Speekium** is a voice assistant that respects your privacy. All speech processing happens on your machine. You choose which LLM to use — Claude, Ollama, or bring your own.
+## Features
+
+### Voice Input Modes
+- **Push-to-Talk (PTT)**: Hold hotkey to record, release to send
+- **Continuous Mode**: Auto-detect voice with VAD (Voice Activity Detection)
+
+### Work Modes
+- **Conversation Mode**: Chat with AI, hear responses via TTS
+- **Text Mode**: Voice-to-text input for any application
+
+### LLM Backends
+- **Ollama** - Run AI completely offline with local models
+- **OpenAI** - GPT-4o, GPT-4o-mini, GPT-3.5-turbo
+- **OpenRouter** - Access Claude, Gemini, and 100+ models
+- **Claude Code CLI** - Direct Claude integration
+- **Custom** - Any OpenAI-compatible API
+
+### More
+- Real-time streaming TTS (Edge TTS)
+- Dark/Light theme
+- i18n support (English, Chinese)
+- Customizable hotkeys
+- Conversation history
+
+## Screenshots
+
+<details>
+<summary>Click to view more screenshots</summary>
+
+### Settings
+<img src="./docs/screenshots/settings.png" width="600" alt="Settings">
+
+### LLM Backend Configuration
+<img src="./docs/screenshots/llm-backends.png" width="600" alt="LLM Backends">
+
+### Dark & Light Theme
+<img src="./docs/screenshots/themes.png" width="600" alt="Themes">
+
+</details>
+
+## Installation
+
+### Download (Recommended)
+
+Download the latest release for your platform:
+
+| Platform | Download |
+|----------|----------|
+| **macOS** (Apple Silicon & Intel) | [Speekium.dmg](https://github.com/kanweiwei/speekium/releases/latest) |
+| **Windows** | [Speekium-setup.exe](https://github.com/kanweiwei/speekium/releases/latest) |
+
+### Build from Source
+
+<details>
+<summary>Click to expand</summary>
+
+**Prerequisites:**
+- Node.js 20+
+- Rust 1.70+
+- Python 3.10+
+- [uv](https://github.com/astral-sh/uv) (Python package manager)
+
+```bash
+# Clone the repository
+git clone https://github.com/kanweiwei/speekium.git
+cd speekium
+
+# Install dependencies
+npm install
+uv sync
+
+# Run in development mode
+npm run tauri dev
+
+# Build for production
+npm run tauri build
+```
+
+</details>
 
 ## Quick Start
 
-**1. Install uv (Python package manager):**
+### 1. Launch Speekium
 
+Open the app after installation. The daemon will start automatically.
+
+### 2. Configure LLM Backend
+
+Click the settings icon and choose your preferred LLM backend:
+
+**For Ollama (Offline):**
 ```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-**2. Run Speekium:**
-
-```bash
-git clone https://github.com/kanweiwei/speekium.git
-cd speekium
-uv sync
-uv run python speekium.py
-```
-
-That's it. Start talking.
-
-> **Note**: Requires Python 3.10+. First run downloads ~1GB of models.
-
-<details>
-<summary>📦 Alternative installation methods</summary>
-
-**Using pip:**
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e .
-python speekium.py
-```
-
-**Linux dependencies:**
-```bash
-# Ubuntu/Debian
-sudo apt install portaudio19-dev ffmpeg
-
-# Fedora
-sudo dnf install portaudio-devel ffmpeg
-```
-</details>
-
-## How It Works
-
-```
-🎤 You speak
-    ↓
-🔍 VAD detects voice (Silero)
-    ↓
-📝 Speech → Text (SenseVoice)
-    ↓
-🤖 LLM generates response (Claude/Ollama/...)
-    ↓
-🔊 Text → Speech (Edge TTS)
-    ↓
-🎧 You hear the response
-```
-
-**Key features:**
-- **Auto voice detection** — No button press, no wake word
-- **Streaming response** — Starts speaking while still generating
-- **Pluggable LLM** — Use Claude API, local Ollama, or add your own
-- **Multi-language** — Chinese, English, and more
-
-## LLM Backends
-
-### Claude (Default)
-
-Requires [Claude Code CLI](https://github.com/anthropics/claude-code):
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-
-### Ollama (Local & Private)
-
-Run AI completely offline:
-
-```bash
-# Install Ollama
+# Install Ollama first
 brew install ollama  # macOS
-ollama pull qwen2.5:7b
+# or download from https://ollama.ai
 
-# Configure Speekium
-# Edit speekium.py:
-LLM_BACKEND = "ollama"
-OLLAMA_MODEL = "qwen2.5:7b"
+# Pull a model
+ollama pull qwen2.5:7b
 ```
 
-| Backend | Status |
-|---------|--------|
-| Claude Code CLI | ✅ Supported |
-| Ollama | ✅ Supported |
-| OpenAI API | 🚧 Planned |
+**For OpenAI/OpenRouter:**
+Enter your API key in settings.
+
+### 3. Start Talking
+
+- **PTT Mode**: Hold `⌘1` (Mac) or `Ctrl+1` (Windows) to record
+- **Continuous Mode**: Just start speaking
 
 ## Configuration
 
-Edit `speekium.py`:
+### Hotkeys
 
-```python
-# LLM Backend
-LLM_BACKEND = "claude"  # or "ollama"
+| Action | macOS | Windows |
+|--------|-------|---------|
+| Push-to-Talk | `⌘1` | `Ctrl+1` |
+| Show/Hide Window | `⌘⇧Space` | `Ctrl+Shift+Space` |
 
-# Voice detection sensitivity
-VAD_THRESHOLD = 0.5  # Lower = more sensitive
+> PTT hotkey can be customized in Settings → Shortcuts
+
+### Voice Settings
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| VAD Threshold | Voice detection sensitivity | 0.5 |
+| Silence Timeout | Time to wait after speech | 1.5s |
+| TTS Rate | Speech speed adjustment | +0% |
+
+## Architecture
+
 ```
-
-<details>
-<summary>🗣️ Available Edge TTS voices</summary>
-
-| Voice | Description |
-|-------|-------------|
-| `zh-CN-XiaoyiNeural` | Xiaoyi (Female, lively) |
-| `zh-CN-XiaoxiaoNeural` | Xiaoxiao (Female, gentle) |
-| `zh-CN-YunxiNeural` | Yunxi (Male) |
-| `zh-CN-YunjianNeural` | Yunjian (Male, announcer) |
-
-List all voices: `edge-tts --list-voices`
-</details>
+┌─────────────────────────────────────────────────────────────┐
+│                     Speekium Desktop App                     │
+│                      (Tauri + React)                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    │
+│   │   Frontend  │    │    Rust     │    │   Python    │    │
+│   │   (React)   │◄──►│   Backend   │◄──►│   Daemon    │    │
+│   └─────────────┘    └─────────────┘    └─────────────┘    │
+│                                                │             │
+│                                          ┌─────┴─────┐      │
+│                                          │           │      │
+│                                     ┌────▼───┐ ┌────▼───┐  │
+│                                     │  VAD   │ │  ASR   │  │
+│                                     │(Silero)│ │(Sense- │  │
+│                                     │        │ │ Voice) │  │
+│                                     └────────┘ └────────┘  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │         LLM Backends          │
+              ├───────────────────────────────┤
+              │ Ollama │ OpenAI │ OpenRouter  │
+              │ Claude │ Custom API           │
+              └───────────────────────────────┘
+```
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
+| Desktop Framework | [Tauri 2.0](https://tauri.app/) |
+| Frontend | React 18 + TypeScript + Tailwind CSS |
+| Backend | Rust + Python |
 | Voice Detection | [Silero VAD](https://github.com/snakers4/silero-vad) |
 | Speech Recognition | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) |
 | Text-to-Speech | [Edge TTS](https://github.com/rany2/edge-tts) |
-| Audio | sounddevice, scipy, numpy |
 
 ## Roadmap
 
-- [x] VAD-based voice detection
-- [x] SenseVoice ASR
+- [x] Tauri desktop app
+- [x] Push-to-Talk mode
+- [x] Continuous VAD mode
+- [x] Multiple LLM backends
 - [x] Streaming TTS
-- [x] Claude backend
-- [x] Ollama backend
-- [x] Conversation memory
-- [x] Auto language detection
-- [ ] OpenAI API backend
+- [x] Conversation history
+- [x] i18n (EN/CN)
+- [x] Custom hotkeys
 - [ ] Wake word detection
-- [ ] Web UI
+- [ ] More TTS engines
+- [ ] Plugin system
+- [ ] Linux support
 
 ## Troubleshooting
 
 <details>
-<summary><b>llvmlite build fails</b></summary>
+<summary><b>Microphone not working</b></summary>
 
-```bash
-# macOS
-brew install llvm
+1. Check system microphone permissions
+2. Try lowering VAD threshold in settings (e.g., 0.3)
+3. Make sure no other app is using the microphone
 
-# Ubuntu/Debian
-sudo apt install llvm-dev
-
-# Or use Python 3.10
-uv sync --python 3.10
-```
 </details>
 
 <details>
-<summary><b>No audio input</b></summary>
+<summary><b>Ollama connection failed</b></summary>
 
-- Check microphone permissions
-- Lower `VAD_THRESHOLD` (e.g., 0.3)
+1. Make sure Ollama is running: `ollama serve`
+2. Check if model is pulled: `ollama list`
+3. Verify the base URL in settings (default: `http://localhost:11434`)
+
 </details>
 
 <details>
-<summary><b>Claude CLI not found</b></summary>
+<summary><b>TTS not working</b></summary>
 
-```bash
-npm install -g @anthropic-ai/claude-code
-```
+1. Edge TTS requires internet connection
+2. Try the "Preview TTS" button in settings
+3. Check console for error messages
+
 </details>
 
 ## Contributing
 
-Contributions welcome!
+Contributions are welcome! Please feel free to:
 
-- 🐛 [Report bugs](https://github.com/kanweiwei/speekium/issues)
-- 💡 [Suggest features](https://github.com/kanweiwei/speekium/issues)
-- 🔧 Submit pull requests
+- Report bugs via [Issues](https://github.com/kanweiwei/speekium/issues)
+- Suggest features via [Discussions](https://github.com/kanweiwei/speekium/discussions)
+- Submit pull requests
 
 ## License
 
@@ -250,5 +276,9 @@ Contributions welcome!
 ---
 
 <p align="center">
-  <strong>If Speekium helps you, give it a ⭐</strong>
+  <strong>If Speekium helps you, please give it a ⭐</strong>
+</p>
+
+<p align="center">
+  Made with ❤️ by the open source community
 </p>
