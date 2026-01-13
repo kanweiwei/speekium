@@ -351,11 +351,211 @@ class OllamaBackend(LLMBackend):
             yield f"Error: {e}"
 
 
+class OpenAIBackend(LLMBackend):
+    """Base class for OpenAI-compatible APIs (OpenAI, Gemini, OpenRouter)"""
+
+    def __init__(
+        self,
+        system_prompt: str,
+        api_key: str,
+        base_url: str,
+        model: str,
+        max_history: int = 10,
+    ):
+        super().__init__(system_prompt, max_history)
+        self.api_key = api_key
+        self.base_url = base_url
+        self.model = model
+
+    def _build_messages(self, message: str) -> list[dict[str, str]]:
+        """Build message list with history"""
+        messages = [{"role": "system", "content": self.system_prompt}]
+        messages.extend(self.history)
+        messages.append({"role": "user", "content": message})
+        return messages
+
+    def chat(self, message: str) -> str:
+        logger.info("llm_processing", backend="openai_api", model=self.model)
+
+        # Security: Validate input
+        try:
+            message = validate_input(message)
+        except ValueError as e:
+            logger.warning("input_validation_failed", error=str(e))
+            return f"Error: {e}"
+
+        try:
+            import httpx
+
+            messages = self._build_messages(message)
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+            }
+
+            logger.debug("openai_request_sent", model=self.model, message_count=len(messages))
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+
+            response = httpx.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=120,
+            )
+
+            if response.status_code != 200:
+                logger.error("openai_api_error", status_code=response.status_code, body=response.text)
+                response.raise_for_status()
+
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+            logger.info("llm_response_received", backend="openai_api", response_preview=content[:100])
+
+            # Save to history
+            self.add_message("user", message)
+            self.add_message("assistant", content)
+
+            return content
+        except Exception as e:
+            logger.error("openai_api_error", error=str(e), error_type=type(e).__name__)
+            return f"Error: {e}"
+
+    async def chat_stream(self, message: str) -> AsyncIterator[str]:
+        logger.info("llm_processing", backend="openai_api", model=self.model)
+
+        try:
+            import httpx
+
+            messages = self._build_messages(message)
+            buffer = ""
+            full_response = ""
+            sentence_endings = re.compile(r"([。！？\n])")
+
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": True,
+            }
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+
+            async with (
+                httpx.AsyncClient() as client,
+                client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=120,
+                ) as response,
+            ):
+                if response.status_code != 200:
+                    logger.error("openai_stream_error", status_code=response.status_code)
+                    response.raise_for_status()
+
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+
+                    data_str = line[6:]  # Remove "data: " prefix
+                    if data_str.strip() == "[DONE]":
+                        break
+
+                    try:
+                        data = json.loads(data_str)
+                        content = data["choices"][0]["delta"].get("content", "")
+                        if content:
+                            buffer += content
+                            full_response += content
+
+                            while True:
+                                match = sentence_endings.search(buffer)
+                                if match:
+                                    end_pos = match.end()
+                                    sentence = buffer[:end_pos].strip()
+                                    buffer = buffer[end_pos:]
+                                    if sentence:
+                                        logger.debug("sentence_generated", sentence=sentence)
+                                        yield sentence
+                                else:
+                                    break
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+
+            if buffer.strip():
+                logger.debug("buffer_output", text=buffer.strip())
+                full_response += buffer.strip()
+                yield buffer.strip()
+
+            # Save to history
+            self.add_message("user", message)
+            self.add_message("assistant", full_response)
+
+        except Exception as e:
+            logger.error("openai_stream_error", error=str(e), error_type=type(e).__name__)
+            yield f"Error: {e}"
+
+
+class OpenAIBackend_Official(OpenAIBackend):
+    """OpenAI official API backend"""
+
+    def __init__(
+        self,
+        system_prompt: str,
+        api_key: str,
+        model: str = "gpt-4o-mini",
+        base_url: str = "https://api.openai.com/v1",
+        max_history: int = 10,
+    ):
+        super().__init__(system_prompt, api_key, base_url, model, max_history)
+
+
+class GeminiBackend(OpenAIBackend):
+    """Google Gemini API backend (using OpenAI-compatible endpoint)"""
+
+    def __init__(
+        self,
+        system_prompt: str,
+        api_key: str,
+        model: str = "gemini-2.0-flash-exp",
+        base_url: str = "https://generativelanguage.googleapis.com/v1beta",
+        max_history: int = 10,
+    ):
+        # Gemini uses a different URL structure
+        # For OpenAI-compatible format, we use the OpenAI endpoint
+        super().__init__(system_prompt, api_key, base_url, model, max_history)
+
+
+class OpenRouterBackend(OpenAIBackend):
+    """OpenRouter API backend - unified access to multiple LLMs"""
+
+    def __init__(
+        self,
+        system_prompt: str,
+        api_key: str,
+        model: str = "anthropic/claude-3.5-sonnet",
+        base_url: str = "https://openrouter.ai/api/v1",
+        max_history: int = 10,
+    ):
+        super().__init__(system_prompt, api_key, base_url, model, max_history)
+
+
 def create_backend(backend_type: str, system_prompt: str, **kwargs) -> LLMBackend:
     """Factory function to create LLM backend"""
     backends = {
         "claude": ClaudeBackend,
         "ollama": OllamaBackend,
+        "openai": OpenAIBackend_Official,
+        "gemini": GeminiBackend,
+        "openrouter": OpenRouterBackend,
     }
 
     if backend_type not in backends:
