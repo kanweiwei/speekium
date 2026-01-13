@@ -1,0 +1,63 @@
+.recorderContainer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.recorderButton {
+  padding: 8px 16px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 6px;
+  background: var(--bg-color, #fff);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.recorderButton:hover:not(:disabled) {
+  border-color: var(--primary-color, #007aff);
+}
+
+.recorderButton.recording {
+  border-color: var(--recording-color, #ff3b30);
+  background: var(--recording-bg, #fff5f5);
+  animation: pulse 1.5s infinite;
+}
+
+.recorderButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.hotkeyDisplay {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 6px;
+  background: var(--bg-secondary, #f5f5f5);
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+  min-width: 80px;
+  justify-content: center;
+}
+
+.key {
+  padding: 2px 6px;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 4px;
+  background: var(--key-bg, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
