@@ -36,6 +36,7 @@ import {
   Trash2,
   MessageCircle,
   Type,
+  RefreshCw,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from '@/i18n';
@@ -856,6 +857,7 @@ export function Settings({
                             variant="ghost"
                             size="sm"
                             onClick={async () => {
+                              console.log('[Settings] Refresh button clicked, isLoading:', isLoadingOllamaModels);
                               setIsLoadingOllamaModels(true);
                               try {
                                 const models = await invoke<string[]>('list_ollama_models', {
@@ -869,12 +871,13 @@ export function Settings({
                                 alert('Failed to load Ollama models. Make sure Ollama is running.');
                               } finally {
                                 setIsLoadingOllamaModels(false);
+                                console.log('[Settings] Loading finished');
                               }
                             }}
                             disabled={isLoadingOllamaModels}
                             className="h-7 px-2 text-xs"
                           >
-                            <Loader2 className={`h-3 w-3 mr-1 ${isLoadingOllamaModels ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`h-3 w-3 mr-1 ${isLoadingOllamaModels ? 'animate-spin' : ''}`} />
                             Refresh
                           </Button>
                         </div>
