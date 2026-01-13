@@ -271,7 +271,7 @@ ollama pull qwen2.5:7b
 
 ## 许可证
 
-[MIT](./LICENSE) © 2025 [kanweiwei](https://github.com/kanweiwei)
+[MIT](./LICENSE) © 2026 [Speekium](https://github.com/kanweiwei/speekium)
 
 ---
 

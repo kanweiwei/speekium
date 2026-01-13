@@ -271,7 +271,7 @@ Contributions are welcome! Please feel free to:
 
 ## License
 
-[MIT](./LICENSE) © 2025 [kanweiwei](https://github.com/kanweiwei)
+[MIT](./LICENSE) © 2026 [Speekium](https://github.com/kanweiwei/speekium)
 
 ---
 
