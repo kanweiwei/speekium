@@ -48,6 +48,8 @@ class HotkeyManager:
         Returns:
             tuple: (modifier_key_name, main_key_char)
         """
+        from pynput import keyboard
+
         modifiers = config.get('modifiers', [])
         key_code = config.get('key', 'Digit1')
 
