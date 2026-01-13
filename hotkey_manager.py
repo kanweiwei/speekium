@@ -170,19 +170,19 @@ class HotkeyManager:
         Args:
             new_hotkey_config: dict with new hotkey configuration
         """
+        # 保存回调函数（在锁外保存，避免死锁）
         with self._lock:
-            # 保存回调函数
             on_press = self.on_hotkey_press
             on_release = self.on_hotkey_release
+            is_running = self.is_running
 
-            # 停止当前监听
-            if self.is_running:
-                self.stop()
+        # 在锁外停止和启动，避免死锁
+        if is_running:
+            self.stop()
 
-            # 使用新配置启动
-            self.start(new_hotkey_config, on_press, on_release)
+        self.start(new_hotkey_config, on_press, on_release)
 
-            print(f"✅ 热键已更新为: {new_hotkey_config.get('displayName', new_hotkey_config.get('key', 'unknown'))}")
+        print(f"✅ 热键已更新为: {new_hotkey_config.get('displayName', new_hotkey_config.get('key', 'unknown'))}")
 
     def stop(self):
         """停止快捷键监听"""
