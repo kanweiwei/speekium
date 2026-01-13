@@ -617,7 +617,7 @@ export function Settings({
                           id="ollama-base-url"
                           value={localConfig.ollama_base_url || ''}
                           onChange={(e) => updateConfig('ollama_base_url', e.target.value)}
-                          placeholder={t('settings.placeholders.ollamaUrl)}
+                          placeholder={t('settings.placeholders.ollamaUrl')}
                           className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                         />
                         <p className="text-xs text-muted-foreground">
