@@ -1130,6 +1130,49 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
     }
 }
 
+/// Get list of installed Ollama models
+#[tauri::command]
+async fn list_ollama_models(base_url: String) -> Result<Vec<String>, String> {
+    println!("📋 获取 Ollama 模型列表: {}", base_url);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let tags_url = format!("{}/api/tags", base_url);
+    let response = client
+        .get(&tags_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to Ollama: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Ollama returned error status: {}", response.status()));
+    }
+
+    let data = response.json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let models = data.get("models")
+        .and_then(|m| m.as_array())
+        .ok_or_else(|| "No models found in response".to_string())?;
+
+    let model_names: Vec<String> = models.iter()
+        .filter_map(|m| m.get("name"))
+        .filter_map(|n| n.as_str())
+        .map(|s| s.to_string())
+        .collect();
+
+    println!("✅ 找到 {} 个模型", model_names.len());
+    for model in &model_names {
+        println!("  - {}", model);
+    }
+
+    Ok(model_names)
+}
+
 // ============================================================================
 // Global Shortcuts
 // ============================================================================
@@ -1334,6 +1377,7 @@ pub fn run() {
             save_config,
             daemon_health,
             test_ollama_connection,
+            list_ollama_models,
             type_text_command,
             // Database commands
             db_create_session,
