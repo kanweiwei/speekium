@@ -91,6 +91,7 @@ class SpeekiumDaemon:
         self.ptt_recording = False
         self.ptt_audio_frames = []
         self.ptt_stream = None
+        self.ptt_start_future = None  # Track the start recording future for synchronization
 
         # Hotkey manager for PTT
         self.hotkey_manager = None
@@ -127,14 +128,49 @@ class SpeekiumDaemon:
         # Use stderr to avoid interfering with command responses on stdout
         print(json.dumps(event), file=sys.stderr, flush=True)
 
+    def _cleanup(self):
+        """Clean up resources before exit"""
+        self._log("🧹 正在清理资源...")
+
+        # Stop PTT recording if active
+        if self.ptt_recording:
+            self._log("🧹 停止 PTT 录音...")
+            self.ptt_recording = False
+
+        # Close audio stream if open
+        if self.ptt_stream:
+            try:
+                self._log("🧹 关闭音频流...")
+                self.ptt_stream.stop()
+                self.ptt_stream.close()
+            except Exception as e:
+                self._log(f"⚠️ 关闭音频流失败: {e}")
+            finally:
+                self.ptt_stream = None
+
+        # Stop hotkey manager
+        if self.hotkey_manager:
+            try:
+                self._log("🧹 停止热键监听...")
+                self.hotkey_manager.stop()
+            except Exception as e:
+                self._log(f"⚠️ 停止热键监听失败: {e}")
+            finally:
+                self.hotkey_manager = None
+
+        self._log("✅ 资源清理完成")
+
     def _on_hotkey_press(self):
         """Callback when PTT hotkey is pressed"""
         self._log("🎤 PTT: Hotkey pressed - starting recording")
         self._emit_ptt_event("recording")
 
         # Start recording in background (use stored loop reference for thread safety)
+        # Store the future so we can wait for it in _on_hotkey_release
         if self.loop:
-            asyncio.run_coroutine_threadsafe(self.handle_record_start(), self.loop)
+            self.ptt_start_future = asyncio.run_coroutine_threadsafe(
+                self.handle_record_start(), self.loop
+            )
 
     def _on_hotkey_release(self):
         """Callback when PTT hotkey is released"""
@@ -158,6 +194,17 @@ class SpeekiumDaemon:
         if not self.loop:
             return
 
+        # Wait for start to complete before stopping (fix race condition)
+        # This ensures recording is fully initialized before we try to stop it
+        # Use 10s timeout to accommodate slower devices (e.g., USB microphones, Bluetooth)
+        if self.ptt_start_future:
+            try:
+                self.ptt_start_future.result(timeout=10.0)
+            except Exception as e:
+                self._log(f"⚠️ PTT: Start future error: {e}")
+            finally:
+                self.ptt_start_future = None
+
         future = asyncio.run_coroutine_threadsafe(
             self.handle_record_stop(auto_chat=auto_chat, use_tts=True), self.loop
         )
@@ -166,11 +213,14 @@ class SpeekiumDaemon:
         def handle_result(fut):
             try:
                 result = fut.result()
-                if result.get("success"):
+                if result is None:
+                    self._emit_ptt_event("error", {"error": "No result from recording"})
+                elif result.get("success"):
                     self._emit_ptt_event("idle", {"text": result.get("text", "")})
                 else:
                     self._emit_ptt_event("error", {"error": result.get("error", "Unknown error")})
             except Exception as e:
+                self._log(f"❌ PTT: handle_result error: {e}")
                 self._emit_ptt_event("error", {"error": str(e)})
 
         future.add_done_callback(handle_result)
@@ -755,6 +805,7 @@ class SpeekiumDaemon:
             return await self.handle_health()
         elif command == "exit":
             self._log("👋 收到退出命令")
+            self._cleanup()
             self.running = False
             return {"success": True, "message": "Daemon shutting down"}
         else:
@@ -813,6 +864,8 @@ class SpeekiumDaemon:
                 error_result = {"success": False, "error": f"Internal error: {str(e)}"}
                 print(json.dumps(error_result), flush=True)
 
+        # Clean up resources before exit
+        self._cleanup()
         self._log("👋 守护进程正常退出")
 
 
