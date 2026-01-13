@@ -23,7 +23,6 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { SaveStatusIndicator } from '@/components/SaveStatusIndicator';
 import { HotkeyRecorder } from '@/components/HotkeyRecorder';
 import { useSettings } from '@/contexts/SettingsContext';
-import { HotkeyConfig } from '@/types/hotkey';
 import {
   Bot,
   Mic,

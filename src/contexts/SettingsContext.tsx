@@ -4,7 +4,7 @@
  * Manages global settings state with auto-save functionality
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { HotkeyConfig } from '../types/hotkey';
 
@@ -198,9 +198,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
       // Also update hotkey in backend immediately
       invoke('update_hotkey', { hotkeyConfig: hotkey })
-        .then((result: { success: boolean; error?: string }) => {
-          if (!result.success) {
-            console.error('[Settings] Failed to update hotkey:', result.error);
+        .then((result: unknown) => {
+          const res = result as { success: boolean; error?: string };
+          if (!res.success) {
+            console.error('[Settings] Failed to update hotkey:', res.error);
           }
         })
         .catch((error) => {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { HotkeyConfig, ModifierKey } from '../types/hotkey';
 import styles from './HotkeyRecorder.module.css';
 
@@ -7,13 +7,6 @@ interface HotkeyRecorderProps {
   onChange: (config: HotkeyConfig) => void;
   disabled?: boolean;
 }
-
-const MODIFIER_MAP: Record<string, ModifierKey> = {
-  'Meta': 'CmdOrCtrl',
-  'Control': 'CmdOrCtrl',
-  'Alt': 'Alt',
-  'Shift': 'Shift',
-};
 
 const MODIFIER_DISPLAY: Record<ModifierKey, string> = {
   'CmdOrCtrl': '⌘',
