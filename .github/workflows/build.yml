@@ -91,7 +91,7 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
 
-  # Signed builds with code signing
+  # Signed builds with code signing (macOS only for now)
   build-signed:
     strategy:
       fail-fast: false
@@ -101,10 +101,6 @@ jobs:
             args: '--target universal-apple-darwin'
             name: 'macos-universal-signed'
             bundle_id: 'com.speekium.mac'
-          - platform: 'windows-latest'
-            args: ''
-            name: 'windows-x86_64-signed'
-            bundle_id: 'com.speekium.windows'
 
     runs-on: ${{ matrix.platform }}
     name: Build (Signed) on ${{ matrix.name }}
@@ -176,22 +172,6 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
-      - name: Import Windows certificate
-        if: matrix.platform == 'windows-latest'
-        run: |
-          # Import certificate from secrets
-          echo -n "$CSC_LINK" | base64 --decode > certificate.pfx
-
-          # Install certificate to certificate store
-          certutil -f -p "$CSC_KEY_PASSWORD" -importPFX certificate.pfx
-
-          # Remove certificate file
-          Remove-Item -Path certificate.pfx -Force
-        env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        shell: pwsh
-
       - name: Build frontend
         run: npm run build
 
@@ -237,16 +217,6 @@ jobs:
           path: |
             src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
-          if-no-files-found: error
-
-      - name: Upload signed Windows artifacts
-        if: matrix.platform == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-x86_64-signed-app
-          path: |
-            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
-            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           if-no-files-found: error
 
   # Create GitHub Release
