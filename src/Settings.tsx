@@ -21,7 +21,9 @@ import {
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { SaveStatusIndicator } from '@/components/SaveStatusIndicator';
+import { HotkeyRecorder } from '@/components/HotkeyRecorder';
 import { useSettings } from '@/contexts/SettingsContext';
+import { HotkeyConfig } from '@/types/hotkey';
 import {
   Bot,
   Mic,
@@ -99,7 +101,7 @@ export function Settings({
   onClearHistory,
 }: SettingsProps) {
   const { t } = useTranslation();
-  const { config, updateConfig, saveStatus, saveError } = useSettings();
+  const { config, updateConfig, updateHotkey, saveStatus, saveError } = useSettings();
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>({});
   const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>('assistant');
   const [showApiKey, setShowApiKey] = React.useState(false);
@@ -1031,17 +1033,35 @@ export function Settings({
               {/* Shortcuts Settings */}
               {activeCategory === 'shortcuts' && (
                 <div className="space-y-6">
-                  <div className="space-y-3">
-                    <div className="p-4 rounded-lg border border-border bg-muted">
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="text-foreground">{t('settings.fields.pushToTalk')}</Label>
-                        <kbd className="px-3 py-1.5 text-xs font-mono font-semibold text-foreground bg-muted/80 border border-border rounded-md shadow-sm">
-                          Cmd + Alt
-                        </kbd>
+                  {/* Push-to-Talk Hotkey */}
+                  <div className="space-y-2">
+                    <Label className="text-foreground">{t('settings.fields.pushToTalk')}</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {t('settings.hints.ptt')}
+                    </p>
+                    <HotkeyRecorder
+                      value={config?.push_to_talk_hotkey || {
+                        modifiers: ['CmdOrCtrl'],
+                        key: 'Digit1',
+                        displayName: '⌘1',
+                      }}
+                      onChange={(hotkey) => updateHotkey(hotkey)}
+                      disabled={saveStatus === 'saving'}
+                    />
+                  </div>
+
+                  {/* Show/Hide Window Info */}
+                  <div className="p-4 rounded-lg border border-border bg-muted">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-foreground">{t('settings.fields.toggleWindow')}</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Global shortcut to show or hide main window
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {t('settings.hints.ptt')}
-                      </p>
+                      <kbd className="px-3 py-1.5 text-xs font-mono font-semibold text-foreground bg-muted/80 border border-border rounded-md shadow-sm">
+                        ⌘⇧Space
+                      </kbd>
                     </div>
                   </div>
                 </div>
