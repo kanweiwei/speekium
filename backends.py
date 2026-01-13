@@ -518,22 +518,6 @@ class OpenAIBackend_Official(OpenAIBackend):
         super().__init__(system_prompt, api_key, base_url, model, max_history)
 
 
-class GeminiBackend(OpenAIBackend):
-    """Google Gemini API backend (using OpenAI-compatible endpoint)"""
-
-    def __init__(
-        self,
-        system_prompt: str,
-        api_key: str,
-        model: str = "gemini-2.0-flash-exp",
-        base_url: str = "https://generativelanguage.googleapis.com/v1beta",
-        max_history: int = 10,
-    ):
-        # Gemini uses a different URL structure
-        # For OpenAI-compatible format, we use the OpenAI endpoint
-        super().__init__(system_prompt, api_key, base_url, model, max_history)
-
-
 class OpenRouterBackend(OpenAIBackend):
     """OpenRouter API backend - unified access to multiple LLMs"""
 
@@ -554,7 +538,6 @@ def create_backend(backend_type: str, system_prompt: str, **kwargs) -> LLMBacken
         "claude": ClaudeBackend,
         "ollama": OllamaBackend,
         "openai": OpenAIBackend_Official,
-        "gemini": GeminiBackend,
         "openrouter": OpenRouterBackend,
     }
 

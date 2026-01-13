@@ -76,7 +76,7 @@ def cleanup_temp_files():
 atexit.register(cleanup_temp_files)
 
 # ===== LLM Backend =====
-LLM_BACKEND = "ollama"  # Options: "claude", "ollama", "openai", "gemini", "openrouter"
+LLM_BACKEND = "ollama"  # Options: "claude", "ollama", "openai", "openrouter"
 
 # Ollama config (only used when LLM_BACKEND="ollama")
 OLLAMA_MODEL = "qwen2.5:1.5b"  # Ollama model (use qwen2.5:7b for smarter but slower)
@@ -85,10 +85,6 @@ OLLAMA_BASE_URL = "http://localhost:11434"  # Ollama server URL
 # OpenAI config (only used when LLM_BACKEND="openai")
 OPENAI_API_KEY = ""  # Get from https://platform.openai.com/api-keys
 OPENAI_MODEL = "gpt-4o-mini"  # Model: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
-
-# Gemini config (only used when LLM_BACKEND="gemini")
-GEMINI_API_KEY = ""  # Get from https://aistudio.google.com/app/apikey
-GEMINI_MODEL = "gemini-2.0-flash-exp"  # Model: gemini-2.0-flash-exp, gemini-1.5-pro
 
 # OpenRouter config (only used when LLM_BACKEND="openrouter")
 OPENROUTER_API_KEY = ""  # Get from https://openrouter.ai/keys
@@ -218,14 +214,6 @@ class VoiceAssistant:
                     SYSTEM_PROMPT,
                     api_key=OPENAI_API_KEY,
                     model=OPENAI_MODEL,
-                    max_history=MAX_HISTORY,
-                )
-            elif LLM_BACKEND == "gemini":
-                self.llm_backend = create_backend(
-                    LLM_BACKEND,
-                    SYSTEM_PROMPT,
-                    api_key=GEMINI_API_KEY,
-                    model=GEMINI_MODEL,
                     max_history=MAX_HISTORY,
                 )
             elif LLM_BACKEND == "openrouter":

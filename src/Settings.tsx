@@ -482,7 +482,6 @@ export function Settings({
                         <SelectItem value="claude">Claude Code CLI</SelectItem>
                         <SelectItem value="ollama">Ollama (Local)</SelectItem>
                         <SelectItem value="openai">OpenAI</SelectItem>
-                        <SelectItem value="gemini">Gemini</SelectItem>
                         <SelectItem value="openrouter">OpenRouter</SelectItem>
                       </SelectContent>
                     </Select>
@@ -526,49 +525,6 @@ export function Settings({
                         />
                         <p className="text-xs text-muted-foreground">
                           Models: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Gemini Configuration */}
-                  {(localConfig.llm_backend || 'ollama') === 'gemini' && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="gemini-api-key" className="text-foreground">Gemini API Key</Label>
-                        <div className="relative">
-                          <Input
-                            id="gemini-api-key"
-                            type={showApiKey ? 'text' : 'password'}
-                            value={localConfig.gemini_api_key || ''}
-                            onChange={(e) => updateConfig('gemini_api_key', e.target.value)}
-                            placeholder={t('settings.placeholders.apiKey')}
-                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          >
-                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {t('settings.hints.apiKey')}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="gemini-model" className="text-foreground">Model</Label>
-                        <Input
-                          id="gemini-model"
-                          value={localConfig.gemini_model || 'gemini-2.0-flash-exp'}
-                          onChange={(e) => updateConfig('gemini_model', e.target.value)}
-                          placeholder="gemini-2.0-flash-exp"
-                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Models: gemini-2.0-flash-exp, gemini-1.5-pro
                         </p>
                       </div>
                     </>
