@@ -532,6 +532,24 @@ class OpenRouterBackend(OpenAIBackend):
         super().__init__(system_prompt, api_key, base_url, model, max_history)
 
 
+class CustomBackend(OpenAIBackend):
+    """Custom OpenAI-compatible API backend - for self-hosted or third-party services"""
+
+    def __init__(
+        self,
+        system_prompt: str,
+        api_key: str,
+        base_url: str,
+        model: str,
+        max_history: int = 10,
+    ):
+        # Ensure base_url doesn't end with /chat/completions
+        # Users should provide the base URL like http://localhost:8000/v1
+        if base_url.endswith("/chat/completions"):
+            base_url = base_url[:-17]
+        super().__init__(system_prompt, api_key, base_url, model, max_history)
+
+
 def create_backend(backend_type: str, system_prompt: str, **kwargs) -> LLMBackend:
     """Factory function to create LLM backend"""
     backends = {
@@ -539,6 +557,7 @@ def create_backend(backend_type: str, system_prompt: str, **kwargs) -> LLMBacken
         "ollama": OllamaBackend,
         "openai": OpenAIBackend_Official,
         "openrouter": OpenRouterBackend,
+        "custom": CustomBackend,
     }
 
     if backend_type not in backends:

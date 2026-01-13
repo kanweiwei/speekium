@@ -150,6 +150,16 @@ export function Settings({
           apiKey: localConfig.openrouter_api_key || '',
           model: localConfig.openrouter_model || 'google/gemini-2.5-flash'
         });
+      } else if (backend === 'custom') {
+        result = await invoke<{
+          success: boolean;
+          message?: string;
+          error?: string;
+        }>('test_custom_connection', {
+          apiKey: localConfig.custom_api_key || '',
+          baseUrl: localConfig.custom_base_url || '',
+          model: localConfig.custom_model || ''
+        });
       } else if (backend === 'claude') {
         // Claude Code CLI 不需要测试连接，直接返回成功
         result = {
@@ -530,6 +540,7 @@ export function Settings({
                         <SelectItem value="ollama">Ollama (Local)</SelectItem>
                         <SelectItem value="openai">OpenAI</SelectItem>
                         <SelectItem value="openrouter">OpenRouter</SelectItem>
+                        <SelectItem value="custom">Custom (OpenAI-compatible)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -615,6 +626,63 @@ export function Settings({
                         />
                         <p className="text-xs text-muted-foreground">
                           Any model from OpenRouter (e.g. google/gemini-2.5-flash)
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Custom OpenAI-Compatible Configuration */}
+                  {(localConfig.llm_backend || 'ollama') === 'custom' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="custom-api-key" className="text-foreground">API Key</Label>
+                        <div className="relative">
+                          <Input
+                            id="custom-api-key"
+                            type={showApiKey ? 'text' : 'password'}
+                            value={localConfig.custom_api_key || ''}
+                            onChange={(e) => updateConfig('custom_api_key', e.target.value)}
+                            placeholder="Optional - leave empty if not required"
+                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          API key for your custom endpoint (if required)
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="custom-base-url" className="text-foreground">API Base URL</Label>
+                        <Input
+                          id="custom-base-url"
+                          value={localConfig.custom_base_url || ''}
+                          onChange={(e) => updateConfig('custom_base_url', e.target.value)}
+                          placeholder="http://localhost:8000/v1"
+                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Base URL of your OpenAI-compatible API (e.g., http://localhost:8000/v1)
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="custom-model" className="text-foreground">Model</Label>
+                        <Input
+                          id="custom-model"
+                          value={localConfig.custom_model || ''}
+                          onChange={(e) => updateConfig('custom_model', e.target.value)}
+                          placeholder="gpt-3.5-turbo"
+                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Model name (depends on your self-hosted service)
                         </p>
                       </div>
                     </>

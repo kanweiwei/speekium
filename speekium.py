@@ -76,7 +76,7 @@ def cleanup_temp_files():
 atexit.register(cleanup_temp_files)
 
 # ===== LLM Backend =====
-LLM_BACKEND = "ollama"  # Options: "claude", "ollama", "openai", "openrouter"
+LLM_BACKEND = "ollama"  # Options: "claude", "ollama", "openai", "openrouter", "custom"
 
 # Ollama config (only used when LLM_BACKEND="ollama")
 OLLAMA_MODEL = "qwen2.5:1.5b"  # Ollama model (use qwen2.5:7b for smarter but slower)
@@ -89,6 +89,11 @@ OPENAI_MODEL = "gpt-4o-mini"  # Model: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
 # OpenRouter config (only used when LLM_BACKEND="openrouter")
 OPENROUTER_API_KEY = ""  # Get from https://openrouter.ai/keys
 OPENROUTER_MODEL = "google/gemini-2.5-flash"  # Any model from OpenRouter
+
+# Custom OpenAI-compatible API config (only used when LLM_BACKEND="custom")
+CUSTOM_API_KEY = ""  # API key for custom endpoint
+CUSTOM_BASE_URL = ""  # Base URL (e.g., http://localhost:8000/v1)
+CUSTOM_MODEL = ""  # Model name
 
 # ===== Conversation Memory =====
 MAX_HISTORY = 10  # Max conversation turns to keep (each turn = user + assistant)
@@ -222,6 +227,15 @@ class VoiceAssistant:
                     SYSTEM_PROMPT,
                     api_key=OPENROUTER_API_KEY,
                     model=OPENROUTER_MODEL,
+                    max_history=MAX_HISTORY,
+                )
+            elif LLM_BACKEND == "custom":
+                self.llm_backend = create_backend(
+                    LLM_BACKEND,
+                    SYSTEM_PROMPT,
+                    api_key=CUSTOM_API_KEY,
+                    base_url=CUSTOM_BASE_URL,
+                    model=CUSTOM_MODEL,
                     max_history=MAX_HISTORY,
                 )
             else:
