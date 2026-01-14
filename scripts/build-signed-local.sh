@@ -4,14 +4,43 @@ set -e
 
 # Parse arguments
 SKIP_SIGN=false
+SPECIFIED_ARCH=""
 for arg in "$@"; do
   case $arg in
     --no-sign|--skip-sign)
       SKIP_SIGN=true
-      shift
+      ;;
+    --arch=*)
+      SPECIFIED_ARCH="${arg#*=}"
+      ;;
+    --arm64|--aarch64)
+      SPECIFIED_ARCH="arm64"
+      ;;
+    --x86_64|--intel)
+      SPECIFIED_ARCH="x86_64"
       ;;
   esac
 done
+
+# Determine architecture
+if [ -n "$SPECIFIED_ARCH" ]; then
+  ARCH="$SPECIFIED_ARCH"
+  echo "🎯 Using specified architecture: $ARCH"
+else
+  ARCH=$(uname -m)
+  echo "🔍 Detected architecture: $ARCH"
+fi
+
+# Map to Rust target
+if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+  RUST_TARGET="aarch64-apple-darwin"
+elif [ "$ARCH" = "x86_64" ]; then
+  RUST_TARGET="x86_64-apple-darwin"
+else
+  echo "❌ Unknown architecture: $ARCH"
+  echo "   Supported: arm64, x86_64"
+  exit 1
+fi
 
 if [ "$SKIP_SIGN" = true ]; then
   echo "🔧 Building Speekium (without signing/notarization)..."
@@ -34,6 +63,8 @@ else
   echo "   Signing Identity: $APPLE_SIGNING_IDENTITY"
   echo "   Team ID: $APPLE_TEAM_ID"
 fi
+
+echo "🏗️  Building for architecture: $RUST_TARGET"
 
 cd "$(dirname "$0")/.."
 
@@ -85,7 +116,7 @@ unset APPLE_SIGNING_IDENTITY_TAURI
 unset TAURI_SIGNING_PRIVATE_KEY
 
 # Build without signing
-CI=true npm run tauri build -- --target universal-apple-darwin
+CI=true npm run tauri build -- --target "$RUST_TARGET"
 
 # Restore Apple credentials for manual signing
 APPLE_SIGNING_IDENTITY="$SAVED_APPLE_SIGNING_IDENTITY"
@@ -95,7 +126,7 @@ APPLE_TEAM_ID="$SAVED_APPLE_TEAM_ID"
 echo "✅ Tauri build complete, credentials restored"
 
 # Step 4: Find the app bundle
-APP_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -type d | head -1)
+APP_PATH=$(find "src-tauri/target/$RUST_TARGET/release/bundle/macos" -name "*.app" -type d | head -1)
 if [ -z "$APP_PATH" ]; then
   echo "❌ App bundle not found!"
   exit 1
@@ -159,10 +190,10 @@ if [ "$SKIP_SIGN" = true ]; then
 else
   # Step 8: Create DMG
   echo "📦 Creating DMG..."
-  DMG_DIR="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
+  DMG_DIR="src-tauri/target/$RUST_TARGET/release/bundle/dmg"
   mkdir -p "$DMG_DIR"
   APP_NAME=$(basename "$APP_PATH" .app)
-  DMG_PATH="$DMG_DIR/${APP_NAME}_universal.dmg"
+  DMG_PATH="$DMG_DIR/${APP_NAME}_${ARCH}.dmg"
   rm -f "$DMG_PATH"
   hdiutil create -volname "$APP_NAME" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
 

@@ -30,6 +30,13 @@ uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
 reqwest = { version = "0.11", features = ["json"] }
 
+# Audio recording
+cpal = "0.17"
+
+# macOS permissions
+[target.'cfg(target_os = "macos")'.dependencies.tauri-plugin-macos-permissions]
+version = "2"
+
 # macOS text input support
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.23"

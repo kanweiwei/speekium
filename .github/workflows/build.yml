@@ -12,14 +12,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
-            args: '--target universal-apple-darwin'
-            name: 'macos-universal'
-            bundle_id: 'com.speekium.mac'
           - platform: 'windows-latest'
             args: ''
             name: 'windows-x86_64'
             bundle_id: 'com.speekium.windows'
+            rust_target: ''
 
     runs-on: ${{ matrix.platform }}
     name: Build on ${{ matrix.name }}
@@ -39,11 +36,6 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Add macOS universal binary targets
-        if: matrix.platform == 'macos-latest'
-        run: |
-          rustup target add aarch64-apple-darwin
-          rustup target add x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -96,43 +88,7 @@ jobs:
           includeDebug: false
           includeRelease: true
 
-      # Add Python daemon sidecar to app bundle (unsigned builds)
-      - name: Add sidecar to macOS app bundle
-        if: matrix.platform == 'macos-latest'
-        run: |
-          # Find the .app bundle
-          APP_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -type d | head -1)
-          if [ -n "$APP_PATH" ]; then
-            echo "Found app bundle: $APP_PATH"
-            # Copy sidecar directory (onedir mode) - use ditto to preserve symlinks
-            SIDECAR_DIR="$APP_PATH/Contents/Resources/worker_daemon"
-            mkdir -p "$SIDECAR_DIR"
-            ditto sidecar_dist/worker_daemon "$SIDECAR_DIR"
-            chmod +x "$SIDECAR_DIR/worker_daemon"
-            echo "✅ Sidecar directory added to app bundle"
-            ls -la "$SIDECAR_DIR/"
-          else
-            echo "❌ App bundle not found!"
-            exit 1
-          fi
-
-          # Recreate DMG with the updated app bundle
-          DMG_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
-          if [ -n "$DMG_PATH" ]; then
-            echo "Updating DMG: $DMG_PATH"
-            APP_NAME=$(basename "$APP_PATH")
-            DMG_NAME=$(basename "$DMG_PATH")
-            DMG_DIR=$(dirname "$DMG_PATH")
-
-            # Remove old DMG and create new one
-            rm -f "$DMG_PATH"
-            hdiutil create -volname "${APP_NAME%.app}" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
-            echo "✅ DMG updated with sidecar"
-          fi
-        shell: bash
-
       - name: Add sidecar to Windows bundle
-        if: matrix.platform == 'windows-latest'
         run: |
           # Copy sidecar directory to release directory
           cp -R sidecar_dist/worker_daemon src-tauri/target/release/worker_daemon
@@ -140,19 +96,7 @@ jobs:
           ls -la src-tauri/target/release/worker_daemon/
         shell: bash
 
-      # macOS specific steps
-      - name: Upload macOS artifacts (notarized)
-        if: matrix.platform == 'macos-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-universal-app
-          path: |
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
-
-      # Windows specific steps
       - name: Upload Windows artifacts
-        if: matrix.platform == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: windows-x86_64-app
@@ -167,9 +111,15 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target universal-apple-darwin'
-            name: 'macos-universal-signed'
+            args: '--target aarch64-apple-darwin'
+            name: 'macos-arm64-signed'
             bundle_id: 'com.speekium.mac'
+            rust_target: 'aarch64-apple-darwin'
+          - platform: 'macos-13'
+            args: '--target x86_64-apple-darwin'
+            name: 'macos-x86_64-signed'
+            bundle_id: 'com.speekium.mac'
+            rust_target: 'x86_64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
     name: Build (Signed) on ${{ matrix.name }}
@@ -192,11 +142,8 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Add macOS universal binary targets
-        if: matrix.platform == 'macos-latest'
-        run: |
-          rustup target add aarch64-apple-darwin
-          rustup target add x86_64-apple-darwin
+      - name: Add macOS target
+        run: rustup target add ${{ matrix.rust_target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -286,7 +233,6 @@ jobs:
 
       # Add sidecar to app bundle, then sign everything
       - name: Add sidecar and sign macOS app
-        if: matrix.platform == 'macos-latest'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -294,7 +240,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           # Find the app bundle
-          APP_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -type d | head -1)
+          APP_PATH=$(find src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos -name "*.app" -type d | head -1)
           if [ -z "$APP_PATH" ]; then
             echo "❌ App bundle not found!"
             exit 1
@@ -349,10 +295,10 @@ jobs:
           codesign -dv --verbose=2 "$APP_PATH"
 
           # Create DMG
-          DMG_DIR="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
+          DMG_DIR="src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg"
           mkdir -p "$DMG_DIR"
           APP_NAME=$(basename "$APP_PATH" .app)
-          DMG_PATH="$DMG_DIR/${APP_NAME}_universal.dmg"
+          DMG_PATH="$DMG_DIR/${APP_NAME}_${{ matrix.rust_target }}.dmg"
 
           echo "📦 Creating DMG..."
           hdiutil create -volname "$APP_NAME" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
@@ -392,19 +338,17 @@ jobs:
         shell: bash
 
       - name: Cleanup macOS keychain
-        if: matrix.platform == 'macos-latest'
         run: |
           security delete-keychain $KEYCHAIN_PATH || true
           rm -f $CERTIFICATE_PATH || true
 
       - name: Upload signed macOS artifacts
-        if: matrix.platform == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: macos-universal-signed-app
+          name: ${{ matrix.name }}-app
           path: |
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+            src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos/*.app
           if-no-files-found: error
 
   # Create GitHub Release

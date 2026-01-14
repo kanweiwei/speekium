@@ -255,6 +255,88 @@ class SpeekiumDaemon:
             traceback.print_exc(file=sys.stderr)
             return {"success": False, "error": str(e)}
 
+    async def handle_ptt_audio(
+        self,
+        audio_path: str,
+        sample_rate: int = 16000,
+        duration: float = 0,
+        auto_chat: bool = True,
+        use_tts: bool = True,
+    ) -> dict:
+        """Handle PTT audio from Rust - receives WAV file path, performs ASR + chat"""
+        import os
+        import numpy as np
+        from scipy.io import wavfile
+
+        try:
+            self._log(f"🎤 PTT Audio: Loading file ({duration:.2f}s): {audio_path}")
+
+            # Check file exists
+            if not os.path.exists(audio_path):
+                return {"success": False, "error": f"Audio file not found: {audio_path}"}
+
+            # Load WAV file using scipy (simple and reliable)
+            wav_sample_rate, samples = wavfile.read(audio_path)
+
+            # Convert to float32 if needed
+            if samples.dtype == np.int16:
+                samples = samples.astype(np.float32) / 32768.0
+            elif samples.dtype == np.int32:
+                samples = samples.astype(np.float32) / 2147483648.0
+            elif samples.dtype != np.float32:
+                samples = samples.astype(np.float32)
+
+            # Convert to mono if stereo
+            if len(samples.shape) > 1 and samples.shape[1] == 2:
+                samples = samples.mean(axis=1)
+
+            actual_duration = len(samples) / wav_sample_rate
+            self._log(
+                f"🎵 WAV info: {wav_sample_rate}Hz, {len(samples)} samples ({actual_duration:.2f}s)"
+            )
+
+            # Delete temp file after loading
+            try:
+                os.remove(audio_path)
+                self._log(f"🗑️ Deleted temp file: {audio_path}")
+            except Exception as e:
+                self._log(f"⚠️ Failed to delete temp file: {e}")
+
+            if actual_duration < 0.3:
+                self._emit_ptt_event("idle")
+                return {"success": False, "error": "Recording too short"}
+
+            # ASR
+            self._log("🔄 识别中...")
+            text, language = self.assistant.transcribe(samples)
+            self._log(f"✅ 识别完成: '{text}' ({language})")
+
+            if not text or not text.strip():
+                self._emit_ptt_event("idle")
+                return {
+                    "success": True,
+                    "text": "",
+                    "language": language,
+                    "message": "No speech detected",
+                }
+
+            # Emit user message for frontend display
+            self._emit_ptt_event("user_message", {"text": text})
+
+            # Auto chat with TTS if enabled
+            if auto_chat and text.strip():
+                self._log(f"💬 PTT: Auto chat with TTS...")
+                await self._handle_ptt_chat_tts(text, use_tts)
+
+            self._emit_ptt_event("idle")
+            return {"success": True, "text": text, "language": language}
+
+        except Exception as e:
+            self._log(f"❌ PTT Audio processing failed: {e}")
+            self._emit_ptt_event("error", {"error": str(e)})
+            traceback.print_exc(file=sys.stderr)
+            return {"success": False, "error": str(e)}
+
     async def handle_record_stop(self, auto_chat: bool = True, use_tts: bool = True) -> dict:
         """Stop PTT recording and process - called when hotkey is released"""
         try:
@@ -679,11 +761,11 @@ class SpeekiumDaemon:
                 args.get("auto_chat", True), args.get("use_tts", True)
             )
         elif command == "ptt_press":
-            # PTT key pressed - emit event and start recording (called from Rust)
+            # PTT key pressed - just emit event (Rust handles recording now)
             self._emit_ptt_event("recording")
-            return await self.handle_record_start()
+            return {"success": True, "message": "PTT recording started (Rust side)"}
         elif command == "ptt_release":
-            # PTT key released - emit event and stop recording (called from Rust)
+            # PTT key released - emit event and stop recording (called from Rust, legacy mode)
             self._emit_ptt_event("processing")
             # Read config to determine auto_chat mode
             from config_manager import ConfigManager
@@ -700,6 +782,20 @@ class SpeekiumDaemon:
                     {"error": result.get("error", "Unknown error") if result else "No result"},
                 )
             return result
+        elif command == "ptt_audio":
+            # PTT audio file from Rust (Rust handles recording, Python handles ASR)
+            from config_manager import ConfigManager
+
+            config = ConfigManager.load()
+            work_mode = config.get("work_mode", "conversation")
+            auto_chat = work_mode == "conversation"
+            return await self.handle_ptt_audio(
+                audio_path=args.get("audio_path", ""),
+                sample_rate=args.get("sample_rate", 16000),
+                duration=args.get("duration", 0),
+                auto_chat=auto_chat,
+                use_tts=True,
+            )
         elif command == "chat":
             return await self.handle_chat(args.get("text", ""))
         elif command == "chat_stream":

@@ -12,7 +12,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 mod database;
+mod audio;
 use database::{Database, Session, Message, PaginatedResult};
+use audio::AudioRecorder;
 
 // ============================================================================
 // Data Structures
@@ -373,6 +375,9 @@ static PTT_KEY_PRESSED: AtomicBool = AtomicBool::new(false);
 
 // Global app handle for shortcut management
 static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+// Global audio recorder (Rust-side recording)
+static AUDIO_RECORDER: Mutex<Option<AudioRecorder>> = Mutex::new(None);
 
 fn ensure_daemon_running() -> Result<(), String> {
     let mut daemon = DAEMON.lock().unwrap();
@@ -1553,6 +1558,28 @@ async fn test_custom_connection(api_key: String, base_url: String, model: String
 // Global Shortcuts
 // ============================================================================
 
+/// Send PTT state to all windows (static version for shortcut callbacks)
+fn emit_ptt_state_static(app_handle: &tauri::AppHandle, state: &str) {
+    // Send to main window
+    if let Some(main_window) = app_handle.get_webview_window("main") {
+        let _ = main_window.emit("ptt-state", state);
+    }
+    // Send to floating window
+    if let Some(overlay) = app_handle.get_webview_window("ptt-overlay") {
+        let _ = overlay.emit("ptt-state", state);
+        // Control floating window visibility
+        match state {
+            "recording" | "processing" => {
+                let _ = overlay.show();
+            }
+            "idle" | "error" => {
+                let _ = overlay.hide();
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Convert hotkey config JSON to Tauri shortcut string
 /// e.g., {"key": "Digit3", "modifiers": ["CmdOrCtrl"]} -> "CommandOrControl+3"
 fn hotkey_config_to_shortcut_string(config: &serde_json::Value) -> Option<String> {
@@ -1639,7 +1666,7 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
     let ptt_shortcut: Shortcut = shortcut_str.parse()
         .map_err(|e| format!("Failed to parse shortcut '{}': {:?}", shortcut_str, e))?;
 
-    app_handle.global_shortcut().on_shortcut(ptt_shortcut, move |_app, _shortcut, event| {
+    app_handle.global_shortcut().on_shortcut(ptt_shortcut, move |app, _shortcut, event| {
         match event.state() {
             ShortcutState::Pressed => {
                 // Filter out key repeat - only handle first press
@@ -1648,14 +1675,37 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                     return;
                 }
                 println!("🎤 PTT: Key pressed (Tauri)");
+
+                // Start Rust-side audio recording
+                {
+                    let mut recorder_guard = AUDIO_RECORDER.lock().unwrap();
+                    if recorder_guard.is_none() {
+                        match AudioRecorder::new() {
+                            Ok(r) => *recorder_guard = Some(r),
+                            Err(e) => {
+                                println!("❌ Failed to create AudioRecorder: {}", e);
+                                return;
+                            }
+                        }
+                    }
+                    if let Some(ref mut recorder) = *recorder_guard {
+                        if let Err(e) = recorder.start_recording() {
+                            println!("❌ Failed to start recording: {}", e);
+                            return;
+                        }
+                    }
+                }
+
+                // Emit recording state to frontend
+                emit_ptt_state_static(app, "recording");
+
+                // Notify Python daemon (for UI state only, no recording)
                 if let Ok(mut daemon_guard) = DAEMON.lock() {
                     if let Some(ref mut daemon) = *daemon_guard {
                         match daemon.send_command("ptt_press", serde_json::json!({})) {
                             Ok(_) => println!("✅ PTT press command sent"),
                             Err(e) => println!("❌ PTT press command failed: {}", e),
                         }
-                    } else {
-                        println!("⚠️ PTT: Daemon not initialized");
                     }
                 }
             }
@@ -1663,14 +1713,53 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                 // Reset key state
                 PTT_KEY_PRESSED.store(false, Ordering::SeqCst);
                 println!("🎤 PTT: Key released (Tauri)");
-                if let Ok(mut daemon_guard) = DAEMON.lock() {
-                    if let Some(ref mut daemon) = *daemon_guard {
-                        match daemon.send_command("ptt_release", serde_json::json!({})) {
-                            Ok(_) => println!("✅ PTT release command sent"),
-                            Err(e) => println!("❌ PTT release command failed: {}", e),
+
+                // Stop Rust-side audio recording and get audio data
+                let audio_data = {
+                    let mut recorder_guard = AUDIO_RECORDER.lock().unwrap();
+                    if let Some(ref mut recorder) = *recorder_guard {
+                        match recorder.stop_recording() {
+                            Ok(data) => Some(data),
+                            Err(e) => {
+                                println!("❌ Failed to stop recording: {}", e);
+                                None
+                            }
                         }
                     } else {
-                        println!("⚠️ PTT: Daemon not initialized");
+                        None
+                    }
+                };
+
+                // Emit processing state
+                emit_ptt_state_static(app, "processing");
+
+                // Send audio file path to Python daemon for ASR
+                if let Some(audio) = audio_data {
+                    println!("📤 Sending audio file ({:.2}s) to Python: {}",
+                             audio.duration_secs, audio.file_path);
+
+                    if let Ok(mut daemon_guard) = DAEMON.lock() {
+                        if let Some(ref mut daemon) = *daemon_guard {
+                            let args = serde_json::json!({
+                                "audio_path": audio.file_path,
+                                "sample_rate": audio.sample_rate,
+                                "duration": audio.duration_secs
+                            });
+                            match daemon.send_command("ptt_audio", args) {
+                                Ok(_) => println!("✅ PTT audio command sent"),
+                                Err(e) => println!("❌ PTT audio command failed: {}", e),
+                            }
+                        }
+                    }
+                } else {
+                    // No audio data, just notify daemon
+                    if let Ok(mut daemon_guard) = DAEMON.lock() {
+                        if let Some(ref mut daemon) = *daemon_guard {
+                            match daemon.send_command("ptt_release", serde_json::json!({})) {
+                                Ok(_) => println!("✅ PTT release command sent"),
+                                Err(e) => println!("❌ PTT release command failed: {}", e),
+                            }
+                        }
                     }
                 }
             }
@@ -1900,9 +1989,17 @@ fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<d
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+    // Add macOS permissions plugin
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_plugin_macos_permissions::init());
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![
             greet,
             record_audio,
@@ -1932,6 +2029,24 @@ pub fn run() {
             db_delete_message
         ])
         .setup(|app| {
+            // Initialize AudioRecorder singleton (only once at startup)
+            // This triggers microphone permission request on first access
+            // cpal 0.17 fixes the repeated permission popup issue
+            {
+                let mut recorder_guard = AUDIO_RECORDER.lock().unwrap();
+                if recorder_guard.is_none() {
+                    match AudioRecorder::new() {
+                        Ok(r) => {
+                            *recorder_guard = Some(r);
+                            println!("✅ AudioRecorder 已初始化");
+                        }
+                        Err(e) => {
+                            println!("⚠️ AudioRecorder 初始化失败: {}", e);
+                        }
+                    }
+                }
+            }
+
             // Initialize database
             let db_path = database::get_database_path(app.handle())
                 .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to get database path: {}", e)))?;
