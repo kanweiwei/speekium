@@ -88,12 +88,23 @@ fn detect_daemon_mode() -> Result<DaemonMode, String> {
     #[cfg(not(target_os = "windows"))]
     let sidecar_name = "worker_daemon";
 
-    let sidecar_path = exe_dir.join(sidecar_name);
+    // Possible sidecar locations:
+    // 1. Contents/MacOS/worker_daemon (onefile mode, legacy)
+    // 2. Contents/Resources/worker_daemon/worker_daemon (onedir mode)
+    // 3. Same directory as exe (Windows)
+    let sidecar_paths = [
+        // onedir mode: Resources/worker_daemon/worker_daemon
+        exe_dir.join("../Resources/worker_daemon").join(sidecar_name),
+        // onefile mode: same directory as main exe
+        exe_dir.join(sidecar_name),
+    ];
 
-    if sidecar_path.exists() {
-        println!("✅ 生产模式: 找到 sidecar 可执行文件");
-        println!("   Sidecar 路径: {:?}", sidecar_path);
-        return Ok(DaemonMode::Production { executable_path: sidecar_path });
+    for sidecar_path in sidecar_paths.iter() {
+        if sidecar_path.exists() {
+            println!("✅ 生产模式: 找到 sidecar 可执行文件");
+            println!("   Sidecar 路径: {:?}", sidecar_path);
+            return Ok(DaemonMode::Production { executable_path: sidecar_path.clone() });
+        }
     }
 
     // Check for Python script (development mode)

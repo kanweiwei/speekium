@@ -207,9 +207,8 @@ pyz = PYZ(
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
-    [],
+    [],  # Don't include binaries/datas in EXE for onedir mode
+    exclude_binaries=True,  # Required for onedir mode
     name='worker_daemon',
     debug=False,
     bootloader_ignore_signals=False,
@@ -223,6 +222,20 @@ exe = EXE(
     target_arch=None,  # Use native architecture
     codesign_identity=None,  # Will be signed by Tauri build process
     entitlements_file=None,
+)
+
+# =============================================================================
+# Collect all files into a directory (onedir mode)
+# =============================================================================
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True if is_windows else False,
+    upx_exclude=[],
+    name='worker_daemon',
 )
 
 # =============================================================================

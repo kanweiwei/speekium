@@ -104,10 +104,13 @@ jobs:
           APP_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -type d | head -1)
           if [ -n "$APP_PATH" ]; then
             echo "Found app bundle: $APP_PATH"
-            cp sidecar_dist/worker_daemon "$APP_PATH/Contents/MacOS/worker_daemon"
-            chmod +x "$APP_PATH/Contents/MacOS/worker_daemon"
-            echo "✅ Sidecar added to app bundle"
-            ls -la "$APP_PATH/Contents/MacOS/"
+            # Copy sidecar directory (onedir mode)
+            SIDECAR_DIR="$APP_PATH/Contents/Resources/worker_daemon"
+            mkdir -p "$SIDECAR_DIR"
+            cp -R sidecar_dist/worker_daemon/* "$SIDECAR_DIR/"
+            chmod +x "$SIDECAR_DIR/worker_daemon"
+            echo "✅ Sidecar directory added to app bundle"
+            ls -la "$SIDECAR_DIR/"
           else
             echo "❌ App bundle not found!"
             exit 1
@@ -131,10 +134,10 @@ jobs:
       - name: Add sidecar to Windows bundle
         if: matrix.platform == 'windows-latest'
         run: |
-          # Copy sidecar to release directory (next to main exe)
-          cp sidecar_dist/worker_daemon.exe src-tauri/target/release/worker_daemon.exe
-          echo "✅ Sidecar added to release directory"
-          ls -la src-tauri/target/release/worker_daemon.exe
+          # Copy sidecar directory to release directory
+          cp -R sidecar_dist/worker_daemon src-tauri/target/release/worker_daemon
+          echo "✅ Sidecar directory added to release"
+          ls -la src-tauri/target/release/worker_daemon/
         shell: bash
 
       # macOS specific steps
@@ -298,14 +301,24 @@ jobs:
           fi
           echo "Found app bundle: $APP_PATH"
 
-          # Add sidecar
-          cp sidecar_dist/worker_daemon "$APP_PATH/Contents/MacOS/worker_daemon"
-          chmod +x "$APP_PATH/Contents/MacOS/worker_daemon"
-          echo "✅ Sidecar added"
+          # Add sidecar directory (onedir mode)
+          SIDECAR_DIR="$APP_PATH/Contents/Resources/worker_daemon"
+          mkdir -p "$SIDECAR_DIR"
+          cp -R sidecar_dist/worker_daemon/* "$SIDECAR_DIR/"
+          chmod +x "$SIDECAR_DIR/worker_daemon"
+          echo "✅ Sidecar directory added"
+          ls -la "$SIDECAR_DIR/"
 
-          # Sign the sidecar
-          echo "🔏 Signing sidecar..."
-          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH/Contents/MacOS/worker_daemon"
+          # Sign all binaries in sidecar directory
+          echo "🔏 Signing sidecar binaries..."
+          find "$SIDECAR_DIR" -type f \( -name "*.so" -o -name "*.dylib" -o -perm +111 \) | while read -r binary; do
+            echo "  Signing: $binary"
+            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$binary" 2>/dev/null || true
+          done
+
+          # Sign the main sidecar executable
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$SIDECAR_DIR/worker_daemon"
+          echo "✅ Sidecar signed"
 
           # Re-sign the entire app bundle
           echo "🔏 Signing app bundle..."
