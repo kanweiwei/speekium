@@ -137,7 +137,7 @@ hiddenimports += [
 hiddenimports = [x for x in hiddenimports if x is not None]
 
 # =============================================================================
-# Binaries - Dynamic libraries
+# Binaries - Dynamic libraries and executables
 # =============================================================================
 
 binaries = []
@@ -148,6 +148,8 @@ binaries += safe_collect_dynamic_libs('sounddevice')
 # PyTorch dynamic libraries
 binaries += safe_collect_dynamic_libs('torch')
 binaries += safe_collect_dynamic_libs('torchaudio')
+
+# Note: ffmpeg is no longer needed - torchaudio handles audio format conversion natively
 
 # =============================================================================
 # Analysis
@@ -187,7 +189,7 @@ a = Analysis(
         'pip_audit',
     ],
     noarchive=False,
-    optimize=2,  # Apply Python bytecode optimization
+    optimize=0,  # NumPy 2.x requires docstrings, cannot use optimize=2
 )
 
 # =============================================================================

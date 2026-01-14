@@ -111,6 +111,11 @@ class HotkeyManager:
 
                 def on_key_press(key):
                     try:
+                        # Debug: Log all key presses
+                        import sys
+
+                        print(f"🎹 DEBUG: key_press received: {key}", file=sys.stderr)
+
                         # Update modifier key state
                         is_modifier = False
                         if self.active_modifier_key and key == self.active_modifier_key:
@@ -156,8 +161,17 @@ class HotkeyManager:
                 self.listener.start()
                 self.is_running = True
 
-                # Note: Removed print to avoid interfering with daemon JSON responses
-                # Logger will be added by the caller
+                # Debug: Check if listener started successfully
+                import sys
+
+                print(
+                    f"🎹 DEBUG: pynput listener started, is_alive={self.listener.is_alive()}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"🎹 DEBUG: waiting for hotkey: modifier={self.active_modifier_key}, key={self.active_main_key}",
+                    file=sys.stderr,
+                )
 
             except ImportError:
                 # Note: These prints only show on error

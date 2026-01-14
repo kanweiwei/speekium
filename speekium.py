@@ -654,47 +654,19 @@ class VoiceAssistant:
 
     def load_audio_file(self, file_path):
         """Load audio file and return numpy array at SAMPLE_RATE.
-        Supports WAV and MP3 formats.
+        Supports WAV and MP3 formats using torchaudio (pure Python, no ffmpeg needed).
         """
-        import subprocess
+        import torchaudio
 
-        from scipy.io.wavfile import read as read_wav
+        # torchaudio can load WAV, MP3, and other formats directly
+        waveform, sr = torchaudio.load(file_path)
 
-        if file_path.endswith(".wav"):
-            sr, audio = read_wav(file_path)
-            # Convert to float32
-            if audio.dtype == np.int16:
-                audio = audio.astype(np.float32) / 32768.0
-            elif audio.dtype == np.int32:
-                audio = audio.astype(np.float32) / 2147483648.0
-        else:
-            # Use ffmpeg to convert MP3 to WAV
-            # Security: Use secure temp file
-            tmp_wav = create_secure_temp_file(suffix=".wav")
-            try:
-                subprocess.run(
-                    [
-                        "ffmpeg",
-                        "-y",
-                        "-i",
-                        file_path,
-                        "-ar",
-                        str(SAMPLE_RATE),
-                        "-ac",
-                        "1",
-                        "-f",
-                        "wav",
-                        tmp_wav,
-                    ],
-                    capture_output=True,
-                    check=True,
-                )
-                sr, audio = read_wav(tmp_wav)
-                if audio.dtype == np.int16:
-                    audio = audio.astype(np.float32) / 32768.0
-            finally:
-                if os.path.exists(tmp_wav):
-                    os.remove(tmp_wav)
+        # Convert stereo to mono if needed (average channels)
+        if waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+
+        # Convert to numpy float32 array
+        audio = waveform.squeeze().numpy()
 
         # Resample if needed
         if sr != SAMPLE_RATE:

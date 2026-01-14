@@ -6,7 +6,7 @@ use tauri::{
     Emitter, Manager, Runtime, State,
 };
 use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout, ChildStderr};
-use std::io::{BufReader, BufWriter, Write, BufRead};
+use std::io::{BufReader, BufWriter, Write, BufRead, Read};
 use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
@@ -144,12 +144,31 @@ impl PythonDaemon {
         // Detect execution mode
         let daemon_mode = detect_daemon_mode()?;
 
+        // Build PATH environment variable
+        // Include common paths for potential external tools
+        // Note: ffmpeg is no longer needed since we use torchaudio for audio conversion
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let extra_paths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
+        let enhanced_path = format!("{}:{}", extra_paths, current_path);
+
         // Build command based on mode
         let mut child = match daemon_mode {
-            DaemonMode::Production { executable_path } => {
+            DaemonMode::Production { ref executable_path } => {
                 println!("📦 生产模式: 启动 sidecar 可执行文件");
+                // Include _internal directory in PATH for bundled dependencies
+                let internal_dir = executable_path.parent()
+                    .map(|p| p.join("_internal"))
+                    .unwrap_or_default();
+                let production_path = format!("{}:{}:{}",
+                    internal_dir.display(),
+                    extra_paths,
+                    current_path
+                );
+                println!("📂 PATH 包含: {}", internal_dir.display());
+
                 Command::new(&executable_path)
                     .arg("daemon")
+                    .env("PATH", production_path)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
@@ -158,14 +177,28 @@ impl PythonDaemon {
             }
             DaemonMode::Development { script_path } => {
                 println!("🔧 开发模式: 使用 Python 运行脚本");
-                Command::new("python3")
+
+                // Try to use venv Python if available (in project root)
+                let project_root = script_path.parent().unwrap_or(std::path::Path::new("."));
+                let venv_python = project_root.join(".venv/bin/python3");
+
+                let python_cmd = if venv_python.exists() {
+                    println!("🐍 使用虚拟环境 Python: {:?}", venv_python);
+                    venv_python
+                } else {
+                    println!("🐍 使用系统 Python: python3");
+                    std::path::PathBuf::from("python3")
+                };
+
+                Command::new(&python_cmd)
                     .arg(&script_path)
                     .arg("daemon")
+                    .env("PATH", enhanced_path)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()
-                    .map_err(|e| format!("Failed to start Python daemon: {} (script: {:?})", e, script_path))?
+                    .map_err(|e| format!("Failed to start Python daemon: {} (python: {:?}, script: {:?})", e, python_cmd, script_path))?
             }
         };
 
@@ -200,6 +233,17 @@ impl PythonDaemon {
                 Ok(0) => {
                     // EOF - daemon exited unexpectedly
                     println!("❌ 守护进程在初始化期间退出");
+
+                    // Try to read stderr to get the error message
+                    if let Some(mut stderr_reader) = PTT_STDERR.lock().unwrap().take() {
+                        let mut stderr_content = String::new();
+                        if let Ok(_) = stderr_reader.read_to_string(&mut stderr_content) {
+                            if !stderr_content.is_empty() {
+                                println!("📛 守护进程错误输出:\n{}", stderr_content);
+                            }
+                        }
+                    }
+
                     return Err("Daemon exited during initialization".to_string());
                 }
                 Ok(_) => {
@@ -320,6 +364,15 @@ static PTT_STDERR: Mutex<Option<BufReader<ChildStderr>>> = Mutex::new(None);
 
 // Streaming operation flag - prevent health checks from interfering
 static STREAMING_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+// Current PTT shortcut string (for dynamic update)
+static CURRENT_PTT_SHORTCUT: Mutex<Option<String>> = Mutex::new(None);
+
+// PTT key state - prevent key repeat from triggering multiple presses
+static PTT_KEY_PRESSED: AtomicBool = AtomicBool::new(false);
+
+// Global app handle for shortcut management
+static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
 
 fn ensure_daemon_running() -> Result<(), String> {
     let mut daemon = DAEMON.lock().unwrap();
@@ -1129,9 +1182,26 @@ async fn save_config(config: serde_json::Value) -> Result<serde_json::Value, Str
 
 #[tauri::command]
 async fn update_hotkey(hotkey_config: serde_json::Value) -> Result<serde_json::Value, String> {
-    println!("⌨️  调用守护进程: update_hotkey, hotkey = {}", hotkey_config.get("displayName").and_then(|v| v.as_str()).unwrap_or("unknown"));
+    let display_name = hotkey_config.get("displayName").and_then(|v| v.as_str()).unwrap_or("unknown");
+    println!("⌨️  调用守护进程: update_hotkey, hotkey = {}", display_name);
 
-    let result = call_daemon("update_hotkey", hotkey_config)?;
+    // Update daemon config
+    let result = call_daemon("update_hotkey", hotkey_config.clone())?;
+
+    // Also update Tauri global shortcut
+    if let Some(shortcut_str) = hotkey_config_to_shortcut_string(&hotkey_config) {
+        if let Some(app_handle) = APP_HANDLE.get() {
+            if let Err(e) = register_ptt_shortcut(app_handle, &shortcut_str) {
+                println!("❌ 更新 Tauri PTT 快捷键失败: {}", e);
+            } else {
+                println!("✅ Tauri PTT 快捷键已更新: {}", shortcut_str);
+            }
+        } else {
+            println!("⚠️ APP_HANDLE 未初始化");
+        }
+    } else {
+        println!("⚠️ 无法解析快捷键配置");
+    }
 
     serde_json::from_value(result)
         .map_err(|e| format!("Failed to parse result: {}", e))
@@ -1483,6 +1553,134 @@ async fn test_custom_connection(api_key: String, base_url: String, model: String
 // Global Shortcuts
 // ============================================================================
 
+/// Convert hotkey config JSON to Tauri shortcut string
+/// e.g., {"key": "Digit3", "modifiers": ["CmdOrCtrl"]} -> "CommandOrControl+3"
+fn hotkey_config_to_shortcut_string(config: &serde_json::Value) -> Option<String> {
+    let key = config.get("key")?.as_str()?;
+    let modifiers = config.get("modifiers")?.as_array()?;
+
+    let mut parts = Vec::new();
+
+    for modifier in modifiers {
+        if let Some(m) = modifier.as_str() {
+            match m {
+                "CmdOrCtrl" | "CommandOrControl" => parts.push("CommandOrControl"),
+                "Shift" => parts.push("Shift"),
+                "Alt" | "Option" => parts.push("Alt"),
+                "Ctrl" | "Control" => parts.push("Control"),
+                _ => {}
+            }
+        }
+    }
+
+    // Convert key code to Tauri format
+    let tauri_key = match key {
+        // Digits
+        "Digit0" => "0",
+        "Digit1" => "1",
+        "Digit2" => "2",
+        "Digit3" => "3",
+        "Digit4" => "4",
+        "Digit5" => "5",
+        "Digit6" => "6",
+        "Digit7" => "7",
+        "Digit8" => "8",
+        "Digit9" => "9",
+        // Letters
+        k if k.starts_with("Key") => &k[3..],
+        // Function keys
+        k if k.starts_with("F") && k.len() <= 3 => k,
+        // Special keys
+        "Space" => "Space",
+        "Enter" => "Enter",
+        "Escape" => "Escape",
+        "Backspace" => "Backspace",
+        "Tab" => "Tab",
+        "ArrowUp" => "Up",
+        "ArrowDown" => "Down",
+        "ArrowLeft" => "Left",
+        "ArrowRight" => "Right",
+        // Punctuation
+        "Minus" => "-",
+        "Equal" => "=",
+        "BracketLeft" => "[",
+        "BracketRight" => "]",
+        "Backslash" => "\\",
+        "Semicolon" => ";",
+        "Quote" => "'",
+        "Comma" => ",",
+        "Period" => ".",
+        "Slash" => "/",
+        "Backquote" => "`",
+        _ => key,
+    };
+
+    parts.push(tauri_key);
+    Some(parts.join("+"))
+}
+
+/// Register or update PTT shortcut
+fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    // Unregister old shortcut if exists
+    {
+        let mut current = CURRENT_PTT_SHORTCUT.lock().unwrap();
+        if let Some(ref old_shortcut_str) = *current {
+            if let Ok(old_shortcut) = old_shortcut_str.parse::<Shortcut>() {
+                let _ = app_handle.global_shortcut().unregister(old_shortcut);
+                println!("🔄 注销旧 PTT 快捷键: {}", old_shortcut_str);
+            }
+        }
+        *current = Some(shortcut_str.to_string());
+    }
+
+    // Parse and register new shortcut
+    let ptt_shortcut: Shortcut = shortcut_str.parse()
+        .map_err(|e| format!("Failed to parse shortcut '{}': {:?}", shortcut_str, e))?;
+
+    app_handle.global_shortcut().on_shortcut(ptt_shortcut, move |_app, _shortcut, event| {
+        match event.state() {
+            ShortcutState::Pressed => {
+                // Filter out key repeat - only handle first press
+                if PTT_KEY_PRESSED.swap(true, Ordering::SeqCst) {
+                    // Already pressed, ignore key repeat
+                    return;
+                }
+                println!("🎤 PTT: Key pressed (Tauri)");
+                if let Ok(mut daemon_guard) = DAEMON.lock() {
+                    if let Some(ref mut daemon) = *daemon_guard {
+                        match daemon.send_command("ptt_press", serde_json::json!({})) {
+                            Ok(_) => println!("✅ PTT press command sent"),
+                            Err(e) => println!("❌ PTT press command failed: {}", e),
+                        }
+                    } else {
+                        println!("⚠️ PTT: Daemon not initialized");
+                    }
+                }
+            }
+            ShortcutState::Released => {
+                // Reset key state
+                PTT_KEY_PRESSED.store(false, Ordering::SeqCst);
+                println!("🎤 PTT: Key released (Tauri)");
+                if let Ok(mut daemon_guard) = DAEMON.lock() {
+                    if let Some(ref mut daemon) = *daemon_guard {
+                        match daemon.send_command("ptt_release", serde_json::json!({})) {
+                            Ok(_) => println!("✅ PTT release command sent"),
+                            Err(e) => println!("❌ PTT release command failed: {}", e),
+                        }
+                    } else {
+                        println!("⚠️ PTT: Daemon not initialized");
+                    }
+                }
+            }
+        }
+    }).map_err(|e| format!("Failed to register PTT shortcut: {}", e))?;
+
+    println!("✅ PTT 快捷键已注册: {}", shortcut_str);
+    Ok(())
+}
+
 fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
@@ -1501,14 +1699,47 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
         }
     }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register toggle shortcut: {}", e)))?;
 
-    // PTT shortcut is now handled by Python daemon's HotkeyManager (supports Cmd+1)
-    // No longer need to register in Tauri
-
     println!("✅ 全局快捷键已注册:");
     println!("   • Command+Shift+Space - 显示/隐藏窗口");
-    println!("   • Command+1 (Python pynput) - Push-to-Talk (按住说话)");
+
+    // PTT shortcut will be registered after daemon starts and config is loaded
+    // See register_ptt_from_config() which is called after daemon initialization
 
     Ok(())
+}
+
+/// Register PTT shortcut from daemon config
+fn register_ptt_from_config(app_handle: &tauri::AppHandle) {
+    // Get config from daemon
+    if let Ok(mut daemon_guard) = DAEMON.lock() {
+        if let Some(ref mut daemon) = *daemon_guard {
+            match daemon.send_command("config", serde_json::json!({})) {
+                Ok(config_result) => {
+                    if let Some(config) = config_result.get("config") {
+                        if let Some(hotkey_config) = config.get("push_to_talk_hotkey") {
+                            if let Some(shortcut_str) = hotkey_config_to_shortcut_string(hotkey_config) {
+                                if let Err(e) = register_ptt_shortcut(app_handle, &shortcut_str) {
+                                    println!("❌ 注册 PTT 快捷键失败: {}", e);
+                                    // Fallback to default
+                                    let _ = register_ptt_shortcut(app_handle, "CommandOrControl+3");
+                                }
+                                return;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("❌ 获取配置失败: {}", e);
+                }
+            }
+        }
+    }
+
+    // Fallback to default shortcut
+    println!("⚠️ 使用默认 PTT 快捷键: Cmd+3");
+    if let Err(e) = register_ptt_shortcut(app_handle, "CommandOrControl+3") {
+        println!("❌ 注册默认 PTT 快捷键失败: {}", e);
+    }
 }
 
 // ============================================================================
@@ -1721,6 +1952,14 @@ pub fn run() {
             ensure_daemon_running()
                 .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to start daemon: {}", e)))?;
 
+            // Store app handle globally for shortcut management
+            let _ = APP_HANDLE.set(app.handle().clone());
+
+            // Register PTT shortcut from user config (after daemon is ready)
+            if let Some(app_handle) = APP_HANDLE.get() {
+                register_ptt_from_config(app_handle);
+            }
+
             // Start PTT event reader (listen to Python daemon stderr)
             start_ptt_reader(app.handle().clone());
 
@@ -1730,7 +1969,6 @@ pub fn run() {
             }
 
             println!("✅ Speekium 应用已启动 (守护进程模式)");
-            println!("🎤 PTT 快捷键: Cmd+1 (按住说话，松开结束)");
 
             Ok(())
         })

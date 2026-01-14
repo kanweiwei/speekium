@@ -91,12 +91,10 @@ class SpeekiumDaemon:
         self.ptt_recording = False
         self.ptt_audio_frames = []
         self.ptt_stream = None
-        self.ptt_start_future = None  # Track the start recording future for synchronization
 
-        # Hotkey manager for PTT
-        self.hotkey_manager = None
+        # Note: PTT hotkey is handled by Tauri/Rust side via ptt_press/ptt_release commands
 
-        # Event loop reference for PTT callbacks (set during initialization)
+        # Event loop reference (set during initialization)
         self.loop = None
 
         # Output startup log
@@ -148,82 +146,9 @@ class SpeekiumDaemon:
             finally:
                 self.ptt_stream = None
 
-        # Stop hotkey manager
-        if self.hotkey_manager:
-            try:
-                self._log("🧹 停止热键监听...")
-                self.hotkey_manager.stop()
-            except Exception as e:
-                self._log(f"⚠️ 停止热键监听失败: {e}")
-            finally:
-                self.hotkey_manager = None
+        # Note: PTT hotkey is now handled by Tauri, no pynput cleanup needed
 
         self._log("✅ 资源清理完成")
-
-    def _on_hotkey_press(self):
-        """Callback when PTT hotkey is pressed"""
-        self._log("🎤 PTT: Hotkey pressed - starting recording")
-        self._emit_ptt_event("recording")
-
-        # Start recording in background (use stored loop reference for thread safety)
-        # Store the future so we can wait for it in _on_hotkey_release
-        if self.loop:
-            self.ptt_start_future = asyncio.run_coroutine_threadsafe(
-                self.handle_record_start(), self.loop
-            )
-
-    def _on_hotkey_release(self):
-        """Callback when PTT hotkey is released"""
-        self._log("🎤 PTT: Hotkey released - stopping recording")
-        self._emit_ptt_event("processing")
-
-        # Read config to check work mode
-        from config_manager import ConfigManager
-
-        config = ConfigManager.load()
-        work_mode = config.get("work_mode", "conversation")
-
-        # Determine auto_chat based on work_mode
-        # conversation mode: auto_chat=True (trigger LLM + TTS)
-        # text mode: auto_chat=False (only return ASR text)
-        auto_chat = work_mode == "conversation"
-
-        self._log(f"🎤 PTT: Work mode = {work_mode}, auto_chat = {auto_chat}")
-
-        # Stop recording and process in background (use stored loop reference for thread safety)
-        if not self.loop:
-            return
-
-        # Wait for start to complete before stopping (fix race condition)
-        # This ensures recording is fully initialized before we try to stop it
-        # Use 10s timeout to accommodate slower devices (e.g., USB microphones, Bluetooth)
-        if self.ptt_start_future:
-            try:
-                self.ptt_start_future.result(timeout=10.0)
-            except Exception as e:
-                self._log(f"⚠️ PTT: Start future error: {e}")
-            finally:
-                self.ptt_start_future = None
-
-        future = asyncio.run_coroutine_threadsafe(
-            self.handle_record_stop(auto_chat=auto_chat, use_tts=True), self.loop
-        )
-
-        # Handle result in another thread to not block
-        def handle_result(fut):
-            try:
-                result = fut.result()
-                if result is None:
-                    self._emit_ptt_event("error", {"error": "No result from recording"})
-                elif result.get("success"):
-                    self._emit_ptt_event("idle", {"text": result.get("text", "")})
-                else:
-                    self._emit_ptt_event("error", {"error": result.get("error", "Unknown error")})
-            except Exception as e:
-                self._log(f"❌ PTT: handle_result error: {e}")
-                self._emit_ptt_event("error", {"error": str(e)})
-
-        future.add_done_callback(handle_result)
 
     async def initialize(self):
         """Preload all models (only executed once at startup)"""
@@ -245,28 +170,9 @@ class SpeekiumDaemon:
             self._log("🔄 预加载 LLM 后端...")
             self.assistant.load_llm()
 
-            # Initialize and start hotkey manager for PTT
-            try:
-                from hotkey_manager import HotkeyManager
-                from config_manager import ConfigManager
-
-                # Load hotkey config from settings
-                config = ConfigManager.load()
-                hotkey_config = config.get(
-                    "push_to_talk_hotkey",
-                    {"modifiers": ["CmdOrCtrl"], "key": "Digit1", "displayName": "⌘1"},
-                )
-
-                self.hotkey_manager = HotkeyManager()
-                self.hotkey_manager.start(
-                    hotkey_config=hotkey_config,
-                    on_press=self._on_hotkey_press,
-                    on_release=self._on_hotkey_release,
-                )
-                self._log(f"✅ PTT 快捷键监听已启动 ({hotkey_config.get('displayName', '⌘1')})")
-            except Exception as e:
-                self._log(f"⚠️ PTT 快捷键监听启动失败: {e}")
-                # Continue without hotkey - can still use commands
+            # Note: PTT hotkey is now handled by Tauri global shortcuts (Rust side)
+            # The pynput hotkey manager is no longer needed
+            # PTT commands (ptt_press, ptt_release) are sent from Rust via stdin
 
             self._log("✅ 所有模型加载完成，进入待命状态")
             return True
@@ -729,29 +635,19 @@ class SpeekiumDaemon:
             return {"success": False, "error": str(e)}
 
     async def handle_update_hotkey(self, hotkey_config: dict) -> dict:
-        """Update hotkey configuration"""
+        """Update hotkey configuration
+        Note: Actual hotkey registration is handled by Tauri/Rust side.
+        This just acknowledges the config update.
+        """
         try:
-            if not self.hotkey_manager:
-                self._log("❌ HotkeyManager not initialized")
-                return {"success": False, "error": "HotkeyManager not initialized"}
-
             display_name = hotkey_config.get("displayName", "unknown")
             self._log(f"📥 收到热键更新请求: {display_name}")
-
-            # Call HotkeyManager update_hotkey method
-            success, error_message = self.hotkey_manager.update_hotkey(hotkey_config)
-
-            if success:
-                self._log(f"✅ 热键已更新为: {display_name}")
-                return {"success": True}
-            else:
-                self._log(f"❌ 热键更新失败: {error_message}")
-                return {"success": False, "error": error_message}
+            # Config is saved via set_config command from Rust
+            # Tauri handles the actual hotkey re-registration
+            self._log(f"✅ 热键配置已确认: {display_name}")
+            return {"success": True}
         except Exception as e:
-            import traceback
-
             self._log(f"❌ 热键更新失败: {e}")
-            self._log(f"❌ Stack trace: {traceback.format_exc()}")
             return {"success": False, "error": str(e)}
 
     async def handle_health(self) -> dict:
@@ -782,6 +678,28 @@ class SpeekiumDaemon:
             return await self.handle_record_stop(
                 args.get("auto_chat", True), args.get("use_tts", True)
             )
+        elif command == "ptt_press":
+            # PTT key pressed - emit event and start recording (called from Rust)
+            self._emit_ptt_event("recording")
+            return await self.handle_record_start()
+        elif command == "ptt_release":
+            # PTT key released - emit event and stop recording (called from Rust)
+            self._emit_ptt_event("processing")
+            # Read config to determine auto_chat mode
+            from config_manager import ConfigManager
+
+            config = ConfigManager.load()
+            work_mode = config.get("work_mode", "conversation")
+            auto_chat = work_mode == "conversation"
+            result = await self.handle_record_stop(auto_chat=auto_chat, use_tts=True)
+            if result and result.get("success"):
+                self._emit_ptt_event("idle", {"text": result.get("text", "")})
+            else:
+                self._emit_ptt_event(
+                    "error",
+                    {"error": result.get("error", "Unknown error") if result else "No result"},
+                )
+            return result
         elif command == "chat":
             return await self.handle_chat(args.get("text", ""))
         elif command == "chat_stream":
