@@ -307,26 +307,45 @@ jobs:
           cp -R sidecar_dist/worker_daemon/* "$SIDECAR_DIR/"
           chmod +x "$SIDECAR_DIR/worker_daemon"
           echo "✅ Sidecar directory added"
-          ls -la "$SIDECAR_DIR/"
 
-          # Sign all binaries in sidecar directory
-          echo "🔏 Signing sidecar binaries..."
-          find "$SIDECAR_DIR" -type f \( -name "*.so" -o -name "*.dylib" -o -perm +111 \) | while read -r binary; do
-            echo "  Signing: $binary"
-            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$binary" 2>/dev/null || true
+          # Remove any .gitignore files that cause signing issues
+          find "$SIDECAR_DIR" -name ".gitignore" -delete
+          find "$SIDECAR_DIR" -name "*.pyc" -delete
+          find "$SIDECAR_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+          # Sign from inside out: frameworks first, then dylibs, then executables
+          echo "🔏 Signing sidecar contents (inside-out)..."
+
+          # 1. Sign all .framework bundles (must sign the framework itself, not individual files)
+          find "$SIDECAR_DIR" -name "*.framework" -type d | while read -r framework; do
+            echo "  Signing framework: $framework"
+            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$framework" || true
           done
 
-          # Sign the main sidecar executable
+          # 2. Sign all .so and .dylib files (excluding those inside frameworks)
+          find "$SIDECAR_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*.framework/*" | while read -r lib; do
+            echo "  Signing lib: $lib"
+            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$lib" 2>/dev/null || true
+          done
+
+          # 3. Sign the main sidecar executable
+          echo "  Signing main executable: $SIDECAR_DIR/worker_daemon"
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$SIDECAR_DIR/worker_daemon"
           echo "✅ Sidecar signed"
 
-          # Re-sign the entire app bundle
+          # 4. Re-sign the main app executable
+          echo "🔏 Signing main app executable..."
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH/Contents/MacOS/speekium"
+
+          # 5. Sign the entire app bundle (without --deep to preserve inner signatures)
           echo "🔏 Signing app bundle..."
-          codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
           echo "✅ App bundle signed"
 
           # Verify signature
-          codesign -dv --verbose=4 "$APP_PATH"
+          echo "🔍 Verifying signature..."
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH" || echo "⚠️ Signature verification had issues"
+          codesign -dv --verbose=2 "$APP_PATH"
 
           # Create DMG
           DMG_DIR="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
