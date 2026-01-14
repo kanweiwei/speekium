@@ -70,3 +70,4 @@ TRACE*.md
 /test_*.py
 /tts_test.py
 /dist/
+sidecar_dist/

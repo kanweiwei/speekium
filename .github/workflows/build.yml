@@ -67,9 +67,9 @@ jobs:
 
       - name: Build Python daemon with PyInstaller
         run: |
-          pyinstaller worker_daemon.spec --noconfirm
+          pyinstaller worker_daemon.spec --noconfirm --distpath sidecar_dist
           echo "✅ Python daemon built successfully"
-          ls -la dist/
+          ls -la sidecar_dist/
         shell: bash
 
       - name: Build frontend
@@ -104,7 +104,7 @@ jobs:
           APP_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -type d | head -1)
           if [ -n "$APP_PATH" ]; then
             echo "Found app bundle: $APP_PATH"
-            cp dist/worker_daemon "$APP_PATH/Contents/MacOS/worker_daemon"
+            cp sidecar_dist/worker_daemon "$APP_PATH/Contents/MacOS/worker_daemon"
             chmod +x "$APP_PATH/Contents/MacOS/worker_daemon"
             echo "✅ Sidecar added to app bundle"
             ls -la "$APP_PATH/Contents/MacOS/"
@@ -132,7 +132,7 @@ jobs:
         if: matrix.platform == 'windows-latest'
         run: |
           # Copy sidecar to release directory (next to main exe)
-          cp dist/worker_daemon.exe src-tauri/target/release/worker_daemon.exe
+          cp sidecar_dist/worker_daemon.exe src-tauri/target/release/worker_daemon.exe
           echo "✅ Sidecar added to release directory"
           ls -la src-tauri/target/release/worker_daemon.exe
         shell: bash
@@ -217,9 +217,9 @@ jobs:
 
       - name: Build Python daemon with PyInstaller
         run: |
-          pyinstaller worker_daemon.spec --noconfirm
+          pyinstaller worker_daemon.spec --noconfirm --distpath sidecar_dist
           echo "✅ Python daemon built successfully"
-          ls -la dist/
+          ls -la sidecar_dist/
         shell: bash
 
       - name: Import macOS certificate
@@ -299,7 +299,7 @@ jobs:
           echo "Found app bundle: $APP_PATH"
 
           # Add sidecar
-          cp dist/worker_daemon "$APP_PATH/Contents/MacOS/worker_daemon"
+          cp sidecar_dist/worker_daemon "$APP_PATH/Contents/MacOS/worker_daemon"
           chmod +x "$APP_PATH/Contents/MacOS/worker_daemon"
           echo "✅ Sidecar added"
 
