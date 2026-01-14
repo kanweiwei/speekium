@@ -8,6 +8,7 @@ use tauri::{
 use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout, ChildStderr};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
+use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 mod database;
@@ -59,6 +60,66 @@ struct HealthResult {
 // Python Daemon Manager
 // ============================================================================
 
+/// Daemon execution mode
+enum DaemonMode {
+    /// Development mode: run Python script directly
+    Development { script_path: PathBuf },
+    /// Production mode: run PyInstaller-bundled executable
+    Production { executable_path: PathBuf },
+}
+
+/// Detect daemon execution mode based on environment
+/// - In production (app bundle): look for sidecar executable
+/// - In development: use Python script
+fn detect_daemon_mode() -> Result<DaemonMode, String> {
+    let current_exe = std::env::current_exe()
+        .map_err(|e| format!("Failed to get current executable path: {}", e))?;
+
+    let exe_dir = current_exe.parent()
+        .ok_or_else(|| "Failed to get executable directory".to_string())?;
+
+    println!("🔍 检测守护进程模式...");
+    println!("   当前可执行文件: {:?}", current_exe);
+    println!("   可执行文件目录: {:?}", exe_dir);
+
+    // Check for sidecar executable
+    #[cfg(target_os = "windows")]
+    let sidecar_name = "worker_daemon.exe";
+    #[cfg(not(target_os = "windows"))]
+    let sidecar_name = "worker_daemon";
+
+    let sidecar_path = exe_dir.join(sidecar_name);
+
+    if sidecar_path.exists() {
+        println!("✅ 生产模式: 找到 sidecar 可执行文件");
+        println!("   Sidecar 路径: {:?}", sidecar_path);
+        return Ok(DaemonMode::Production { executable_path: sidecar_path });
+    }
+
+    // Check for Python script (development mode)
+    // In dev mode, the Tauri binary is in src-tauri/target/debug/
+    // The Python script is at project root: ../../../worker_daemon.py
+    let dev_script_paths = [
+        exe_dir.join("../../../worker_daemon.py"),  // From src-tauri/target/debug/
+        exe_dir.join("../../worker_daemon.py"),     // Alternative path
+        exe_dir.join("../worker_daemon.py"),        // Original relative path
+        PathBuf::from("worker_daemon.py"),          // Current directory
+    ];
+
+    for script_path in dev_script_paths.iter() {
+        if let Ok(canonical) = script_path.canonicalize() {
+            println!("✅ 开发模式: 找到 Python 脚本");
+            println!("   脚本路径: {:?}", canonical);
+            return Ok(DaemonMode::Development { script_path: canonical });
+        }
+    }
+
+    // Fallback: try the original relative path (will fail if not found, but provides useful error)
+    println!("⚠️ 开发模式: 使用默认相对路径");
+    let fallback_path = exe_dir.join("../worker_daemon.py");
+    Ok(DaemonMode::Development { script_path: fallback_path })
+}
+
 struct PythonDaemon {
     process: Child,
     stdin: BufWriter<ChildStdin>,
@@ -69,14 +130,33 @@ impl PythonDaemon {
     fn new() -> Result<Self, String> {
         println!("🚀 启动 Python 守护进程...");
 
-        let mut child = Command::new("python3")
-            .arg("../worker_daemon.py")
-            .arg("daemon")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())  // Capture stderr for PTT events
-            .spawn()
-            .map_err(|e| format!("Failed to start daemon: {}", e))?;
+        // Detect execution mode
+        let daemon_mode = detect_daemon_mode()?;
+
+        // Build command based on mode
+        let mut child = match daemon_mode {
+            DaemonMode::Production { executable_path } => {
+                println!("📦 生产模式: 启动 sidecar 可执行文件");
+                Command::new(&executable_path)
+                    .arg("daemon")
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to start sidecar daemon: {} (path: {:?})", e, executable_path))?
+            }
+            DaemonMode::Development { script_path } => {
+                println!("🔧 开发模式: 使用 Python 运行脚本");
+                Command::new("python3")
+                    .arg(&script_path)
+                    .arg("daemon")
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to start Python daemon: {} (script: {:?})", e, script_path))?
+            }
+        };
 
         let stdin = BufWriter::new(
             child.stdin.take().ok_or("Failed to get stdin")?
