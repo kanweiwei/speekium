@@ -104,10 +104,10 @@ jobs:
           APP_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -type d | head -1)
           if [ -n "$APP_PATH" ]; then
             echo "Found app bundle: $APP_PATH"
-            # Copy sidecar directory (onedir mode)
+            # Copy sidecar directory (onedir mode) - use ditto to preserve symlinks
             SIDECAR_DIR="$APP_PATH/Contents/Resources/worker_daemon"
             mkdir -p "$SIDECAR_DIR"
-            cp -R sidecar_dist/worker_daemon/* "$SIDECAR_DIR/"
+            ditto sidecar_dist/worker_daemon "$SIDECAR_DIR"
             chmod +x "$SIDECAR_DIR/worker_daemon"
             echo "✅ Sidecar directory added to app bundle"
             ls -la "$SIDECAR_DIR/"
@@ -302,15 +302,16 @@ jobs:
           echo "Found app bundle: $APP_PATH"
 
           # Add sidecar directory (onedir mode)
+          # Use ditto instead of cp to preserve symlinks and framework structure
           SIDECAR_DIR="$APP_PATH/Contents/Resources/worker_daemon"
           mkdir -p "$SIDECAR_DIR"
-          cp -R sidecar_dist/worker_daemon/* "$SIDECAR_DIR/"
+          ditto sidecar_dist/worker_daemon "$SIDECAR_DIR"
           chmod +x "$SIDECAR_DIR/worker_daemon"
-          echo "✅ Sidecar directory added"
+          echo "✅ Sidecar directory added (using ditto to preserve symlinks)"
 
-          # Remove any .gitignore files that cause signing issues
-          find "$SIDECAR_DIR" -name ".gitignore" -delete
-          find "$SIDECAR_DIR" -name "*.pyc" -delete
+          # Clean up unnecessary files before signing
+          find "$SIDECAR_DIR" -name ".gitignore" -delete 2>/dev/null || true
+          find "$SIDECAR_DIR" -name "*.pyc" -delete 2>/dev/null || true
           find "$SIDECAR_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
           # Sign from inside out: frameworks first, then dylibs, then executables
