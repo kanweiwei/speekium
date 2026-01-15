@@ -85,8 +85,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             ...result.config,
             push_to_talk_hotkey: result.config.push_to_talk_hotkey || {
               modifiers: ['CmdOrCtrl'],
-              key: 'Digit1',
-              displayName: '⌘1',
+              key: 'Digit3',
+              displayName: '⌘3',
             },
           };
           setConfig(configWithDefaults);

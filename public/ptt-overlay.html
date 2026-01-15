@@ -58,6 +58,18 @@
       animation: pulse 0.6s ease-in-out infinite;
     }
 
+    Listening state - waiting for speech */
+    .ptt-card.listening .dot {
+      background: #22c55e;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    Detected state - speech detected, preparing to record */
+    .ptt-card.detected .dot {
+      background: #f59e0b;
+      animation: pulse 0.8s ease-in-out infinite;
+    }
+
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.4; }
@@ -72,6 +84,8 @@
 
     .ptt-card.recording .label { color: #fca5a5; }
     .ptt-card.processing .label { color: #a5b4fc; }
+    .ptt-card.listening .label { color: #86efac; }  绿色 */
+    .ptt-card.detected .label { color: #fcd34d; }  黄色 */
   </style>
 </head>
 <body>
@@ -99,12 +113,25 @@
         const state = event.payload;
         card.className = 'ptt-card ' + state;
 
-        // Show/hide overlay based on state
+        // Show/hide overlay based on state - P2-9: 新增 listening 和 detected 状态
         switch (state) {
+          case 'listening':
+            自动检测模式，正在监听中
+            container.classList.remove('hidden');
+            label.textContent = '正在监听...';
+            break;
+          case 'detected':
+            检测到声音
+            container.classList.remove('hidden');
+            label.textContent = '检测到声音';
+            break;
           case 'recording':
+            container.classList.remove('hidden');
+            label.textContent = '录音中...';
+            break;
           case 'processing':
             container.classList.remove('hidden');
-            label.textContent = state === 'recording' ? '录音中...' : '处理中...';
+            label.textContent = '处理中...';
             break;
           default:
             // idle or error - hide overlay

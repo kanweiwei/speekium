@@ -81,8 +81,8 @@ interface SettingsProps {
   onAutoTTSChange?: (value: boolean) => void;
   recordMode?: 'push-to-talk' | 'continuous';
   onRecordModeChange?: (value: 'push-to-talk' | 'continuous') => void;
-  workMode?: 'conversation' | 'text';
-  onWorkModeChange?: (value: 'conversation' | 'text') => void;
+  workMode?: 'conversation' | 'text-input';
+  onWorkModeChange?: (value: 'conversation' | 'text-input') => void;
   onClearHistory?: () => void;
 }
 
@@ -456,7 +456,7 @@ export function Settings({
                       onValueChange={(v) => {
                         // 同时更新 localConfig 和调用 onWorkModeChange
                         updateLocalConfig('work_mode', v);
-                        onWorkModeChange?.(v as 'conversation' | 'text');
+                        onWorkModeChange?.(v as 'conversation' | 'text-input');
                       }}
                     >
                       <SelectTrigger
@@ -475,7 +475,7 @@ export function Settings({
                             <span>{t('settings.workModes.conversation')}</span>
                           </div>
                         </SelectItem>
-                        <SelectItem value="text">
+                        <SelectItem value="text-input">
                           <div className="flex items-center gap-2">
                             <Type className="h-4 w-4 text-green-400" />
                             <span>{t('settings.workModes.text')}</span>
@@ -1041,8 +1041,8 @@ export function Settings({
                     <HotkeyRecorder
                       value={config?.push_to_talk_hotkey || {
                         modifiers: ['CmdOrCtrl'],
-                        key: 'Digit1',
-                        displayName: '⌘1',
+                        key: 'Digit3',
+                        displayName: '⌘3',
                       }}
                       onChange={(hotkey) => updateHotkey(hotkey)}
                       disabled={saveStatus === 'saving'}

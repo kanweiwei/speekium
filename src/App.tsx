@@ -6,7 +6,8 @@ import { Settings } from './Settings';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { NewSessionDialog } from './components/NewSessionDialog';
 import { ThemeToggle } from './components/ThemeToggle';
-import { WorkModeToast } from './components/WorkModeToast';
+import { SystemToast } from './components/SystemToast';
+import type { ToastType } from './components/SystemToast';
 import { CollapsibleInput } from './components/CollapsibleInput';
 import { historyAPI } from './useTauriAPI';
 import { useWorkMode } from './contexts/WorkModeContext';
@@ -203,14 +204,17 @@ function App() {
   const [daemonStatus, setDaemonStatus] = React.useState<'loading' | 'ready' | 'error'>('loading');
   const [loadingMessage, setLoadingMessage] = React.useState<string>('');
 
-  // Work Mode Toast state
+  // Toast state - 支持多种 Toast 类型
   const [toast, setToast] = React.useState<{
     show: boolean;
-    mode: WorkMode;
+    type: ToastType;
+    workMode: WorkMode;
     message?: string;
+    duration?: number;
   }>({
     show: false,
-    mode: 'conversation',
+    type: 'custom',
+    workMode: 'conversation',
   });
 
   const [recordMode, setRecordMode] = React.useState<'push-to-talk' | 'continuous'>(() => {
@@ -350,7 +354,7 @@ function App() {
         const userText = event.payload;
 
         // Determine behavior based on work mode
-        if (workMode === 'text') {
+        if (workMode === 'text-input') {
           // Text input mode: call type_text_command to input text to focused field and log to session history
 
           // First log to session history and database
@@ -488,8 +492,25 @@ function App() {
     let isContinuousMode = recordMode === 'continuous';
     let shouldKeepListening = true;
     let abortController = new AbortController();
+    let hasShownStartToast = false;  // Track if we've shown the start toast
 
     const continuousListen = async () => {
+      // Show toast when continuous listening starts
+      if (!hasShownStartToast && isContinuousMode) {
+        setToast({
+          show: true,
+          type: 'custom',
+          workMode,
+          message: '🎤 自动监听已启动',
+          duration: 2000,
+        });
+        // Auto-hide toast after 2 seconds
+        setTimeout(() => {
+          setToast(prev => ({ ...prev, show: false }));
+        }, 2000);
+        hasShownStartToast = true;
+      }
+
       while (isContinuousMode && shouldKeepListening && !abortController.signal.aborted) {
         // Check if mode has changed (use ref for immediate access)
         if (recordModeRef.current !== 'continuous') {
@@ -503,7 +524,12 @@ function App() {
         }
 
         try {
-          const result = await startRecording('continuous', 'auto', true, autoTTS);
+          // 🔧 Bug fix #2: Determine autoChat based on workMode
+          // - conversation mode: auto chat with LLM + TTS
+          // - text-input mode: only transcribe and input text, no LLM
+          const shouldAutoChat = workMode === 'conversation';
+          // 🔧 Bug fix #3: Pass workMode to startRecording so it can call type_text_command
+          const result = await startRecording('continuous', 'auto', shouldAutoChat, shouldAutoChat && autoTTS, workMode);
 
           // Check again after recording completes
           if (recordModeRef.current !== 'continuous') {
@@ -557,7 +583,76 @@ function App() {
         setError(null);
       }
     };
-  }, [recordMode, daemonStatus]); // Add daemonStatus dependency
+  }, [recordMode, daemonStatus, workMode]); // Add workMode dependency for toast
+
+  // 监听 Rust 发送的系统事件，显示 Toast 通知
+  React.useEffect(() => {
+    const unlisteners: Promise<() => void>[] = [];
+
+    // 监听通用 show-toast 事件
+    unlisteners.push(
+      (async () => {
+        const unlisten = await listen<string>('show-toast', (event) => {
+          console.log('[Toast] Received show-toast event:', event.payload);
+          setToast({
+            show: true,
+            type: 'custom',
+            workMode,
+            message: event.payload,
+            duration: 2000,
+          });
+        });
+        return unlisten;
+      })()
+    );
+
+    // 监听工作模式切换事件 (Alt+1 快捷键)
+    unlisteners.push(
+      (async () => {
+        const unlisten = await listen<string>('work-mode-changed', (event) => {
+          console.log('[Toast] Received work-mode-changed event:', event.payload);
+          const newMode = event.payload as WorkMode;
+          // 同步更新 WorkModeContext
+          setWorkMode(newMode, 'hotkey');
+          // 显示 Toast
+          setToast({
+            show: true,
+            type: newMode === 'conversation' ? 'work-mode-conversation' : 'work-mode-text-input',
+            workMode: newMode,
+            duration: 2000,
+          });
+        });
+        return unlisten;
+      })()
+    );
+
+    // 监听录音模式切换事件 (Alt+2 快捷键)
+    unlisteners.push(
+      (async () => {
+        const unlisten = await listen<string>('recording-mode-changed', (event) => {
+          console.log('[Toast] Received recording-mode-changed event:', event.payload);
+          const newMode = event.payload as 'push-to-talk' | 'continuous';
+          // 同步更新 recordMode state
+          setRecordMode(newMode);
+          // 显示 Toast
+          setToast({
+            show: true,
+            type: newMode === 'continuous' ? 'recording-mode-continuous' : 'recording-mode-push-to-talk',
+            workMode,
+            duration: 2000,
+          });
+        });
+        return unlisten;
+      })()
+    );
+
+    // Cleanup
+    return () => {
+      Promise.all(unlisteners).then(cleanupFns => {
+        cleanupFns.forEach(fn => fn());
+      });
+    };
+  }, [workMode, setWorkMode]);
 
   const handleClearHistory = () => {
     clearHistory();
@@ -839,7 +934,9 @@ function App() {
           // Show toast notification
           setToast({
             show: true,
-            mode,
+            type: mode === 'conversation' ? 'work-mode-conversation' : 'work-mode-text-input',
+            workMode: mode,
+            duration: 2000,
           });
         }}
         onClearHistory={handleClearHistory}
@@ -855,11 +952,13 @@ function App() {
         }}
       />
 
-      {/* 工作模式 Toast */}
+      {/* Toast 通知 - P2-8: 使用 SystemToast 支持多种类型 */}
       {toast.show && (
-        <WorkModeToast
-          mode={toast.mode}
+        <SystemToast
+          type={toast.type}
+          workMode={toast.workMode}
           message={toast.message}
+          duration={toast.duration}
           onClose={() => setToast(prev => ({ ...prev, show: false }))}
         />
       )}

@@ -39,13 +39,18 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "ollama_base_url": "http://localhost:11434",
     "tts_backend": "edge",
     "tts_rate": "+0%",
-    "vad_threshold": 0.7,
+    "vad_threshold": 0.5,  # Voice detection threshold (0.0-1.0, lower = more sensitive)
+    "vad_consecutive_threshold": 3,  # Consecutive detections to confirm speech start (lower = faster response)
+    "vad_silence_duration": 0.8,  # Silence duration to stop recording (seconds)
+    "vad_pre_buffer": 0.3,  # Pre-buffer duration to capture speech start (seconds)
+    "vad_min_speech_duration": 0.4,  # Minimum speech duration (seconds)
+    "vad_max_recording_duration": 30,  # Maximum recording duration (seconds)
     "max_history": 10,
-    "work_mode": "conversation",  # conversation | text
+    "work_mode": "conversation",  # conversation | text-input
     "push_to_talk_hotkey": {
         "modifiers": ["CmdOrCtrl"],
-        "key": "Digit1",
-        "displayName": "⌘1",
+        "key": "Digit3",
+        "displayName": "⌘3",
     },
 }
 

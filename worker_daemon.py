@@ -92,6 +92,11 @@ class SpeekiumDaemon:
         self.ptt_audio_frames = []
         self.ptt_stream = None
 
+        # Interrupt flag for LLM/TTS operations
+        import threading
+
+        self.interrupt_event = threading.Event()
+
         # Note: PTT hotkey is handled by Tauri/Rust side via ptt_press/ptt_release commands
 
         # Event loop reference (set during initialization)
@@ -187,10 +192,19 @@ class SpeekiumDaemon:
         try:
             self._log(f"🎤 开始录音 (mode={mode}, duration={duration}s)...")
 
+            # 🔧 Fix: Clear interrupt flag before starting new recording
+            self.assistant.recording_interrupt_event.clear()
+
             if mode == "continuous":
+                # Send "listening" event when entering continuous mode
+                self._emit_ptt_event("listening")
+                self._log("🎤 正在监听...")
+
                 # Use VAD auto-detection - send recording event when voice detected
                 def on_speech():
-                    self._emit_ptt_event("recording")
+                    # Send "detected" event when speech is first detected
+                    self._emit_ptt_event("detected")
+                    self._log("🎤 检测到声音，开始录音...")
 
                 audio = self.assistant.record_with_vad(on_speech_detected=on_speech)
             else:
@@ -529,14 +543,39 @@ class SpeekiumDaemon:
 
             backend = self.assistant.load_llm()
 
+            # Clear interrupt flag at start
+            self.interrupt_event.clear()
+
             # Check if streaming is supported
             if not hasattr(backend, "chat_stream"):
                 # Fallback to non-streaming mode
                 response = backend.chat(text)
+
+                # Check for interrupt before TTS generation
+                if self.interrupt_event.is_set():
+                    self._log("🚫 LLM response interrupted (before TTS)")
+                    print(
+                        json.dumps({"type": "interrupted", "reason": "Interrupted before TTS"}),
+                        flush=True,
+                    )
+                    return
+
                 print(json.dumps({"type": "text_chunk", "content": response}), flush=True)
 
                 # Generate TTS
                 audio_path = await self.assistant.generate_audio(response)
+
+                # Check for interrupt before playback
+                if self.interrupt_event.is_set():
+                    self._log("🚫 TTS generation interrupted (before playback)")
+                    print(
+                        json.dumps(
+                            {"type": "interrupted", "reason": "Interrupted before playback"}
+                        ),
+                        flush=True,
+                    )
+                    return
+
                 if audio_path and auto_play:
                     print(
                         json.dumps(
@@ -552,11 +591,25 @@ class SpeekiumDaemon:
 
             # Stream LLM + TTS generation
             async for sentence in backend.chat_stream(text):
+                # Check for interrupt in streaming loop
+                if self.interrupt_event.is_set():
+                    self._log("🚫 LLM streaming interrupted")
+                    print(
+                        json.dumps({"type": "interrupted", "reason": "LLM streaming interrupted"}),
+                        flush=True,
+                    )
+                    break
+
                 if sentence and sentence.strip():
                     self._log(f"📤 Streaming output: {sentence[:30]}...")
 
                     # Send text chunk
                     print(json.dumps({"type": "text_chunk", "content": sentence}), flush=True)
+
+                    # Check for interrupt before TTS generation
+                    if self.interrupt_event.is_set():
+                        self._log("🚫 Interrupted before TTS generation")
+                        break
 
                     # Generate TTS immediately
                     try:
@@ -575,6 +628,10 @@ class SpeekiumDaemon:
                             )
                             # Play audio immediately if auto_play is enabled
                             if auto_play:
+                                # Check for interrupt before playback
+                                if self.interrupt_event.is_set():
+                                    self._log("🚫 Interrupted before audio playback")
+                                    break
                                 await self._play_audio(audio_path)
                     except Exception as tts_error:
                         self._log(f"⚠️ TTS generation failed: {tts_error}")
@@ -590,7 +647,7 @@ class SpeekiumDaemon:
             print(json.dumps({"type": "error", "error": str(e)}), flush=True)
 
     async def _play_audio(self, audio_path: str) -> None:
-        """Play audio file (cross-platform)"""
+        """Play audio file (cross-platform) with interrupt support (P0-4)"""
         import asyncio
         import os
         import platform
@@ -608,7 +665,20 @@ class SpeekiumDaemon:
                     stderr=asyncio.subprocess.DEVNULL,
                 )
                 self._log(f"🔊 Playing audio: {audio_path}")
-                await process.wait()  # Wait for playback to complete
+
+                # Wait for playback with interrupt checking
+                while True:
+                    if self.interrupt_event.is_set():
+                        self._log("🚫 Audio playback interrupted")
+                        process.terminate()
+                        try:
+                            await asyncio.wait_for(process.wait(), timeout=1.0)
+                        except asyncio.TimeoutError:
+                            process.kill()
+                        return
+                    if process.poll() is not None:
+                        break  # Process finished
+                    await asyncio.sleep(0.1)  # Check every 100ms
 
             elif system == "Linux":
                 # Try mpg123 or ffplay
@@ -621,7 +691,21 @@ class SpeekiumDaemon:
                         stderr=asyncio.subprocess.DEVNULL,
                     )
                     self._log(f"🔊 Playing audio: {audio_path}")
-                    await process.wait()
+
+                    # Wait for playback with interrupt checking
+                    while True:
+                        if self.interrupt_event.is_set():
+                            self._log("🚫 Audio playback interrupted")
+                            process.terminate()
+                            try:
+                                await asyncio.wait_for(process.wait(), timeout=1.0)
+                            except asyncio.TimeoutError:
+                                process.kill()
+                            return
+                        if process.poll() is not None:
+                            break
+                        await asyncio.sleep(0.1)
+
                 except FileNotFoundError:
                     # Fallback to ffplay if mpg123 is not available
                     process = await asyncio.create_subprocess_exec(
@@ -633,7 +717,20 @@ class SpeekiumDaemon:
                         stderr=asyncio.subprocess.DEVNULL,
                     )
                     self._log(f"🔊 Playing audio: {audio_path}")
-                    await process.wait()
+
+                    # Wait for playback with interrupt checking
+                    while True:
+                        if self.interrupt_event.is_set():
+                            self._log("🚫 Audio playback interrupted")
+                            process.terminate()
+                            try:
+                                await asyncio.wait_for(process.wait(), timeout=1.0)
+                            except asyncio.TimeoutError:
+                                process.kill()
+                            return
+                        if process.poll() is not None:
+                            break
+                        await asyncio.sleep(0.1)
 
             elif system == "Windows":
                 # Use Windows Media Player with duration detection
@@ -662,7 +759,20 @@ class SpeekiumDaemon:
                     stderr=asyncio.subprocess.DEVNULL,
                 )
                 self._log(f"🔊 Playing audio: {audio_path}")
-                await process.wait()
+
+                # Wait for playback with interrupt checking (Windows)
+                while True:
+                    if self.interrupt_event.is_set():
+                        self._log("🚫 Audio playback interrupted")
+                        process.terminate()
+                        try:
+                            await asyncio.wait_for(process.wait(), timeout=1.0)
+                        except asyncio.TimeoutError:
+                            process.kill()
+                        return
+                    if process.poll() is not None:
+                        break
+                    await asyncio.sleep(0.1)
 
             else:
                 self._log(f"⚠️ Unsupported operating system: {system}")
@@ -745,6 +855,70 @@ class SpeekiumDaemon:
             },
         }
 
+    async def handle_interrupt(self, priority: int = 1) -> dict:
+        """P0-4: Handle interrupt request from Rust backend
+
+        Args:
+            priority: Interrupt priority (1=mode switch, 2=manual stop, 3=app exit)
+
+        Returns:
+            dict with success status and message
+        """
+        self._log(f"🚫 Interrupt request received (priority {priority})")
+
+        # Set the interrupt flags
+        self.interrupt_event.set()
+
+        # 🔧 Fix: Also set VAD recording interrupt flag for continuous mode
+        self.assistant.recording_interrupt_event.set()
+        self._log("🛑 VAD recording interrupt flag set")
+
+        return {
+            "success": True,
+            "message": f"Interrupt signal sent (priority {priority})",
+        }
+
+    async def handle_get_daemon_state(self) -> dict:
+        """P2-10: Get current daemon state
+
+        Returns comprehensive state information including:
+        - Running status
+        - PTT recording status
+        - Model loading status
+        - Command statistics
+        - Interrupt flag status
+        """
+        try:
+            # Get current state
+            state = {
+                "success": True,
+                "running": self.running,
+                "command_count": self.command_count,
+                "ptt_recording": self.ptt_recording,
+                "interrupt_flag_set": self.interrupt_event.is_set(),
+                "models_loaded": {
+                    "vad": self.assistant.vad_model is not None,
+                    "asr": self.assistant.asr_model is not None,
+                    "llm": self.assistant.llm_backend is not None,
+                    "tts": self.assistant.tts_backend is not None,
+                },
+                "audio_frames_count": len(self.ptt_audio_frames) if self.ptt_audio_frames else 0,
+                "ptt_stream_active": self.ptt_stream is not None,
+            }
+
+            self._log(
+                f"📊 Daemon state requested: running={state['running']}, "
+                f"ptt_recording={state['ptt_recording']}, "
+                f"commands={state['command_count']}"
+            )
+
+            return state
+
+        except Exception as e:
+            self._log(f"❌ Failed to get daemon state: {e}")
+            traceback.print_exc(file=sys.stderr)
+            return {"success": False, "error": str(e)}
+
     async def handle_command(self, command: str, args: dict) -> dict:
         """Route commands to corresponding handler functions
 
@@ -817,6 +991,13 @@ class SpeekiumDaemon:
             return await self.handle_update_hotkey(args)
         elif command == "health":
             return await self.handle_health()
+        elif command == "interrupt":
+            # Handle interrupt request
+            priority = args.get("priority", 1)
+            return await self.handle_interrupt(priority)
+        elif command == "get_daemon_state":
+            # Get current daemon state
+            return await self.handle_get_daemon_state()
         elif command == "exit":
             self._log("👋 收到退出命令")
             self._cleanup()

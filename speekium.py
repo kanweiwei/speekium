@@ -160,6 +160,47 @@ class VoiceAssistant:
         self._tts_backend = None  # Cache TTS backend setting
         self._load_tts_config()  # Load TTS config on initialization
 
+        # Add interrupt event for VAD recording
+        import threading
+
+        self.recording_interrupt_event = threading.Event()
+
+        # VAD configuration (load from config file)
+        self.vad_threshold = VAD_THRESHOLD
+        self.vad_consecutive_threshold = VAD_CONSECUTIVE_THRESHOLD
+        self.vad_silence_duration = SILENCE_AFTER_SPEECH
+        self.vad_pre_buffer = VAD_PRE_BUFFER
+        self.vad_min_speech_duration = MIN_SPEECH_DURATION
+        self.vad_max_recording_duration = MAX_RECORDING_DURATION
+        self._load_vad_config()  # Load VAD config on initialization
+
+    def _load_vad_config(self):
+        """Load VAD configuration from config file."""
+        try:
+            from config_manager import ConfigManager
+
+            config = ConfigManager.load()
+            self.vad_threshold = config.get("vad_threshold", VAD_THRESHOLD)
+            self.vad_consecutive_threshold = config.get(
+                "vad_consecutive_threshold", VAD_CONSECUTIVE_THRESHOLD
+            )
+            self.vad_silence_duration = config.get("vad_silence_duration", SILENCE_AFTER_SPEECH)
+            self.vad_pre_buffer = config.get("vad_pre_buffer", VAD_PRE_BUFFER)
+            self.vad_min_speech_duration = config.get(
+                "vad_min_speech_duration", MIN_SPEECH_DURATION
+            )
+            self.vad_max_recording_duration = config.get(
+                "vad_max_recording_duration", MAX_RECORDING_DURATION
+            )
+            logger.info(
+                "vad_config_loaded",
+                threshold=self.vad_threshold,
+                consecutive=self.vad_consecutive_threshold,
+                silence=self.vad_silence_duration,
+            )
+        except Exception as e:
+            logger.warning("vad_config_load_failed", error=str(e), fallback="default")
+
     def _load_tts_config(self):
         """Load TTS backend and rate from config file."""
         try:
@@ -284,13 +325,13 @@ class VoiceAssistant:
         is_speaking = speech_already_started  # Start in speaking mode if interrupted
         silence_chunks = 0
         speech_chunks = len(frames)  # Count buffered frames as speech
-        consecutive_speech = VAD_CONSECUTIVE_THRESHOLD if speech_already_started else 0
-        max_silence_chunks = int(SILENCE_AFTER_SPEECH * SAMPLE_RATE / chunk_size)
-        min_speech_chunks = int(MIN_SPEECH_DURATION * SAMPLE_RATE / chunk_size)
-        max_chunks = int(MAX_RECORDING_DURATION * SAMPLE_RATE / chunk_size)
+        consecutive_speech = self.vad_consecutive_threshold if speech_already_started else 0
+        max_silence_chunks = int(self.vad_silence_duration * SAMPLE_RATE / chunk_size)
+        min_speech_chunks = int(self.vad_min_speech_duration * SAMPLE_RATE / chunk_size)
+        max_chunks = int(self.vad_max_recording_duration * SAMPLE_RATE / chunk_size)
 
         # Pre-buffer: keep audio before speech starts to avoid clipping
-        pre_buffer_size = int(VAD_PRE_BUFFER * SAMPLE_RATE / chunk_size)
+        pre_buffer_size = int(self.vad_pre_buffer * SAMPLE_RATE / chunk_size)
         pre_buffer = deque(maxlen=pre_buffer_size)
 
         recording_done = False
@@ -308,11 +349,11 @@ class VoiceAssistant:
                 audio_tensor = torch.from_numpy(audio_chunk).float()
                 speech_prob = model(audio_tensor, SAMPLE_RATE).item()
 
-                if speech_prob > VAD_THRESHOLD:
+                if speech_prob > self.vad_threshold:
                     # Speech detected
                     consecutive_speech += 1
 
-                    if not is_speaking and consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
+                    if not is_speaking and consecutive_speech >= self.vad_consecutive_threshold:
                         is_speaking = True
                         # Add pre-buffer to frames to avoid clipping speech start
                         frames.extend(pre_buffer)
@@ -324,7 +365,7 @@ class VoiceAssistant:
 
                     if is_speaking:
                         # Only reset silence count on consecutive speech
-                        if consecutive_speech >= VAD_CONSECUTIVE_THRESHOLD:
+                        if consecutive_speech >= self.vad_consecutive_threshold:
                             silence_chunks = 0
                         speech_chunks += 1
                         frames.append(audio_chunk)
@@ -367,7 +408,13 @@ class VoiceAssistant:
             callback=callback,
         ):
             while not recording_done:
-                sd.sleep(50)
+                # Check for interrupt signal (e.g., mode change)
+                # Check every 10ms for faster response
+                if self.recording_interrupt_event.is_set():
+                    logger.info("recording_interrupted")
+                    recording_done = True
+                    break
+                sd.sleep(10)  # Reduced from 50ms for faster interrupt response
 
         if not frames or speech_chunks < min_speech_chunks:
             return None

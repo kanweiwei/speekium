@@ -45,7 +45,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
     // Read saved mode from localStorage, use default value if not exists
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(WORK_MODE_STORAGE_KEY);
-      if (saved === 'conversation' || saved === 'text') {
+      if (saved === 'conversation' || saved === 'text-input') {
         return saved;
       }
     }
@@ -60,7 +60,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
 
     // First read from localStorage (fast loading)
     const saved = localStorage.getItem(WORK_MODE_STORAGE_KEY);
-    if (saved === 'conversation' || saved === 'text') {
+    if (saved === 'conversation' || saved === 'text-input') {
       setWorkModeState(saved);
     }
 
@@ -69,7 +69,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
       try {
         const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
         const configWorkMode = result?.config?.work_mode;
-        if (configWorkMode === 'conversation' || configWorkMode === 'text') {
+        if (configWorkMode === 'conversation' || configWorkMode === 'text-input') {
           setWorkModeState(configWorkMode);
           localStorage.setItem(WORK_MODE_STORAGE_KEY, configWorkMode);
         }
@@ -134,7 +134,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
    * Switch to text input mode
    */
   const switchToText = useCallback(() => {
-    setWorkMode('text', 'api');
+    setWorkMode('text-input', 'api');
   }, [setWorkMode]);
 
   /**
@@ -145,7 +145,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
   /**
    * Computed property: whether it's text input mode
    */
-  const isTextInputMode = workMode === 'text';
+  const isTextInputMode = workMode === 'text-input';
 
   const contextValue: WorkModeContextValue = {
     workMode,

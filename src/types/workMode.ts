@@ -3,11 +3,11 @@
  */
 
 /**
- * Work mode enumeration
+ * Work mode enumeration (P1-7: Unified naming with backend)
  * - conversation: Conversation mode (Voice → AI dialogue → TTS playback)
- * - text: Text input mode (Voice → Direct text input to focused field)
+ * - text-input: Text input mode (Voice → Direct text input to focused field)
  */
-export type WorkMode = 'conversation' | 'text';
+export type WorkMode = 'conversation' | 'text-input';
 
 /**
  * Work mode configuration interface
@@ -58,8 +58,8 @@ export const WORK_MODE_INFO: Record<WorkMode, WorkModeDisplayInfo> = {
     icon: 'MessageCircle',
     color: 'blue',
   },
-  text: {
-    mode: 'text',
+  'text-input': {
+    mode: 'text-input',
     label: 'Text Input Mode',
     description: 'Voice → Direct text input to focused field',
     icon: 'Type',

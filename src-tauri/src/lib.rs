@@ -46,6 +46,86 @@ impl RecordingMode {
     }
 }
 
+/// Work mode enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WorkMode {
+    Conversation,
+    TextInput,
+}
+
+impl WorkMode {
+    /// Convert to string representation
+    fn as_str(&self) -> &'static str {
+        match self {
+            WorkMode::Conversation => "conversation",
+            WorkMode::TextInput => "text-input",
+        }
+    }
+
+    /// Parse from string
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "conversation" => Some(WorkMode::Conversation),
+            "text-input" => Some(WorkMode::TextInput),
+            _ => None,
+        }
+    }
+}
+
+/// Application status enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AppStatus {
+    Idle,              // 空闲状态
+    Listening,         // 自动模式监听中
+    Recording,         // 录音中
+    AsrProcessing,     // ASR识别中
+    LlmProcessing,     // LLM思考中
+    TtsProcessing,     // TTS生成中
+    Playing,           // TTS播放中
+}
+
+impl AppStatus {
+    /// Convert to string representation
+    fn as_str(&self) -> &'static str {
+        match self {
+            AppStatus::Idle => "idle",
+            AppStatus::Listening => "listening",
+            AppStatus::Recording => "recording",
+            AppStatus::AsrProcessing => "asr",
+            AppStatus::LlmProcessing => "llm",
+            AppStatus::TtsProcessing => "tts",
+            AppStatus::Playing => "playing",
+        }
+    }
+
+    /// Parse from string
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "idle" => Some(AppStatus::Idle),
+            "listening" => Some(AppStatus::Listening),
+            "recording" => Some(AppStatus::Recording),
+            "asr" => Some(AppStatus::AsrProcessing),
+            "llm" => Some(AppStatus::LlmProcessing),
+            "tts" => Some(AppStatus::TtsProcessing),
+            "playing" => Some(AppStatus::Playing),
+            _ => None,
+        }
+    }
+
+    /// Check if status allows interruption
+    /// Priority 1: Mode switch can interrupt all statuses
+    /// Priority 2: Manual stop can interrupt recording
+    /// Priority 3: App exit waits for recording, interrupts others
+    fn can_be_interrupted(&self, interrupt_priority: u8) -> bool {
+        match interrupt_priority {
+            1 => true,  // Mode switch: can interrupt everything
+            2 => matches!(self, AppStatus::Recording | AppStatus::Listening),  // Manual stop
+            3 => !matches!(self, AppStatus::Recording),  // App exit: wait for recording
+            _ => false,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct RecordResult {
     success: bool,
@@ -446,6 +526,12 @@ static PTT_PROCESSING: AtomicBool = AtomicBool::new(false);
 // Recording mode flag - "continuous" or "push-to-talk"
 static RECORDING_MODE: Mutex<RecordingMode> = Mutex::new(RecordingMode::PushToTalk);
 
+// Work mode flag - "conversation" or "text-input" (P0-1: Added)
+static WORK_MODE: Mutex<WorkMode> = Mutex::new(WorkMode::Conversation);
+
+// Application status (P0-2: Added) - unified state management
+static APP_STATUS: Mutex<AppStatus> = Mutex::new(AppStatus::Idle);
+
 // Recording abort flag - signal to stop current recording
 static RECORDING_ABORTED: AtomicBool = AtomicBool::new(false);
 
@@ -782,6 +868,15 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                         // Send state to floating window and control visibility
                         if let Some(ref overlay) = overlay_window {
                             match ptt_event {
+                                "listening" => {
+                                    // Show overlay in listening state (continuous mode waiting for speech)
+                                    let _ = overlay.show();
+                                    let _ = overlay.emit("ptt-state", "listening");
+                                }
+                                "detected" => {
+                                    // Speech detected, transitioning to recording
+                                    let _ = overlay.emit("ptt-state", "detected");
+                                }
                                 "recording" => {
                                     let _ = overlay.show();
                                     let _ = overlay.emit("ptt-state", "recording");
@@ -800,6 +895,14 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                         // Send full event to main window
                         if let Some(window) = main_window {
                             match ptt_event {
+                                "listening" => {
+                                    // Main window also receives listening state
+                                    let _ = window.emit("ptt-state", "listening");
+                                }
+                                "detected" => {
+                                    // Main window also receives detected state
+                                    let _ = window.emit("ptt-state", "detected");
+                                }
                                 "recording" => {
                                     let _ = window.emit("ptt-state", "recording");
                                 }
@@ -1212,6 +1315,22 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
         });
     }
 
+    // 🔧 Additional check: if switching FROM continuous, abort immediately
+    if !is_continuous_mode && current_mode == RecordingMode::Continuous {
+        // Just switched from continuous to push-to-talk
+        // Check if there's a recording in progress by checking the abort flag
+        if RECORDING_ABORTED.load(Ordering::SeqCst) {
+            println!("🚫 Recording aborted (mode changed from continuous)");
+            emit_ptt_state(&app_handle, "idle");
+            return Ok(RecordResult {
+                success: false,
+                text: None,
+                language: None,
+                error: Some("Recording cancelled".to_string()),
+            });
+        }
+    }
+
     // Handle duration parameter: support numeric string, "auto", or empty
     let duration_val = match duration {
         Some(d) => {
@@ -1272,9 +1391,165 @@ fn set_recording_mode(mode: String) -> Result<(), String> {
         // Switching away from continuous: abort any ongoing recording
         RECORDING_ABORTED.store(true, Ordering::SeqCst);
         println!("🛑 Aborting continuous recording (switched to {})", new_mode.as_str());
+
+        // 🔧 Fix: Send interrupt signal asynchronously to avoid blocking UI
+        // Use try_lock to prevent deadlock
+        if let Ok(mut daemon_guard) = DAEMON.try_lock() {
+            if let Some(ref mut daemon) = *daemon_guard {
+                match daemon.send_command_no_wait("interrupt", serde_json::json!({"priority": 1})) {
+                    Ok(_) => println!("📤 Interrupt signal sent to Python daemon"),
+                    Err(e) => println!("❌ Failed to send interrupt: {}", e),
+                }
+            }
+        } else {
+            println!("⚠️ Daemon busy, interrupt signal deferred (will be picked up by next recording check)");
+        }
     }
 
     Ok(())
+}
+
+/// Get current work mode
+#[tauri::command]
+fn get_work_mode() -> Result<String, String> {
+    let mode = *WORK_MODE.lock().unwrap();
+    Ok(mode.as_str().to_string())
+}
+
+/// Set work mode (conversation or text-input)
+#[tauri::command]
+fn set_work_mode(mode: String) -> Result<(), String> {
+    println!("🎛️ Setting work mode to: {}", mode);
+
+    // Parse mode from string
+    let new_mode = WorkMode::from_str(mode.as_str())
+        .ok_or_else(|| format!("Invalid work mode: {}", mode))?;
+
+    // Update global work mode
+    let old_mode = *WORK_MODE.lock().unwrap();
+    *WORK_MODE.lock().unwrap() = new_mode;
+
+    println!("✅ Work mode changed: {} → {}", old_mode.as_str(), new_mode.as_str());
+
+    Ok(())
+}
+
+/// Get current application status
+#[tauri::command]
+fn get_app_status() -> Result<String, String> {
+    let status = *APP_STATUS.lock().unwrap();
+    Ok(status.as_str().to_string())
+}
+
+/// Transition application status with validation
+fn transition_status(new_status: AppStatus) -> Result<(), String> {
+    let current_status = *APP_STATUS.lock().unwrap();
+
+    // Validate transition
+    let valid_transition = match (current_status, new_status) {
+        // From Idle
+        (AppStatus::Idle, AppStatus::Listening) => true,
+        (AppStatus::Idle, AppStatus::Recording) => true,
+
+        // From Listening
+        (AppStatus::Listening, AppStatus::Recording) => true,  // VAD detected speech
+        (AppStatus::Listening, AppStatus::Idle) => true,       // Stop listening
+
+        // From Recording
+        (AppStatus::Recording, AppStatus::AsrProcessing) => true,
+        (AppStatus::Recording, AppStatus::Idle) => true,       // Recording aborted
+
+        // From ASR
+        (AppStatus::AsrProcessing, AppStatus::Idle) => true,    // Text input mode done
+        (AppStatus::AsrProcessing, AppStatus::LlmProcessing) => true,  // Conversation mode
+
+        // From LLM
+        (AppStatus::LlmProcessing, AppStatus::TtsProcessing) => true,
+        (AppStatus::LlmProcessing, AppStatus::Idle) => true,    // TTS disabled or failed
+
+        // From TTS
+        (AppStatus::TtsProcessing, AppStatus::Playing) => true,
+        (AppStatus::TtsProcessing, AppStatus::Idle) => true,    // TTS failed
+
+        // From Playing
+        (AppStatus::Playing, AppStatus::Idle) => true,
+        (AppStatus::Playing, AppStatus::Listening) => true,     // Auto mode continues
+
+        // Same status (no-op)
+        _ if current_status == new_status => true,
+
+        // Invalid transitions
+        _ => false,
+    };
+
+    if !valid_transition {
+        return Err(format!(
+            "Invalid status transition: {} → {}",
+            current_status.as_str(),
+            new_status.as_str()
+        ));
+    }
+
+    // Log transition
+    if current_status != new_status {
+        println!("📊 Status transition: {} → {}", current_status.as_str(), new_status.as_str());
+    }
+
+    // Update status
+    *APP_STATUS.lock().unwrap() = new_status;
+
+    Ok(())
+}
+
+/// Interrupt current operation with priority
+#[tauri::command]
+fn interrupt_operation(priority: u8) -> Result<String, String> {
+    let current_status = *APP_STATUS.lock().unwrap();
+
+    println!("🚨 Interrupt request (priority {}): current status = {}", priority, current_status.as_str());
+
+    if current_status.can_be_interrupted(priority) {
+        // Perform interrupt based on current status
+        match current_status {
+            AppStatus::Recording => {
+                RECORDING_ABORTED.store(true, Ordering::SeqCst);
+                println!("✅ Recording interrupted (priority {})", priority);
+            }
+            AppStatus::Listening => {
+                // Stop listening logic will be handled by the recording loop
+                println!("✅ Listening will stop (priority {})", priority);
+            }
+            AppStatus::LlmProcessing | AppStatus::TtsProcessing | AppStatus::Playing => {
+                // Send interrupt signal to Python daemon
+                println!("📤 Sending interrupt signal to Python daemon (priority {})", priority);
+                match call_daemon("interrupt", serde_json::json!({"priority": priority})) {
+                    Ok(_) => {
+                        println!("✅ Interrupt signal sent to Python daemon");
+                    }
+                    Err(e) => {
+                        println!("⚠️ Failed to send interrupt to Python daemon: {}", e);
+                        // Continue anyway, as the interrupt flag may have been set elsewhere
+                    }
+                }
+            }
+            _ => {
+                println!("ℹ️ No interrupt needed for status: {}", current_status.as_str());
+            }
+        }
+
+        // Transition to Idle based on priority
+        if priority <= 2 {
+            *APP_STATUS.lock().unwrap() = AppStatus::Idle;
+        }
+
+        Ok(format!("Interrupted: {}", current_status.as_str()))
+    } else {
+        Err(format!(
+            "Cannot interrupt status {} with priority {}",
+            current_status.as_str(),
+            priority
+        ))
+    }
 }
 
 /// Send PTT state to all windows
@@ -1288,7 +1563,8 @@ fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
         let _ = overlay.emit("ptt-state", state);
         // Control floating window visibility
         match state {
-            "recording" | "processing" => {
+            "listening" | "detected" | "recording" | "processing" => {
+                // Show overlay for listening, detected, recording, processing states
                 // Don't show overlay if PTT processing (ASR/LLM/TTS) is in progress
                 if PTT_PROCESSING.load(Ordering::SeqCst) {
                     println!("🚫 PTT 正在处理中，跳过显示浮动窗口 (state: {})", state);
@@ -1620,6 +1896,17 @@ async fn update_hotkey(hotkey_config: serde_json::Value) -> Result<serde_json::V
     } else {
         println!("⚠️ 无法解析快捷键配置");
     }
+
+    serde_json::from_value(result)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+#[tauri::command]
+async fn get_daemon_state() -> Result<serde_json::Value, String> {
+    // Get comprehensive daemon state
+    println!("📊 调用守护进程: get_daemon_state");
+
+    let result = call_daemon("get_daemon_state", serde_json::json!({}))?;
 
     serde_json::from_value(result)
         .map_err(|e| format!("Failed to parse result: {}", e))
@@ -1982,7 +2269,8 @@ fn emit_ptt_state_static(app_handle: &tauri::AppHandle, state: &str) {
         let _ = overlay.emit("ptt-state", state);
         // Control floating window visibility
         match state {
-            "recording" | "processing" => {
+            "listening" | "detected" | "recording" | "processing" => {
+                // Show overlay for listening, detected, recording, processing states
                 let _ = overlay.show();
             }
             "idle" | "error" => {
@@ -2151,13 +2439,20 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                     println!("📤 Sending audio file ({:.2}s) to Python: {}",
                              audio.duration_secs, audio.file_path);
 
+                    // Determine auto_chat based on work mode (conversation = auto chat, text-input = no chat)
+                    let work_mode = *WORK_MODE.lock().unwrap();
+                    let auto_chat = work_mode == WorkMode::Conversation;
+
                     if let Ok(mut daemon_guard) = DAEMON.lock() {
                         if let Some(ref mut daemon) = *daemon_guard {
                             let args = serde_json::json!({
                                 "audio_path": audio.file_path,
                                 "sample_rate": audio.sample_rate,
-                                "duration": audio.duration_secs
+                                "duration": audio.duration_secs,
+                                "auto_chat": auto_chat,
+                                "use_tts": true
                             });
+                            println!("🎤 Work mode: {:?}, auto_chat: {}", work_mode, auto_chat);
                             // Use send_command_no_wait to avoid blocking UI
                             match daemon.send_command_no_wait("ptt_audio", args) {
                                 Ok(_) => println!("✅ PTT audio command sent (async)"),
@@ -2419,6 +2714,10 @@ pub fn run() {
             greet,
             record_audio,
             set_recording_mode,
+            get_work_mode,
+            set_work_mode,
+            get_app_status,
+            interrupt_operation,
             chat_llm,
             chat_llm_stream,
             chat_tts_stream,
@@ -2426,6 +2725,7 @@ pub fn run() {
             load_config,
             save_config,
             update_hotkey,
+            get_daemon_state,
             daemon_health,
             test_ollama_connection,
             list_ollama_models,

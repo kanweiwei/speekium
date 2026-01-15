@@ -178,7 +178,13 @@ export function useTauriAPI() {
     }
   };
 
-  const startRecording = async (mode: string = 'push-to-talk', duration?: number | string, autoChat: boolean = true, useTTS: boolean = false) => {
+  const startRecording = async (
+    mode: string = 'push-to-talk',
+    duration?: number | string,
+    autoChat: boolean = true,
+    useTTS: boolean = false,
+    workMode?: 'conversation' | 'text-input'  // 🔧 Added workMode parameter
+  ) => {
     setIsRecording(true);
     try {
 
@@ -192,15 +198,26 @@ export function useTauriAPI() {
 
       if (result.success && result.text) {
 
-        // Add user message
-        setMessages(prev => [...prev, {
-          role: 'user',
-          content: result.text!
-        }]);
+        // 🔧 Bug fix: Handle text-input mode by calling type_text_command
+        if (workMode === 'text-input') {
+          try {
+            await invoke<string>('type_text_command', { text: result.text! });
+            console.log('[Recording] Text input completed:', result.text!.slice(0, 30) + '...');
+          } catch (error) {
+            console.error('[Recording] Text input failed:', error);
+            throw error;
+          }
+        } else {
+          // Conversation mode: add message and optionally call LLM
+          setMessages(prev => [...prev, {
+            role: 'user',
+            content: result.text!
+          }]);
 
-        // Auto call LLM (if enabled)
-        if (autoChat) {
-          await chatGenerator(result.text!, result.language, true, useTTS);
+          // Auto call LLM (if enabled)
+          if (autoChat) {
+            await chatGenerator(result.text!, result.language, true, useTTS);
+          }
         }
       } else {
         console.error('[Recording] Failed:', result.error);
