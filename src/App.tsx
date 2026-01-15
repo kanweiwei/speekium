@@ -234,10 +234,7 @@ function App() {
 
           // Then call type_text_command to paste text to focused field
           try {
-            const result = await invoke<string>('type_text_command', { text: userText });
-            // Show brief notification
-            setError(`✓ ${result}`);
-            setTimeout(() => setError(null), 2000);
+            await invoke<string>('type_text_command', { text: userText });
           } catch (error) {
             console.error('[PTT] 文字输入失败:', error);
             setError(`文字输入失败: ${error}`);
