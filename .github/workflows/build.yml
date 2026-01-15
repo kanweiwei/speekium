@@ -173,7 +173,7 @@ jobs:
         shell: bash
 
       - name: Import macOS certificate
-        if: matrix.platform == 'macos-latest'
+        if: startsWith(matrix.platform, 'macos')
         run: |
           # Create variables
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
@@ -260,19 +260,36 @@ jobs:
           find "$SIDECAR_DIR" -name "*.pyc" -delete 2>/dev/null || true
           find "$SIDECAR_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
+          # Entitlements files for microphone access
+          APP_ENTITLEMENTS="src-tauri/Speekium.entitlements"
+          SIDECAR_ENTITLEMENTS="src-tauri/WorkerDaemon.entitlements"
+
+          # Verify entitlements files exist
+          if [ ! -f "$APP_ENTITLEMENTS" ]; then
+            echo "❌ Missing entitlements file: $APP_ENTITLEMENTS"
+            exit 1
+          fi
+          if [ ! -f "$SIDECAR_ENTITLEMENTS" ]; then
+            echo "❌ Missing entitlements file: $SIDECAR_ENTITLEMENTS"
+            exit 1
+          fi
+          echo "✅ Found entitlements files for microphone access"
+
           # Sign from inside out: frameworks first, then dylibs, then executables
-          echo "🔏 Signing sidecar contents (inside-out)..."
+          echo "🔏 Signing sidecar contents (inside-out with entitlements)..."
 
           # 1. Sign all .framework bundles (must sign the framework itself, not individual files)
           find "$SIDECAR_DIR" -name "*.framework" -type d | while read -r framework; do
             echo "  Signing framework: $framework"
-            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$framework" || true
+            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+              --entitlements "$SIDECAR_ENTITLEMENTS" "$framework" || true
           done
 
           # 2. Sign all .so and .dylib files (excluding those inside frameworks)
           find "$SIDECAR_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*.framework/*" | while read -r lib; do
             echo "  Signing lib: $lib"
-            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$lib" 2>/dev/null || true
+            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+              --entitlements "$SIDECAR_ENTITLEMENTS" "$lib" 2>/dev/null || true
           done
 
           # 3. Sign all executable binaries in bin directories (torch/bin, etc.)
@@ -280,23 +297,27 @@ jobs:
             echo "  Signing executables in: $bindir"
             find "$bindir" -type f -perm +111 | while read -r exe; do
               echo "    Signing: $exe"
-              codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$exe" 2>/dev/null || true
+              codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+                --entitlements "$SIDECAR_ENTITLEMENTS" "$exe" 2>/dev/null || true
             done
           done
 
-          # 4. Sign the main sidecar executable
-          echo "  Signing main executable: $SIDECAR_DIR/worker_daemon"
-          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$SIDECAR_DIR/worker_daemon"
-          echo "✅ Sidecar signed"
+          # 4. Sign the main sidecar executable with microphone entitlements
+          echo "  Signing main sidecar with microphone entitlements: $SIDECAR_DIR/worker_daemon"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+            --entitlements "$SIDECAR_ENTITLEMENTS" "$SIDECAR_DIR/worker_daemon"
+          echo "✅ Sidecar signed with microphone entitlements"
 
-          # 5. Re-sign the main app executable
-          echo "🔏 Signing main app executable..."
-          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH/Contents/MacOS/speekium"
+          # 5. Re-sign the main app executable with microphone entitlements
+          echo "🔏 Signing main app executable with microphone entitlements..."
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+            --entitlements "$APP_ENTITLEMENTS" "$APP_PATH/Contents/MacOS/speekium"
 
           # 6. Sign the entire app bundle (without --deep to preserve inner signatures)
-          echo "🔏 Signing app bundle..."
-          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
-          echo "✅ App bundle signed"
+          echo "🔏 Signing app bundle with microphone entitlements..."
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+            --entitlements "$APP_ENTITLEMENTS" "$APP_PATH"
+          echo "✅ App bundle signed with microphone entitlements"
 
           # Verify signature
           echo "🔍 Verifying signature..."
@@ -308,6 +329,9 @@ jobs:
           mkdir -p "$DMG_DIR"
           APP_NAME=$(basename "$APP_PATH" .app)
           DMG_PATH="$DMG_DIR/${APP_NAME}_${{ matrix.rust_target }}.dmg"
+
+          # Remove Tauri's auto-generated unsigned DMG
+          rm -f "$DMG_DIR"/*.dmg 2>/dev/null || true
 
           echo "📦 Creating DMG..."
           hdiutil create -volname "$APP_NAME" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
@@ -355,9 +379,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}-app
-          path: |
-            src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
-            src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos/*.app
+          path: src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
   # Create GitHub Release
@@ -383,7 +405,6 @@ jobs:
         with:
           files: |
             artifacts/**/*.dmg
-            artifacts/**/*.app
             artifacts/**/*.msi
             artifacts/**/*.exe
           draft: false
