@@ -148,30 +148,53 @@ find "$SIDECAR_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null ||
 if [ "$SKIP_SIGN" = true ]; then
   echo "⏭️  Skipping signing (--no-sign)"
 else
-  # Step 6: Sign from inside out
-  echo "🔏 Signing (inside-out)..."
+  # Step 6: Sign from inside out with entitlements
+  echo "🔏 Signing (inside-out with entitlements)..."
+
+  # Entitlements files
+  SCRIPT_DIR="$(dirname "$0")"
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+  APP_ENTITLEMENTS="$PROJECT_ROOT/src-tauri/Speekium.entitlements"
+  SIDECAR_ENTITLEMENTS="$PROJECT_ROOT/src-tauri/WorkerDaemon.entitlements"
+
+  # Verify entitlements files exist
+  if [ ! -f "$APP_ENTITLEMENTS" ]; then
+    echo "❌ Missing entitlements file: $APP_ENTITLEMENTS"
+    exit 1
+  fi
+  if [ ! -f "$SIDECAR_ENTITLEMENTS" ]; then
+    echo "❌ Missing entitlements file: $SIDECAR_ENTITLEMENTS"
+    exit 1
+  fi
 
   # Sign frameworks
   find "$SIDECAR_DIR" -name "*.framework" -type d | while read -r framework; do
     echo "  Signing framework: $(basename $framework)"
-    codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$framework" 2>/dev/null || true
+    codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+      --entitlements "$SIDECAR_ENTITLEMENTS" "$framework" 2>/dev/null || true
   done
 
   # Sign dylibs and so files
   find "$SIDECAR_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*.framework/*" | while read -r lib; do
     echo "  Signing: $(basename $lib)"
-    codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$lib" 2>/dev/null || true
+    codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+      --entitlements "$SIDECAR_ENTITLEMENTS" "$lib" 2>/dev/null || true
   done
 
-  # Sign sidecar executable
-  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$SIDECAR_DIR/worker_daemon"
+  # Sign sidecar executable with microphone entitlements
+  echo "  Signing sidecar with microphone entitlements..."
+  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+    --entitlements "$SIDECAR_ENTITLEMENTS" "$SIDECAR_DIR/worker_daemon"
 
-  # Sign main app executable
-  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH/Contents/MacOS/speekium"
+  # Sign main app executable with microphone entitlements
+  echo "  Signing main app with microphone entitlements..."
+  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+    --entitlements "$APP_ENTITLEMENTS" "$APP_PATH/Contents/MacOS/speekium"
 
-  # Sign app bundle
-  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
-  echo "✅ Signing complete"
+  # Sign app bundle with microphone entitlements
+  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+    --entitlements "$APP_ENTITLEMENTS" "$APP_PATH"
+  echo "✅ Signing complete (with microphone entitlements)"
 
   # Step 7: Verify signature
   echo "🔍 Verifying signature..."
