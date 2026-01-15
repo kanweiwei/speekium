@@ -88,14 +88,6 @@ jobs:
           includeDebug: false
           includeRelease: true
 
-      - name: Add sidecar to Windows bundle
-        run: |
-          # Copy sidecar directory to release directory
-          cp -R sidecar_dist/worker_daemon src-tauri/target/release/worker_daemon
-          echo "✅ Sidecar directory added to release"
-          ls -la src-tauri/target/release/worker_daemon/
-        shell: bash
-
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -231,8 +223,8 @@ jobs:
         run: npm run tauri build -- ${{ matrix.args }}
         shell: bash
 
-      # Add sidecar to app bundle, then sign everything
-      - name: Add sidecar and sign macOS app
+      # Sign the app bundle (sidecar is already included via Tauri resources config)
+      - name: Sign macOS app
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -247,13 +239,15 @@ jobs:
           fi
           echo "Found app bundle: $APP_PATH"
 
-          # Add sidecar directory (onedir mode)
-          # Use ditto instead of cp to preserve symlinks and framework structure
+          # Sidecar is already included via Tauri resources config
           SIDECAR_DIR="$APP_PATH/Contents/Resources/worker_daemon"
-          mkdir -p "$SIDECAR_DIR"
-          ditto sidecar_dist/worker_daemon "$SIDECAR_DIR"
+          if [ ! -d "$SIDECAR_DIR" ]; then
+            echo "❌ Sidecar directory not found at $SIDECAR_DIR"
+            echo "   Tauri should have bundled it via resources config"
+            exit 1
+          fi
           chmod +x "$SIDECAR_DIR/worker_daemon"
-          echo "✅ Sidecar directory added (using ditto to preserve symlinks)"
+          echo "✅ Sidecar directory found (bundled by Tauri)"
 
           # Clean up unnecessary files before signing
           find "$SIDECAR_DIR" -name ".gitignore" -delete 2>/dev/null || true
