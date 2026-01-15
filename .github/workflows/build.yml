@@ -275,16 +275,25 @@ jobs:
             codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$lib" 2>/dev/null || true
           done
 
-          # 3. Sign the main sidecar executable
+          # 3. Sign all executable binaries in bin directories (torch/bin, etc.)
+          find "$SIDECAR_DIR" -type d -name "bin" | while read -r bindir; do
+            echo "  Signing executables in: $bindir"
+            find "$bindir" -type f -perm +111 | while read -r exe; do
+              echo "    Signing: $exe"
+              codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$exe" 2>/dev/null || true
+            done
+          done
+
+          # 4. Sign the main sidecar executable
           echo "  Signing main executable: $SIDECAR_DIR/worker_daemon"
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$SIDECAR_DIR/worker_daemon"
           echo "✅ Sidecar signed"
 
-          # 4. Re-sign the main app executable
+          # 5. Re-sign the main app executable
           echo "🔏 Signing main app executable..."
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH/Contents/MacOS/speekium"
 
-          # 5. Sign the entire app bundle (without --deep to preserve inner signatures)
+          # 6. Sign the entire app bundle (without --deep to preserve inner signatures)
           echo "🔏 Signing app bundle..."
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
           echo "✅ App bundle signed"
