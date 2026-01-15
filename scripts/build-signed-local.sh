@@ -133,12 +133,16 @@ if [ -z "$APP_PATH" ]; then
 fi
 echo "📱 Found app: $APP_PATH"
 
-# Step 5: Add sidecar
-echo "📥 Adding sidecar..."
+# Step 5: Verify sidecar (bundled by Tauri via resources config)
+echo "📥 Verifying sidecar..."
 SIDECAR_DIR="$APP_PATH/Contents/Resources/worker_daemon"
-mkdir -p "$SIDECAR_DIR"
-ditto sidecar_dist/worker_daemon "$SIDECAR_DIR"
+if [ ! -d "$SIDECAR_DIR" ]; then
+  echo "❌ Sidecar directory not found at $SIDECAR_DIR"
+  echo "   Tauri should have bundled it via resources config in tauri.conf.json"
+  exit 1
+fi
 chmod +x "$SIDECAR_DIR/worker_daemon"
+echo "✅ Sidecar found (bundled by Tauri)"
 
 # Clean up unnecessary files
 find "$SIDECAR_DIR" -name ".gitignore" -delete 2>/dev/null || true
