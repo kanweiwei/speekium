@@ -11,6 +11,6 @@
     "core:webview:default",
     "core:app:default",
     "opener:default",
-    "macos-permissions:default"
+    "global-shortcut:default"
   ]
 }
