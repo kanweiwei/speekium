@@ -162,7 +162,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install -r requirements-build.txt
+          # Use architecture-specific requirements for macOS x86_64
+          if [ "${{ matrix.rust_target }}" == "x86_64-apple-darwin" ]; then
+            pip install -r requirements-build-macos-x86_64.txt
+          else
+            pip install -r requirements-build.txt
+          fi
         shell: bash
 
       - name: Build Python daemon with PyInstaller
