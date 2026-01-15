@@ -58,6 +58,13 @@ struct HealthResult {
     error: Option<String>,
 }
 
+/// Daemon initialization status for frontend
+#[derive(Clone, Serialize)]
+struct DaemonStatusPayload {
+    status: String,   // "loading" | "ready" | "error"
+    message: String,  // User-readable status message
+}
+
 // ============================================================================
 // Python Daemon Manager
 // ============================================================================
@@ -91,18 +98,21 @@ fn detect_daemon_mode() -> Result<DaemonMode, String> {
     let sidecar_name = "worker_daemon";
 
     // Possible sidecar locations:
-    // 1. Contents/MacOS/worker_daemon (onefile mode, legacy)
-    // 2. Contents/Resources/worker_daemon/worker_daemon (onedir mode)
-    // 3. Same directory as exe (Windows)
+    // 1. Contents/Resources/worker_daemon/worker_daemon (macOS bundle, onedir mode)
+    // 2. ./worker_daemon/worker_daemon (dev/debug, onedir mode)
+    // 3. ./worker_daemon (onefile mode or Windows)
     let sidecar_paths = [
-        // onedir mode: Resources/worker_daemon/worker_daemon
+        // onedir mode: Resources/worker_daemon/worker_daemon (macOS bundle)
         exe_dir.join("../Resources/worker_daemon").join(sidecar_name),
+        // onedir mode: worker_daemon/worker_daemon (dev/debug directory)
+        exe_dir.join("worker_daemon").join(sidecar_name),
         // onefile mode: same directory as main exe
         exe_dir.join(sidecar_name),
     ];
 
     for sidecar_path in sidecar_paths.iter() {
-        if sidecar_path.exists() {
+        // Use is_file() to ensure we found an executable, not a directory
+        if sidecar_path.is_file() {
             println!("✅ 生产模式: 找到 sidecar 可执行文件");
             println!("   Sidecar 路径: {:?}", sidecar_path);
             return Ok(DaemonMode::Production { executable_path: sidecar_path.clone() });
@@ -405,8 +415,247 @@ fn ensure_daemon_running() -> Result<(), String> {
     Ok(())
 }
 
+/// Check if daemon is ready (for commands to check before execution)
+fn is_daemon_ready() -> bool {
+    let daemon = DAEMON.lock().unwrap();
+    daemon.is_some()
+}
+
+/// Start daemon asynchronously with status events to frontend
+/// This allows the UI to show immediately while daemon loads in background
+fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
+    std::thread::spawn(move || {
+        println!("🚀 异步启动 Python 守护进程...");
+
+        // Send initial loading status
+        let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+            status: "loading".to_string(),
+            message: "正在启动语音服务...".to_string(),
+        });
+
+        // Detect execution mode
+        let daemon_mode = match detect_daemon_mode() {
+            Ok(mode) => mode,
+            Err(e) => {
+                println!("❌ 检测守护进程模式失败: {}", e);
+                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                    status: "error".to_string(),
+                    message: format!("启动失败: {}", e),
+                });
+                return;
+            }
+        };
+
+        // Build PATH environment variable
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let extra_paths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
+        let enhanced_path = format!("{}:{}", extra_paths, current_path);
+
+        // Build command based on mode
+        let mut child = match daemon_mode {
+            DaemonMode::Production { ref executable_path } => {
+                println!("📦 生产模式: 启动 sidecar 可执行文件");
+                let internal_dir = executable_path.parent()
+                    .map(|p| p.join("_internal"))
+                    .unwrap_or_default();
+                let production_path = format!("{}:{}:{}",
+                    internal_dir.display(),
+                    extra_paths,
+                    current_path
+                );
+
+                match Command::new(&executable_path)
+                    .arg("daemon")
+                    .env("PATH", production_path)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                {
+                    Ok(child) => child,
+                    Err(e) => {
+                        let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                            status: "error".to_string(),
+                            message: format!("启动失败: {}", e),
+                        });
+                        return;
+                    }
+                }
+            }
+            DaemonMode::Development { script_path } => {
+                println!("🔧 开发模式: 使用 Python 运行脚本");
+                let project_root = script_path.parent().unwrap_or(std::path::Path::new("."));
+                let venv_python = project_root.join(".venv/bin/python3");
+                let python_cmd = if venv_python.exists() {
+                    venv_python
+                } else {
+                    std::path::PathBuf::from("python3")
+                };
+
+                match Command::new(&python_cmd)
+                    .arg(&script_path)
+                    .arg("daemon")
+                    .env("PATH", enhanced_path)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                {
+                    Ok(child) => child,
+                    Err(e) => {
+                        let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                            status: "error".to_string(),
+                            message: format!("启动失败: {}", e),
+                        });
+                        return;
+                    }
+                }
+            }
+        };
+
+        // Get stdin/stdout/stderr
+        let stdin = match child.stdin.take() {
+            Some(s) => BufWriter::new(s),
+            None => {
+                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                    status: "error".to_string(),
+                    message: "无法获取进程输入流".to_string(),
+                });
+                return;
+            }
+        };
+        let mut stdout = match child.stdout.take() {
+            Some(s) => BufReader::new(s),
+            None => {
+                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                    status: "error".to_string(),
+                    message: "无法获取进程输出流".to_string(),
+                });
+                return;
+            }
+        };
+        let stderr = match child.stderr.take() {
+            Some(s) => BufReader::new(s),
+            None => {
+                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                    status: "error".to_string(),
+                    message: "无法获取进程错误流".to_string(),
+                });
+                return;
+            }
+        };
+
+        // Store stderr for PTT event reader
+        {
+            let mut ptt_stderr = PTT_STDERR.lock().unwrap();
+            *ptt_stderr = Some(stderr);
+        }
+
+        // Wait for daemon initialization with progress updates
+        // No timeout - let it load as long as needed
+        println!("⏳ 等待守护进程初始化...");
+        let mut initialized = false;
+
+        loop {
+            let mut line = String::new();
+            match stdout.read_line(&mut line) {
+                Ok(0) => {
+                    // EOF - daemon exited
+                    println!("❌ 守护进程在初始化期间退出");
+                    let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                        status: "error".to_string(),
+                        message: "语音服务意外退出".to_string(),
+                    });
+                    return;
+                }
+                Ok(_) => {
+                    // Parse JSON log events and forward status to frontend
+                    if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
+                        if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
+                            println!("📋 守护进程事件: {}", event_type);
+
+                            // Map daemon events to user-friendly messages
+                            let status_message = match event_type {
+                                "daemon_initializing" => "正在初始化语音服务...".to_string(),
+                                "loading_voice_assistant" => "正在加载语音助手...".to_string(),
+                                "loading_asr" | "asr_loaded" => "正在加载语音识别模型...".to_string(),
+                                "loading_llm" | "llm_loaded" => "正在加载语言模型...".to_string(),
+                                "loading_tts" | "tts_loaded" => "正在加载语音合成模型...".to_string(),
+                                "resource_limits_failed" => "资源限制设置失败，继续启动...".to_string(),
+                                "daemon_success" => {
+                                    if let Some(message) = event.get("message").and_then(|v| v.as_str()) {
+                                        if message.contains("就绪") || message.contains("ready") {
+                                            initialized = true;
+                                            "语音服务已就绪".to_string()
+                                        } else {
+                                            message.to_string()
+                                        }
+                                    } else {
+                                        "初始化成功".to_string()
+                                    }
+                                }
+                                _ => {
+                                    // For other events, use message if available
+                                    event.get("message")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("正在加载...")
+                                        .to_string()
+                                }
+                            };
+
+                            // Send progress update to frontend
+                            let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                                status: "loading".to_string(),
+                                message: status_message,
+                            });
+
+                            if initialized {
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("❌ 读取守护进程输出失败: {}", e);
+                    let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                        status: "error".to_string(),
+                        message: format!("读取输出失败: {}", e),
+                    });
+                    return;
+                }
+            }
+        }
+
+        // Store daemon instance
+        {
+            let mut daemon = DAEMON.lock().unwrap();
+            *daemon = Some(PythonDaemon {
+                process: child,
+                stdin,
+                stdout,
+            });
+        }
+
+        println!("✅ Python 守护进程已启动");
+
+        // Register PTT shortcut from config (after daemon is ready)
+        if let Some(handle) = APP_HANDLE.get() {
+            register_ptt_from_config(handle);
+        }
+
+        // Send ready status to frontend
+        let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+            status: "ready".to_string(),
+            message: "就绪".to_string(),
+        });
+    });
+}
+
 fn call_daemon(command: &str, args: serde_json::Value) -> Result<serde_json::Value, String> {
-    ensure_daemon_running()?;
+    // Check if daemon is ready (don't block waiting for it)
+    if !is_daemon_ready() {
+        return Err("语音服务正在启动中，请稍候...".to_string());
+    }
 
     let mut daemon = DAEMON.lock().unwrap();
     let daemon = daemon.as_mut().ok_or("Daemon not available")?;
@@ -2063,19 +2312,16 @@ pub fn run() {
             // Register shortcuts
             register_shortcuts(app.handle())?;
 
-            // Start daemon
-            ensure_daemon_running()
-                .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to start daemon: {}", e)))?;
-
             // Store app handle globally for shortcut management
             let _ = APP_HANDLE.set(app.handle().clone());
 
-            // Register PTT shortcut from user config (after daemon is ready)
-            if let Some(app_handle) = APP_HANDLE.get() {
-                register_ptt_from_config(app_handle);
-            }
+            // Start daemon asynchronously (non-blocking)
+            // This allows the UI to show immediately while daemon loads in background
+            // PTT shortcut registration happens after daemon is ready (inside start_daemon_async)
+            start_daemon_async(app.handle().clone());
 
             // Start PTT event reader (listen to Python daemon stderr)
+            // This will wait for stderr to be available from daemon
             start_ptt_reader(app.handle().clone());
 
             // Create PTT floating state window
@@ -2083,7 +2329,7 @@ pub fn run() {
                 println!("⚠️ 创建 PTT 浮动窗口失败: {}", e);
             }
 
-            println!("✅ Speekium 应用已启动 (守护进程模式)");
+            println!("✅ Speekium 应用已启动 (异步守护进程模式)");
 
             Ok(())
         })

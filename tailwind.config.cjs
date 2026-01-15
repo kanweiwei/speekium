@@ -75,6 +75,11 @@ module.exports = {
           from: { opacity: "1" },
           to: { opacity: "0" },
         },
+        "loading-progress": {
+          "0%": { transform: "translateX(-100%)", width: "30%" },
+          "50%": { transform: "translateX(100%)", width: "60%" },
+          "100%": { transform: "translateX(300%)", width: "30%" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -82,6 +87,7 @@ module.exports = {
         "dot-bounce": "dot-bounce 1.4s ease-in-out infinite",
         "cursor-blink": "cursor-blink 1s step-end infinite",
         "cursor-fade-out": "cursor-fade-out 0.3s ease-out forwards",
+        "loading-progress": "loading-progress 2s ease-in-out infinite",
       },
     },
   },

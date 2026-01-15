@@ -24,6 +24,8 @@ import {
   Wand2,
   Clock,
   PenSquare,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
@@ -97,6 +99,95 @@ function EmptyState({ onPromptClick }: { onPromptClick: (prompt: string) => void
   );
 }
 
+// Loading screen component shown during daemon initialization
+function LoadingScreen({ message, status }: { message: string; status: 'loading' | 'error' }) {
+  const { t } = useTranslation();
+
+  const handleRetry = () => {
+    // Reload the app to retry daemon initialization
+    window.location.reload();
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center h-screen bg-background">
+      {/* Subtle ambient background - single, slow breathing */}
+      {status === 'loading' && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-3xl animate-pulse"
+            style={{ animationDuration: '10s' }}
+          />
+        </div>
+      )}
+
+      {/* Content container */}
+      <div className="relative z-10 flex flex-col items-center">
+        {/* Logo - static, serves as visual anchor */}
+        <div className="relative mb-8">
+          <div className={cn(
+            "w-24 h-24 transition-all duration-300",
+            status === 'error' && "opacity-60 scale-95"
+          )}>
+            <img
+              src="/logo.svg"
+              alt="Speekium"
+              className="w-full h-full"
+            />
+          </div>
+
+          {/* Static glow effect */}
+          <div className={cn(
+            "absolute -inset-2 rounded-full bg-gradient-to-br opacity-15 blur-2xl -z-10",
+            status === 'loading'
+              ? "from-blue-500 to-purple-600"
+              : "from-destructive to-destructive/50"
+          )} />
+        </div>
+
+        {/* Title */}
+        <h1 className="text-2xl font-semibold text-foreground mb-6">
+          {t('app.title')}
+        </h1>
+
+        {/* Status message */}
+        <div className={cn(
+          "flex items-center gap-2 px-4 py-2 rounded-full transition-colors duration-300",
+          status === 'error'
+            ? "bg-destructive/10 text-destructive"
+            : "text-muted-foreground"
+        )}>
+          {status === 'loading' ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <AlertCircle className="w-4 h-4" />
+          )}
+          <span className="text-sm">{message || t('app.loading.startingService')}</span>
+        </div>
+
+        {/* First launch hint */}
+        {status === 'loading' && (
+          <p className="text-xs text-muted-foreground/60 mt-4">
+            {t('app.loading.firstLaunchHint')}
+          </p>
+        )}
+
+        {/* Retry button for error state */}
+        {status === 'error' && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={handleRetry}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            {t('app.loading.retry')}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const { t } = useTranslation();
   const { workMode, setWorkMode } = useWorkMode();
@@ -107,6 +198,10 @@ function App() {
   const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
   const [isStreaming, setIsStreaming] = React.useState<boolean>(false);
   const [isWaitingForLLM, setIsWaitingForLLM] = React.useState<boolean>(false);
+
+  // Daemon initialization status
+  const [daemonStatus, setDaemonStatus] = React.useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadingMessage, setLoadingMessage] = React.useState<string>('');
 
   // Work Mode Toast state
   const [toast, setToast] = React.useState<{
@@ -165,6 +260,34 @@ function App() {
       localStorage.removeItem('speekium_current_session_id');
     }
   }, [currentSessionId]);
+
+  // Listen for daemon status events
+  React.useEffect(() => {
+    const setupDaemonListener = async () => {
+      const unlisten = await listen<{ status: string; message: string }>('daemon-status', (event) => {
+        const { status, message } = event.payload;
+        console.log('Daemon status:', status, message);
+
+        if (status === 'ready') {
+          setDaemonStatus('ready');
+        } else if (status === 'error') {
+          setDaemonStatus('error');
+          setLoadingMessage(message);
+        } else {
+          // loading
+          setLoadingMessage(message);
+        }
+      });
+
+      return unlisten;
+    };
+
+    const unlistenPromise = setupDaemonListener();
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten());
+    };
+  }, []);
 
   React.useEffect(() => {
     loadConfig();
@@ -463,6 +586,15 @@ function App() {
   const handlePromptClick = async (prompt: string) => {
     await handleSendText(prompt);
   };
+
+  // Show loading screen while daemon is initializing
+  if (daemonStatus !== 'ready') {
+    return (
+      <SettingsProvider>
+        <LoadingScreen message={loadingMessage} status={daemonStatus} />
+      </SettingsProvider>
+    );
+  }
 
   return (
     <SettingsProvider>

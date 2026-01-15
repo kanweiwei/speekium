@@ -76,3 +76,36 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Loading progress animation */
+  @keyframes loading-progress {
+    0% {
+      transform: translateX(-100%);
+    }
+    50% {
+      transform: translateX(0%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-loading-progress {
+    animation: loading-progress 2s ease-in-out infinite;
+  }
+
+  /* Cursor blink animation for streaming */
+  @keyframes cursor-blink {
+    0%, 49% {
+      opacity: 1;
+    }
+    50%, 100% {
+      opacity: 0;
+    }
+  }
+
+  .animate-cursor-blink {
+    animation: cursor-blink 1s step-end infinite;
+  }
+}

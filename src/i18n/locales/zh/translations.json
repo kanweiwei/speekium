@@ -1,6 +1,11 @@
 {
   "app": {
     "title": "Speekium",
+    "loading": {
+      "startingService": "正在启动语音服务...",
+      "firstLaunchHint": "首次启动约需 30-60 秒",
+      "retry": "重试"
+    },
     "header": {
       "history": "历史",
       "newSession": "新建",

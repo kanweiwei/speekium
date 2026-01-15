@@ -1,6 +1,11 @@
 {
   "app": {
     "title": "Speekium",
+    "loading": {
+      "startingService": "Starting voice service...",
+      "firstLaunchHint": "First launch may take 30-60 seconds",
+      "retry": "Retry"
+    },
     "header": {
       "history": "History",
       "newSession": "New",
