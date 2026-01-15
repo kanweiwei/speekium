@@ -49,7 +49,7 @@ function EmptyState({ onPromptClick }: { onPromptClick: (prompt: string) => void
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-4">
-      {/* 品牌图标 */}
+      {/* Brand icon */}
       <div className="relative mb-8">
         <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
           <Mic className="w-10 h-10 text-white" />
@@ -226,10 +226,10 @@ function App() {
     forceStopRecording,
     chatGenerator,
     clearHistory,
-    loadConfig,
     generateTTS,
     addMessage,
     updateLastAssistantMessage,
+    setDaemonReady,
   } = useTauriAPI();
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
@@ -242,6 +242,7 @@ function App() {
   const isRecordingRef = React.useRef(isRecording);
   const isProcessingRef = React.useRef(isProcessing);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const recordModeRef = React.useRef(recordMode); // Track current mode for immediate access
 
   React.useEffect(() => {
     isRecordingRef.current = isRecording;
@@ -261,20 +262,39 @@ function App() {
     }
   }, [currentSessionId]);
 
+  // Sync recordMode to ref for immediate access in async operations
+  React.useEffect(() => {
+    recordModeRef.current = recordMode;
+
+    // Notify Rust backend about mode change (only after daemon is ready)
+    const notifyModeChange = async () => {
+      if (daemonStatus !== 'ready') {
+        return;
+      }
+
+      try {
+        await invoke('set_recording_mode', { mode: recordMode });
+      } catch (error) {
+        console.error('Failed to set recording mode:', error);
+      }
+    };
+
+    notifyModeChange();
+  }, [recordMode, daemonStatus]); // Add daemonStatus dependency
+
   // Listen for daemon status events
   React.useEffect(() => {
     const setupDaemonListener = async () => {
       const unlisten = await listen<{ status: string; message: string }>('daemon-status', (event) => {
         const { status, message } = event.payload;
-        console.log('Daemon status:', status, message);
-
         if (status === 'ready') {
           setDaemonStatus('ready');
+          // Enable health check only after daemon is ready
+          setDaemonReady(true);
         } else if (status === 'error') {
           setDaemonStatus('error');
           setLoadingMessage(message);
         } else {
-          // loading
           setLoadingMessage(message);
         }
       });
@@ -289,10 +309,8 @@ function App() {
     };
   }, []);
 
+  // Restore last session from localStorage
   React.useEffect(() => {
-    loadConfig();
-
-    // Restore last session from localStorage
     const restoreSession = async () => {
       const savedSessionId = localStorage.getItem('speekium_current_session_id');
       if (savedSessionId) {
@@ -338,22 +356,24 @@ function App() {
           // First log to session history and database
           addMessage('user', userText);
 
-          // Save to database
-          try {
-            let sessionId = currentSessionIdRef.current;
-            if (!sessionId) {
-              // Create new session with first message as title
-              const title = userText.slice(0, 30) + (userText.length > 30 ? '...' : '');
-              const session = await historyAPI.createSession(title);
-              sessionId = session.id;
-              setCurrentSessionId(sessionId);
-              currentSessionIdRef.current = sessionId;
-              setCurrentSessionTitle(title);
+          // Save to database (non-blocking, don't await)
+          (async () => {
+            try {
+              let sessionId = currentSessionIdRef.current;
+              if (!sessionId) {
+                // Create new session with first message as title
+                const title = userText.slice(0, 30) + (userText.length > 30 ? '...' : '');
+                const session = await historyAPI.createSession(title);
+                sessionId = session.id;
+                setCurrentSessionId(sessionId);
+                currentSessionIdRef.current = sessionId;
+                setCurrentSessionTitle(title);
+              }
+              await historyAPI.addSessionMessage(sessionId, 'user', userText);
+            } catch (error) {
+              console.error('Failed to save user message:', error);
             }
-            await historyAPI.addSessionMessage(sessionId, 'user', userText);
-          } catch (error) {
-            console.error('Failed to save user message:', error);
-          }
+          })();
 
           // Then call type_text_command to paste text to focused field
           try {
@@ -370,22 +390,24 @@ function App() {
           pttAssistantAddedRef.current = false;
           setIsWaitingForLLM(true);  // Start waiting for LLM response
 
-          // Save to database
-          try {
-            let sessionId = currentSessionIdRef.current;
-            if (!sessionId) {
-              // Create new session with first message as title
-              const title = userText.slice(0, 30) + (userText.length > 30 ? '...' : '');
-              const session = await historyAPI.createSession(title);
-              sessionId = session.id;
-              setCurrentSessionId(sessionId);
-              currentSessionIdRef.current = sessionId;
-              setCurrentSessionTitle(title);
+          // Save to database (non-blocking, don't await)
+          (async () => {
+            try {
+              let sessionId = currentSessionIdRef.current;
+              if (!sessionId) {
+                // Create new session with first message as title
+                const title = userText.slice(0, 30) + (userText.length > 30 ? '...' : '');
+                const session = await historyAPI.createSession(title);
+                sessionId = session.id;
+                setCurrentSessionId(sessionId);
+                currentSessionIdRef.current = sessionId;
+                setCurrentSessionTitle(title);
+              }
+              await historyAPI.addSessionMessage(sessionId, 'user', userText);
+            } catch (error) {
+              console.error('Failed to save user message:', error);
             }
-            await historyAPI.addSessionMessage(sessionId, 'user', userText);
-          } catch (error) {
-            console.error('Failed to save user message:', error);
-          }
+          })();
         }
       });
 
@@ -409,18 +431,25 @@ function App() {
           updateLastAssistantMessage(event.payload);
         }
 
-        // Save assistant message to database
+        // Save assistant message to database (non-blocking, don't await)
         if (finalResponse && currentSessionIdRef.current) {
-          try {
-            await historyAPI.addSessionMessage(currentSessionIdRef.current, 'assistant', finalResponse);
-          } catch (error) {
-            console.error('Failed to save assistant message:', error);
-          }
+          (async () => {
+            try {
+              if (currentSessionIdRef.current) {
+                await historyAPI.addSessionMessage(currentSessionIdRef.current, 'assistant', finalResponse);
+              }
+            } catch (error) {
+              console.error('Failed to save assistant message:', error);
+            }
+          })();
         }
 
         pttAssistantResponseRef.current = '';
         pttAssistantAddedRef.current = false;
       });
+
+      // Note: ptt-audio-chunk events are handled by Python daemon playback
+      // Frontend does NOT play audio to avoid duplication
 
       const unlistenError = await listen<string>('ptt-error', (event) => {
         setIsWaitingForLLM(false);  // Reset waiting state on error
@@ -440,7 +469,7 @@ function App() {
     return () => {
       cleanup.then(fn => fn());
     };
-  }, [addMessage, updateLastAssistantMessage, workMode]);
+  }, [addMessage, updateLastAssistantMessage, workMode, t]);
 
   React.useEffect(() => {
     localStorage.setItem('recordMode', recordMode);
@@ -451,12 +480,23 @@ function App() {
 
   // Continuous listening mode
   React.useEffect(() => {
+    // Only start continuous listening after daemon is ready
+    if (daemonStatus !== 'ready') {
+      return;
+    }
+
     let isContinuousMode = recordMode === 'continuous';
     let shouldKeepListening = true;
     let abortController = new AbortController();
 
     const continuousListen = async () => {
       while (isContinuousMode && shouldKeepListening && !abortController.signal.aborted) {
+        // Check if mode has changed (use ref for immediate access)
+        if (recordModeRef.current !== 'continuous') {
+          console.log('Mode changed to push-to-talk, stopping continuous listening');
+          break;
+        }
+
         if (isRecordingRef.current || isProcessingRef.current) {
           await new Promise(resolve => setTimeout(resolve, 500));
           continue;
@@ -464,16 +504,40 @@ function App() {
 
         try {
           const result = await startRecording('continuous', 'auto', true, autoTTS);
+
+          // Check again after recording completes
+          if (recordModeRef.current !== 'continuous') {
+            console.log('Mode changed during recording, stopping continuous listening');
+            break;
+          }
+
           if (!result.success) {
+            // Check if error is due to mode change (recording cancelled)
+            if (result.error?.includes('Recording cancelled') || result.error?.includes('Recording mode changed')) {
+              console.log('Recording cancelled due to mode change, stopping continuous listening');
+              break;
+            }
+            // Check if error is due to streaming in progress - just wait and retry
+            if (result.error?.includes('streaming in progress')) {
+              console.log('Recording blocked by streaming, waiting...');
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              continue;
+            }
             setError(result.error || t('app.errors.listenFailed'));
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         } catch (error) {
           if (abortController.signal.aborted) break;
+          // Check mode on error too
+          if (recordModeRef.current !== 'continuous') {
+            console.log('Mode changed, stopping continuous listening (error path)');
+            break;
+          }
         }
 
         await new Promise(resolve => setTimeout(resolve, 500));
       }
+      console.log('Continuous listening loop ended');
     };
 
     if (recordMode === 'continuous') {
@@ -493,7 +557,7 @@ function App() {
         setError(null);
       }
     };
-  }, [recordMode]);
+  }, [recordMode, daemonStatus]); // Add daemonStatus dependency
 
   const handleClearHistory = () => {
     clearHistory();

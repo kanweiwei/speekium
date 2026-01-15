@@ -20,6 +20,32 @@ use audio::AudioRecorder;
 // Data Structures
 // ============================================================================
 
+/// Recording mode enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecordingMode {
+    Continuous,
+    PushToTalk,
+}
+
+impl RecordingMode {
+    /// Convert to string representation
+    fn as_str(&self) -> &'static str {
+        match self {
+            RecordingMode::Continuous => "continuous",
+            RecordingMode::PushToTalk => "push-to-talk",
+        }
+    }
+
+    /// Parse from string
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "continuous" => Some(RecordingMode::Continuous),
+            "push-to-talk" => Some(RecordingMode::PushToTalk),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct RecordResult {
     success: bool,
@@ -319,6 +345,16 @@ impl PythonDaemon {
         // Read response from stdout, skip log events
         // Daemon log events have "event" field, command responses have "success" field
         loop {
+            // Check if recording should be aborted (for continuous mode)
+            if RECORDING_ABORTED.load(Ordering::SeqCst) {
+                println!("🚫 Recording aborted during wait");
+                RECORDING_ABORTED.store(false, Ordering::SeqCst);
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": "Recording cancelled"
+                }));
+            }
+
             let mut line = String::new();
             self.stdout.read_line(&mut line)
                 .map_err(|e| {
@@ -343,6 +379,27 @@ impl PythonDaemon {
             println!("📥 收到命令响应: {}", line.trim());
             return Ok(result);
         }
+    }
+
+    /// Send command without waiting for response (fire-and-forget)
+    fn send_command_no_wait(&mut self, command: &str, args: serde_json::Value) -> Result<(), String> {
+        // Build request
+        let request = serde_json::json!({
+            "command": command,
+            "args": args
+        });
+
+        println!("📤 发送命令（不等待响应）: {}", command);
+
+        // Send to stdin
+        writeln!(self.stdin, "{}", request.to_string())
+            .map_err(|e| format!("Failed to write command: {}", e))?;
+
+        self.stdin.flush()
+            .map_err(|e| format!("Failed to flush stdin: {}", e))?;
+
+        println!("✅ 命令已发送（异步模式）");
+        Ok(())
     }
 
     fn health_check(&mut self) -> bool {
@@ -383,6 +440,15 @@ static CURRENT_PTT_SHORTCUT: Mutex<Option<String>> = Mutex::new(None);
 // PTT key state - prevent key repeat from triggering multiple presses
 static PTT_KEY_PRESSED: AtomicBool = AtomicBool::new(false);
 
+// PTT processing flag - prevent overlay from showing during ASR/LLM/TTS processing
+static PTT_PROCESSING: AtomicBool = AtomicBool::new(false);
+
+// Recording mode flag - "continuous" or "push-to-talk"
+static RECORDING_MODE: Mutex<RecordingMode> = Mutex::new(RecordingMode::PushToTalk);
+
+// Recording abort flag - signal to stop current recording
+static RECORDING_ABORTED: AtomicBool = AtomicBool::new(false);
+
 // Global app handle for shortcut management
 static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
 
@@ -418,7 +484,11 @@ fn ensure_daemon_running() -> Result<(), String> {
 /// Check if daemon is ready (for commands to check before execution)
 fn is_daemon_ready() -> bool {
     let daemon = DAEMON.lock().unwrap();
-    daemon.is_some()
+    let ready = daemon.is_some();
+    if !ready {
+        println!("⚠️ Daemon not ready: DAEMON is None");
+    }
+    ready
 }
 
 /// Start daemon asynchronously with status events to frontend
@@ -741,10 +811,21 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                 }
                                 "user_message" => {
                                     // User speech recognition result - hide overlay, show message
+                                    // Set processing flag to prevent overlay from reappearing
+                                    PTT_PROCESSING.store(true, Ordering::SeqCst);
+                                    println!("🎤 用户消息事件 - 隐藏浮动窗口，设置 PTT_PROCESSING=true");
                                     let _ = window.emit("ptt-state", "idle");
                                     if let Some(ref overlay) = overlay_window {
-                                        let _ = overlay.hide();
+                                        println!("🎤 调用 overlay.hide()");
+                                        // First make it ignore cursor events, then hide
+                                        let _ = overlay.set_ignore_cursor_events(true);
+                                        match overlay.hide() {
+                                            Ok(_) => println!("🎤浮动窗口已隐藏"),
+                                            Err(e) => println!("❌ 隐藏浮动窗口失败: {}", e),
+                                        }
                                         let _ = overlay.emit("ptt-state", "idle");
+                                    } else {
+                                        println!("⚠️ 浮动窗口不存在");
                                     }
                                     if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
                                         let _ = window.emit("ptt-user-message", text);
@@ -754,6 +835,7 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     // LLM streaming response chunk - ensure overlay is hidden
                                     let _ = window.emit("ptt-state", "idle");
                                     if let Some(ref overlay) = overlay_window {
+                                        let _ = overlay.set_ignore_cursor_events(true);
                                         let _ = overlay.hide();
                                     }
                                     if let Some(content) = event.get("content").and_then(|v| v.as_str()) {
@@ -762,8 +844,12 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                 }
                                 "assistant_done" => {
                                     // LLM response complete - ensure overlay is hidden
+                                    // Clear processing flag to allow future recordings
+                                    PTT_PROCESSING.store(false, Ordering::SeqCst);
+                                    println!("🎤 Assistant 完成事件 - 清除 PTT_PROCESSING 标志");
                                     let _ = window.emit("ptt-state", "idle");
                                     if let Some(ref overlay) = overlay_window {
+                                        let _ = overlay.set_ignore_cursor_events(true);
                                         let _ = overlay.hide();
                                     }
                                     if let Some(content) = event.get("content").and_then(|v| v.as_str()) {
@@ -782,6 +868,9 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     }
                                 }
                                 "error" => {
+                                    // Clear processing flag on error
+                                    PTT_PROCESSING.store(false, Ordering::SeqCst);
+                                    println!("🎤 PTT 错误事件 - 清除 PTT_PROCESSING 标志");
                                     let _ = window.emit("ptt-state", "error");
                                     if let Some(error) = event.get("error").and_then(|v| v.as_str()) {
                                         let _ = window.emit("ptt-error", error);
@@ -1082,6 +1171,47 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Option<String>) -> Result<RecordResult, String> {
+    // Block recording during streaming operations (TTS, chat streaming)
+    if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
+        println!("⏸️ Recording blocked: streaming operation in progress");
+        return Ok(RecordResult {
+            success: false,
+            text: None,
+            language: None,
+            error: Some("Recording blocked: streaming in progress".to_string()),
+        });
+    }
+
+    // Check if recording should be aborted
+    if RECORDING_ABORTED.load(Ordering::SeqCst) {
+        println!("🚫 Recording aborted by mode change");
+        RECORDING_ABORTED.store(false, Ordering::SeqCst);
+        // Send idle state to hide floating window
+        emit_ptt_state(&app_handle, "idle");
+        return Ok(RecordResult {
+            success: false,
+            text: None,
+            language: None,
+            error: Some("Recording cancelled".to_string()),
+        });
+    }
+
+    // Check if recording mode matches
+    let current_mode = *RECORDING_MODE.lock().unwrap();
+    let is_continuous_mode = mode == "continuous";
+
+    if is_continuous_mode && current_mode != RecordingMode::Continuous {
+        println!("🚫 Continuous recording aborted (mode changed to {})", current_mode.as_str());
+        // Send idle state to hide floating window
+        emit_ptt_state(&app_handle, "idle");
+        return Ok(RecordResult {
+            success: false,
+            text: None,
+            language: None,
+            error: Some("Recording mode changed".to_string()),
+        });
+    }
+
     // Handle duration parameter: support numeric string, "auto", or empty
     let duration_val = match duration {
         Some(d) => {
@@ -1099,7 +1229,7 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
         "duration": duration_val
     });
 
-    println!("🎤 调用守护进程: record {}", args);
+    println!("🎤 调用守护进程: record {} (current mode: {})", args, current_mode.as_str());
 
     // Send recording start state to all windows (unified state sync)
     emit_ptt_state(&app_handle, "recording");
@@ -1121,6 +1251,32 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
     parsed_result
 }
 
+/// Set recording mode (continuous or push-to-talk)
+#[tauri::command]
+fn set_recording_mode(mode: String) -> Result<(), String> {
+    println!("🎛️ Setting recording mode to: {}", mode);
+
+    // Parse mode from string
+    let new_mode = RecordingMode::from_str(mode.as_str())
+        .ok_or_else(|| format!("Invalid recording mode: {}", mode))?;
+
+    // Update global recording mode
+    *RECORDING_MODE.lock().unwrap() = new_mode;
+
+    // Clear or set abort flag based on mode
+    if new_mode == RecordingMode::Continuous {
+        // Switching to continuous: clear abort flag to allow new recordings
+        RECORDING_ABORTED.store(false, Ordering::SeqCst);
+        println!("✅ Cleared abort flag (switched to continuous)");
+    } else {
+        // Switching away from continuous: abort any ongoing recording
+        RECORDING_ABORTED.store(true, Ordering::SeqCst);
+        println!("🛑 Aborting continuous recording (switched to {})", new_mode.as_str());
+    }
+
+    Ok(())
+}
+
 /// Send PTT state to all windows
 fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
     // Send to main window
@@ -1133,6 +1289,11 @@ fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
         // Control floating window visibility
         match state {
             "recording" | "processing" => {
+                // Don't show overlay if PTT processing (ASR/LLM/TTS) is in progress
+                if PTT_PROCESSING.load(Ordering::SeqCst) {
+                    println!("🚫 PTT 正在处理中，跳过显示浮动窗口 (state: {})", state);
+                    return;
+                }
                 // Recalculate position before showing (in case screen config changed)
                 match calculate_overlay_position(app_handle) {
                     Ok((x, y)) => {
@@ -1144,9 +1305,12 @@ fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
                         eprintln!("❌ Failed to calculate PTT overlay position: {}, showing anyway", e);
                     }
                 }
+                let _ = overlay.set_ignore_cursor_events(false);
                 let _ = overlay.show();
             }
             "idle" | "error" => {
+                // Force hide overlay - use set_ignore_cursor_events to make it "invisible"
+                let _ = overlay.set_ignore_cursor_events(true);
                 let _ = overlay.hide();
             }
             _ => {}
@@ -1948,11 +2112,11 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                 // Emit recording state to frontend
                 emit_ptt_state_static(app, "recording");
 
-                // Notify Python daemon (for UI state only, no recording)
+                // Notify Python daemon (for UI state only, no recording) - async mode
                 if let Ok(mut daemon_guard) = DAEMON.lock() {
                     if let Some(ref mut daemon) = *daemon_guard {
-                        match daemon.send_command("ptt_press", serde_json::json!({})) {
-                            Ok(_) => println!("✅ PTT press command sent"),
+                        match daemon.send_command_no_wait("ptt_press", serde_json::json!({})) {
+                            Ok(_) => println!("✅ PTT press command sent (async)"),
                             Err(e) => println!("❌ PTT press command failed: {}", e),
                         }
                     }
@@ -1982,7 +2146,7 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                 // Emit processing state
                 emit_ptt_state_static(app, "processing");
 
-                // Send audio file path to Python daemon for ASR
+                // Send audio file path to Python daemon for ASR (async, don't wait)
                 if let Some(audio) = audio_data {
                     println!("📤 Sending audio file ({:.2}s) to Python: {}",
                              audio.duration_secs, audio.file_path);
@@ -1994,18 +2158,20 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                                 "sample_rate": audio.sample_rate,
                                 "duration": audio.duration_secs
                             });
-                            match daemon.send_command("ptt_audio", args) {
-                                Ok(_) => println!("✅ PTT audio command sent"),
+                            // Use send_command_no_wait to avoid blocking UI
+                            match daemon.send_command_no_wait("ptt_audio", args) {
+                                Ok(_) => println!("✅ PTT audio command sent (async)"),
                                 Err(e) => println!("❌ PTT audio command failed: {}", e),
                             }
                         }
                     }
                 } else {
-                    // No audio data, just notify daemon
+                    // No audio data, just notify daemon (async, don't wait)
                     if let Ok(mut daemon_guard) = DAEMON.lock() {
                         if let Some(ref mut daemon) = *daemon_guard {
-                            match daemon.send_command("ptt_release", serde_json::json!({})) {
-                                Ok(_) => println!("✅ PTT release command sent"),
+                            // Use send_command_no_wait to avoid blocking UI
+                            match daemon.send_command_no_wait("ptt_release", serde_json::json!({})) {
+                                Ok(_) => println!("✅ PTT release command sent (async)"),
                                 Err(e) => println!("❌ PTT release command failed: {}", e),
                             }
                         }
@@ -2252,6 +2418,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             record_audio,
+            set_recording_mode,
             chat_llm,
             chat_llm_stream,
             chat_tts_stream,

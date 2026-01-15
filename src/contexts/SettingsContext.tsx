@@ -6,6 +6,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { HotkeyConfig } from '../types/hotkey';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -71,8 +72,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<Record<string, any> | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [daemonReady, setDaemonReady] = useState(false);
 
-  // Load config on mount
+  // Load config on mount (only after daemon is ready)
   useEffect(() => {
     const loadConfig = async () => {
       try {
@@ -90,11 +92,31 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           setConfig(configWithDefaults);
         }
       } catch (error) {
-        console.error('[Settings] Failed to load config:', error);
+        // Silently ignore errors during daemon initialization
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (!errorMessage.includes('语音服务正在启动中')) {
+          console.error('[Settings] Failed to load config:', error);
+        }
       }
     };
 
-    loadConfig();
+    // Only load config after daemon is ready
+    if (daemonReady) {
+      loadConfig();
+    }
+  }, [daemonReady]);
+
+  // Listen for daemon status events
+  useEffect(() => {
+    const unlistenPromise = listen<{ status: string; message: string }>('daemon-status', (event) => {
+      if (event.payload.status === 'ready') {
+        setDaemonReady(true);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten());
+    };
   }, []);
 
   // Create debounced save function

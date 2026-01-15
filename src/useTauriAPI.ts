@@ -80,10 +80,19 @@ export function useTauriAPI() {
   const [daemonHealth, setDaemonHealth] = useState<HealthResult | null>(null);
   const [audioQueue, setAudioQueue] = useState<Array<{ path: string; text: string }>>([]);
   const [isPlayingQueue, setIsPlayingQueue] = useState(false);
+  const [daemonReady, setDaemonReady] = useState(false);
 
-  // Load config and health check
+  // Load config and start periodic health check only after daemon is ready
   useEffect(() => {
+    // Only load config after daemon is ready
+    if (!daemonReady) {
+      return;
+    }
+
+    // Initial config load when daemon becomes ready
     loadConfig();
+
+    // Initial health check when daemon becomes ready
     checkDaemonHealth();
 
     // Periodic health check (every 30s)
@@ -92,7 +101,7 @@ export function useTauriAPI() {
     }, 30000);
 
     return () => clearInterval(healthInterval);
-  }, []);
+  }, [daemonReady]);
 
   // Audio queue player
   useEffect(() => {
@@ -483,15 +492,19 @@ export function useTauriAPI() {
       setDaemonHealth(result);
 
       if (result.success) {
+        return result; // ✅ 返回结果
       } else {
         console.warn('[Daemon] Health check failed:', result.error);
+        return result; // ✅ 返回结果（即使失败）
       }
     } catch (error) {
       console.error('[Daemon] Health check error:', error);
-      setDaemonHealth({
+      const errorResult = {
         success: false,
         error: String(error)
-      });
+      };
+      setDaemonHealth(errorResult);
+      return errorResult; // ✅ 返回错误结果
     }
   };
 
@@ -591,6 +604,7 @@ export function useTauriAPI() {
     generateTTS,
     playAudio,
     checkDaemonHealth,
+    setDaemonReady,
     addMessage,
     updateLastAssistantMessage,
     // History API

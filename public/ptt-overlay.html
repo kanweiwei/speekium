@@ -24,6 +24,12 @@
       background: transparent !important;
     }
 
+    /* Hide container when idle or error */
+    .container.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
     .ptt-card {
       display: flex;
       align-items: center;
@@ -69,7 +75,7 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <div id="container" class="container hidden">
     <div id="ptt-card" class="ptt-card idle">
       <div class="dot"></div>
       <span id="ptt-label" class="label">就绪</span>
@@ -77,6 +83,7 @@
   </div>
 
   <script type="module">
+    const container = document.getElementById('container');
     const card = document.getElementById('ptt-card');
     const label = document.getElementById('ptt-label');
 
@@ -92,14 +99,16 @@
         const state = event.payload;
         card.className = 'ptt-card ' + state;
 
+        // Show/hide overlay based on state
         switch (state) {
           case 'recording':
-            label.textContent = '录音中...';
-            break;
           case 'processing':
-            label.textContent = '处理中...';
+            container.classList.remove('hidden');
+            label.textContent = state === 'recording' ? '录音中...' : '处理中...';
             break;
           default:
+            // idle or error - hide overlay
+            container.classList.add('hidden');
             label.textContent = '就绪';
         }
       });
