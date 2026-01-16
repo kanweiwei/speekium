@@ -5,6 +5,7 @@ use tauri::{
     webview::WebviewWindowBuilder,
     Emitter, Manager, Runtime, State,
 };
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout, ChildStderr};
 use std::io::{BufReader, BufWriter, Write, BufRead, Read};
 use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
@@ -794,6 +795,40 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
 
         println!("✅ Python 守护进程已启动");
 
+        // CRITICAL: Load config and sync work_mode/recording_mode to Rust globals
+        // This ensures backend state matches config file on startup
+        {
+            let mut daemon_guard = DAEMON.lock().unwrap();
+            if let Some(ref mut daemon) = *daemon_guard {
+                match daemon.send_command("config", serde_json::json!({})) {
+                    Ok(config_response) => {
+                        if let Some(config) = config_response.get("config") {
+                            // Sync work_mode from config to Rust WORK_MODE global
+                            if let Some(work_mode_str) = config.get("work_mode").and_then(|v| v.as_str()) {
+                                if let Some(work_mode) = WorkMode::from_str(work_mode_str) {
+                                    let old_mode = *WORK_MODE.lock().unwrap();
+                                    *WORK_MODE.lock().unwrap() = work_mode;
+                                    println!("🔄 Work mode synced from config: {} → {}", old_mode.as_str(), work_mode.as_str());
+                                }
+                            }
+
+                            // Sync recording_mode from config to Rust RECORDING_MODE global
+                            if let Some(recording_mode_str) = config.get("recording_mode").and_then(|v| v.as_str()) {
+                                if let Some(recording_mode) = RecordingMode::from_str(recording_mode_str) {
+                                    let old_mode = *RECORDING_MODE.lock().unwrap();
+                                    *RECORDING_MODE.lock().unwrap() = recording_mode;
+                                    println!("🔄 Recording mode synced from config: {} → {}", old_mode.as_str(), recording_mode.as_str());
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("⚠️ Failed to load config during daemon startup: {}", e);
+                    }
+                }
+            }
+        }
+
         // Register PTT shortcut from config (after daemon is ready)
         if let Some(handle) = APP_HANDLE.get() {
             register_ptt_from_config(handle);
@@ -1433,6 +1468,17 @@ fn set_work_mode(mode: String) -> Result<(), String> {
 
     Ok(())
 }
+
+/// Get current recording mode
+#[tauri::command]
+fn get_recording_mode() -> Result<String, String> {
+    let mode = *RECORDING_MODE.lock().unwrap();
+    Ok(match mode {
+        RecordingMode::PushToTalk => "push-to-talk".to_string(),
+        RecordingMode::Continuous => "continuous".to_string(),
+    })
+}
+
 
 /// Get current application status
 #[tauri::command]
@@ -2254,6 +2300,77 @@ async fn test_custom_connection(api_key: String, base_url: String, model: String
     }
 }
 
+/// Test ZhipuAI API connection
+#[tauri::command]
+async fn test_zhipu_connection(api_key: String, base_url: String, model: String) -> Result<serde_json::Value, String> {
+    println!("🔗 测试 ZhipuAI 连接: url={}, model={}", base_url, model);
+
+    if api_key.is_empty() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "error": "API Key is empty. Please enter your ZhipuAI API key."
+        }));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let payload = serde_json::json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hi"
+            }
+        ],
+        "max_tokens": 1
+    });
+
+    // Ensure base_url doesn't end with /chat/completions
+    let url = if base_url.ends_with("/chat/completions") {
+        base_url
+    } else {
+        format!("{}/chat/completions", base_url.trim_end_matches('/'))
+    };
+
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&payload)
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                println!("✅ ZhipuAI 连接成功");
+                return Ok(serde_json::json!({
+                    "success": true,
+                    "message": "ZhipuAI connection successful"
+                }));
+            } else {
+                let status = resp.status();
+                let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                println!("❌ ZhipuAI 错误: {} - {}", status, error_text);
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": format!("API error: {} - {}", status, error_text)
+                }));
+            }
+        }
+        Err(e) => {
+            println!("❌ 连接失败: {}", e);
+            return Ok(serde_json::json!({
+                "success": false,
+                "error": format!("Connection failed: {}", e)
+            }));
+        }
+    }
+}
+
 // ============================================================================
 // Global Shortcuts
 // ============================================================================
@@ -2481,7 +2598,7 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
 }
 
 fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
     // Register show/hide window shortcut: Command+Shift+Space
     let toggle_shortcut: Shortcut = "CommandOrControl+Shift+Space".parse().unwrap();
@@ -2498,8 +2615,73 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
         }
     }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register toggle shortcut: {}", e)))?;
 
+    // Register Alt+1: Toggle work mode (conversation <-> text-input)
+    let work_mode_shortcut: Shortcut = "Alt+1".parse().unwrap();
+    app.global_shortcut().on_shortcut(work_mode_shortcut, move |_app, _shortcut, event| {
+        // Only trigger on press, not release (to avoid double toggle)
+        if event.state() != ShortcutState::Pressed {
+            return;
+        }
+
+        println!("🔄 工作模式切换快捷键触发 (Alt+1)");
+
+        // Acquire lock, toggle mode, extract name, then release immediately
+        let mode_name = {
+            let mut work_mode = WORK_MODE.lock().unwrap();
+            *work_mode = match *work_mode {
+                WorkMode::Conversation => WorkMode::TextInput,
+                WorkMode::TextInput => WorkMode::Conversation,
+            };
+            match *work_mode {
+                WorkMode::Conversation => "conversation",
+                WorkMode::TextInput => "text-input",
+            }
+        }; // Lock released here
+
+        println!("✅ 工作模式已切换为: {}", mode_name);
+
+        // Don't save config here to avoid deadlock in shortcut callback thread
+        // Frontend polling will detect the change and trigger save
+        // Note: Config will be saved by frontend when it detects the mode change
+    }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register work mode shortcut: {}", e)))?;
+
+    // Register Alt+2: Toggle recording mode (push-to-talk <-> continuous)
+    let recording_mode_shortcut: Shortcut = "Alt+2".parse().unwrap();
+    app.global_shortcut().on_shortcut(recording_mode_shortcut, move |_app, _shortcut, event| {
+        // Only trigger on press, not release (to avoid double toggle)
+        if event.state() != ShortcutState::Pressed {
+            return;
+        }
+
+        println!("🔄 录音模式切换快捷键触发 (Alt+2)");
+
+        // Acquire lock, toggle mode, extract name, then release immediately
+        let mode_name = {
+            let mut recording_mode = RECORDING_MODE.lock().unwrap();
+            *recording_mode = match *recording_mode {
+                RecordingMode::PushToTalk => RecordingMode::Continuous,
+                RecordingMode::Continuous => RecordingMode::PushToTalk,
+            };
+            match *recording_mode {
+                RecordingMode::PushToTalk => "push-to-talk",
+                RecordingMode::Continuous => "continuous",
+            }
+        }; // Lock released here
+
+        println!("✅ 录音模式已切换为: {}", mode_name);
+
+        // Don't update daemon or modify shortcuts here to avoid deadlock
+        // Frontend polling will detect the change and handle:
+        // 1. Saving config
+        // 2. Updating daemon recording mode
+        // 3. Registering/unregistering PTT shortcut
+        // Note: All side effects handled by frontend to avoid lock conflicts
+    }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register recording mode shortcut: {}", e)))?;
+
     println!("✅ 全局快捷键已注册:");
     println!("   • Command+Shift+Space - 显示/隐藏窗口");
+    println!("   • Alt+1 - 切换工作模式 (对话模式/文字输入模式)");
+    println!("   • Alt+2 - 切换录音模式 (按键录音/连续录音)");
 
     // PTT shortcut will be registered after daemon starts and config is loaded
     // See register_ptt_from_config() which is called after daemon initialization
@@ -2509,8 +2691,35 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
 
 /// Register PTT shortcut from daemon config
 fn register_ptt_from_config(app_handle: &tauri::AppHandle) {
-    // Get config from daemon
-    if let Ok(mut daemon_guard) = DAEMON.lock() {
+    // Check current recording mode - only register PTT shortcut in push-to-talk mode
+    // IMPORTANT: Release the lock immediately after checking to avoid deadlock
+    let should_register = {
+        let recording_mode = RECORDING_MODE.lock().unwrap();
+        *recording_mode != RecordingMode::Continuous
+    };
+
+    if !should_register {
+        println!("⏭️  跳过 PTT 快捷键注册 (当前为连续录音模式)");
+        return;
+    }
+
+    // Check if recording is in progress - if so, skip to avoid deadlock
+    let is_recording = {
+        let status = APP_STATUS.lock().unwrap();
+        matches!(*status, AppStatus::Recording | AppStatus::Listening)
+    };
+
+    if is_recording {
+        println!("⏭️  跳过 PTT 快捷键注册 (正在录音)");
+        // Use default shortcut without calling daemon
+        println!("⚠️ 使用默认 PTT 快捷键: Alt+3");
+        let _ = register_ptt_shortcut(app_handle, "Alt+3");
+        return;
+    }
+
+    // Try to get daemon lock with timeout - if can't get it, skip daemon call
+    // Use try_lock to avoid blocking
+    if let Ok(mut daemon_guard) = DAEMON.try_lock() {
         if let Some(ref mut daemon) = *daemon_guard {
             match daemon.send_command("config", serde_json::json!({})) {
                 Ok(config_result) => {
@@ -2520,7 +2729,7 @@ fn register_ptt_from_config(app_handle: &tauri::AppHandle) {
                                 if let Err(e) = register_ptt_shortcut(app_handle, &shortcut_str) {
                                     println!("❌ 注册 PTT 快捷键失败: {}", e);
                                     // Fallback to default
-                                    let _ = register_ptt_shortcut(app_handle, "CommandOrControl+3");
+                                    let _ = register_ptt_shortcut(app_handle, "Alt+3");
                                 }
                                 return;
                             }
@@ -2532,11 +2741,13 @@ fn register_ptt_from_config(app_handle: &tauri::AppHandle) {
                 }
             }
         }
+    } else {
+        println!("⚠️ 无法获取 daemon 锁，使用默认 PTT 快捷键");
     }
 
     // Fallback to default shortcut
-    println!("⚠️ 使用默认 PTT 快捷键: Cmd+3");
-    if let Err(e) = register_ptt_shortcut(app_handle, "CommandOrControl+3") {
+    println!("⚠️ 使用默认 PTT 快捷键: Alt+3");
+    if let Err(e) = register_ptt_shortcut(app_handle, "Alt+3") {
         println!("❌ 注册默认 PTT 快捷键失败: {}", e);
     }
 }
@@ -2714,6 +2925,8 @@ pub fn run() {
             greet,
             record_audio,
             set_recording_mode,
+            get_recording_mode,
+            update_recording_mode,
             get_work_mode,
             set_work_mode,
             get_app_status,
@@ -2732,6 +2945,7 @@ pub fn run() {
             test_openai_connection,
             test_openrouter_connection,
             test_custom_connection,
+            test_zhipu_connection,
             type_text_command,
             // Database commands
             db_create_session,
@@ -2825,3 +3039,70 @@ pub fn run() {
             }
         });
 }
+/// Update recording mode and handle PTT shortcut registration
+/// This should be called from frontend when it detects a mode change
+/// Note: This does NOT modify RECORDING_MODE state - the shortcut callback already did that
+#[tauri::command]
+fn update_recording_mode(mode: String) -> Result<(), String> {
+    println!("Handling recording mode change: {}", mode);
+
+    // Parse mode
+    let current_mode = match mode.as_str() {
+        "push-to-talk" => Ok(RecordingMode::PushToTalk),
+        "continuous" => Ok(RecordingMode::Continuous),
+        _ => Err(format!("Invalid recording mode: {}", mode)),
+    }?;
+
+    println!("Processing side effects for mode: {:?}", current_mode);
+
+    // IMPORTANT: Use try_lock to avoid blocking - if daemon is busy, skip the update
+    // This is critical because update_recording_mode may be called during recording
+    if let Ok(mut daemon_guard) = DAEMON.try_lock() {
+        if let Some(ref mut daemon) = *daemon_guard {
+            let _ = daemon.send_command_no_wait("set_recording_mode", serde_json::json!({
+                "mode": mode
+            }));
+            println!("Sent recording mode update to daemon");
+        }
+    } else {
+        println!("Daemon busy, skipping recording mode update (will retry on next poll)");
+    }
+
+    // Handle PTT shortcut registration/unregistration
+    // CRITICAL: Only handle shortcuts when NOT recording to avoid deadlock
+    let is_recording = {
+        let status = APP_STATUS.lock().unwrap();
+        matches!(*status, AppStatus::Recording | AppStatus::Listening)
+    };
+
+    if !is_recording {
+        if let Some(handle) = APP_HANDLE.get() {
+            match current_mode {
+                RecordingMode::PushToTalk => {
+                    // Register PTT shortcut asynchronously (spawn in background)
+                    let handle_clone = handle.clone();
+                    std::thread::spawn(move || {
+                        register_ptt_from_config(&handle_clone);
+                        println!("PTT shortcut registered (switched to push-to-talk)");
+                    });
+                }
+                RecordingMode::Continuous => {
+                    // Unregister PTT shortcut
+                    let mut current = CURRENT_PTT_SHORTCUT.lock().unwrap();
+                    if let Some(ref shortcut_str) = *current {
+                        if let Ok(shortcut) = shortcut_str.parse::<Shortcut>() {
+                            let _ = handle.global_shortcut().unregister(shortcut);
+                            println!("PTT shortcut unregistered (switched to continuous)");
+                        }
+                    }
+                    *current = None;
+                }
+            }
+        }
+    } else {
+        println!("Skipping PTT shortcut update (recording in progress)");
+    }
+
+    Ok(())
+}
+

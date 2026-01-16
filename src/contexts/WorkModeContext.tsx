@@ -18,8 +18,10 @@ import {
 interface WorkModeContextValue {
   /** Current work mode */
   workMode: WorkMode;
-  /** Set work mode */
+  /** Set work mode (persist to backend) */
   setWorkMode: (mode: WorkMode, source?: WorkModeChangeEvent['source']) => void;
+  /** Set work mode locally only (no backend call, used by hotkey events) */
+  setWorkModeLocal: (mode: WorkMode) => void;
   /** Switch to conversation mode */
   switchToConversation: () => void;
   /** Switch to text input mode */
@@ -54,31 +56,65 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Load work mode from localStorage and config file
+   * Also poll for changes from backend (e.g., hotkey shortcuts)
    */
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    let lastKnownMode: WorkMode | null = null;
 
     // First read from localStorage (fast loading)
     const saved = localStorage.getItem(WORK_MODE_STORAGE_KEY);
     if (saved === 'conversation' || saved === 'text-input') {
       setWorkModeState(saved);
+      lastKnownMode = saved;
     }
 
-    // Then sync from config file (ensure consistency with backend)
+    // Sync from config file and poll for changes
     const syncFromConfig = async () => {
       try {
-        const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
-        const configWorkMode = result?.config?.work_mode;
-        if (configWorkMode === 'conversation' || configWorkMode === 'text-input') {
-          setWorkModeState(configWorkMode);
-          localStorage.setItem(WORK_MODE_STORAGE_KEY, configWorkMode);
+        // Use lightweight get_work_mode command (reads from Rust state, no daemon call)
+        const currentMode = await invoke<string>('get_work_mode');
+
+        if (currentMode === 'conversation' || currentMode === 'text-input') {
+          // Only update if mode changed (avoid unnecessary re-renders)
+          if (currentMode !== lastKnownMode) {
+            console.log('[WorkMode] Mode changed (detected via polling):', currentMode);
+            setWorkModeState(currentMode);
+            localStorage.setItem(WORK_MODE_STORAGE_KEY, currentMode);
+            lastKnownMode = currentMode;
+
+            // Save to config file (persist the change)
+            try {
+              const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
+              if (result.success && result.config) {
+                const updatedConfig = {
+                  ...result.config,
+                  work_mode: currentMode,
+                };
+                await invoke<{ success: boolean; error?: string }>('save_config', {
+                  config: updatedConfig,
+                });
+              }
+            } catch (saveError) {
+              console.error('[WorkMode] Failed to save config after detecting change:', saveError);
+            }
+          }
         }
       } catch (error) {
-        console.error('[WorkMode] Failed to load from config file:', error);
+        console.error('[WorkMode] Failed to get work mode:', error);
       }
     };
 
+    // Initial sync
     syncFromConfig();
+
+    // Poll every 500ms for config changes (lightweight operation)
+    const intervalId = setInterval(syncFromConfig, 500);
+
+    return () => {
+      clearInterval(intervalId);
+    };
   }, []);
 
   /**
@@ -91,6 +127,15 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
     // Persist to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(WORK_MODE_STORAGE_KEY, mode);
+    }
+
+    // CRITICAL: Update backend WORK_MODE state immediately
+    // This ensures PTT shortcut and other backend features use the correct mode
+    try {
+      await invoke('set_work_mode', { mode });
+      console.log('[WorkMode] Backend state updated to:', mode);
+    } catch (error) {
+      console.error('[WorkMode] Failed to update backend state:', error);
     }
 
     // Save to config file (Python daemon reads from here)
@@ -124,6 +169,21 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
   }, [workMode]);
 
   /**
+   * Set work mode locally without calling backend
+   * Used when the backend has already saved the config (e.g., hotkey events)
+   */
+  const setWorkModeLocal = useCallback((mode: WorkMode) => {
+    // Update state
+    setWorkModeState(mode);
+
+    // Persist to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(WORK_MODE_STORAGE_KEY, mode);
+    }
+    // Note: No backend call - backend already saved the config
+  }, []);
+
+  /**
    * Switch to conversation mode
    */
   const switchToConversation = useCallback(() => {
@@ -150,6 +210,7 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
   const contextValue: WorkModeContextValue = {
     workMode,
     setWorkMode,
+    setWorkModeLocal,
     switchToConversation,
     switchToText,
     isConversationMode,

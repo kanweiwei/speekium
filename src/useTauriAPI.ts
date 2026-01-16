@@ -283,73 +283,81 @@ export function useTauriAPI() {
       let fullResponse = '';
       let assistantMessageAdded = false;
 
+      // Track unlisten functions safely
+      let unlistenChunk: (() => void) | null = null;
+      let unlistenDone: (() => void) | null = null;
+      let unlistenError: (() => void) | null = null;
+
       // Listen for streaming events
       const { listen } = await import('@tauri-apps/api/event');
 
-      const unlistenChunk = await listen<string>('chat-chunk', (event) => {
-        const chunk = event.payload;
-        fullResponse += chunk;
+      try {
+        unlistenChunk = await listen<string>('chat-chunk', (event) => {
+          const chunk = event.payload;
+          fullResponse += chunk;
 
 
-        // Real-time UI update
-        setMessages(prev => {
-          if (!assistantMessageAdded) {
-            // First time, add new message
-            assistantMessageAdded = true;
-            return [...prev, {
-              role: 'assistant',
-              content: fullResponse
-            }];
-          } else {
-            // Update last assistant message
-            const newMessages = [...prev];
-            const lastIndex = newMessages.length - 1;
-
-            // Check if last message is assistant
-            if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
-              newMessages[lastIndex] = {
-                role: 'assistant',
-                content: fullResponse
-              };
-              return newMessages;
-            } else {
-              // If last message is not assistant, add new message
+          // Real-time UI update
+          setMessages(prev => {
+            if (!assistantMessageAdded) {
+              // First time, add new message
+              assistantMessageAdded = true;
               return [...prev, {
                 role: 'assistant',
                 content: fullResponse
               }];
+            } else {
+              // Update last assistant message
+              const newMessages = [...prev];
+              const lastIndex = newMessages.length - 1;
+
+              // Check if last message is assistant
+              if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+                newMessages[lastIndex] = {
+                  role: 'assistant',
+                  content: fullResponse
+                };
+                return newMessages;
+              } else {
+                // If last message is not assistant, add new message
+                return [...prev, {
+                  role: 'assistant',
+                  content: fullResponse
+                }];
+              }
             }
-          }
+          });
         });
-      });
 
-      const unlistenDone = await listen('chat-done', () => {
-        unlistenChunk();
-        unlistenDone();
-        unlistenError();
+        unlistenDone = await listen('chat-done', () => {
+          // Safely unlisten all
+          unlistenChunk?.();
+          unlistenDone?.();
+          unlistenError?.();
 
-        resolve({
-          success: true,
-          content: fullResponse
+          resolve({
+            success: true,
+            content: fullResponse
+          });
         });
-      });
 
-      const unlistenError = await listen<string>('chat-error', (event) => {
-        console.error('[Chat] Stream error:', event.payload);
-        unlistenChunk();
-        unlistenDone();
-        unlistenError();
+        unlistenError = await listen<string>('chat-error', (event) => {
+          console.error('[Chat] Stream error:', event.payload);
+          // Safely unlisten all
+          unlistenChunk?.();
+          unlistenDone?.();
+          unlistenError?.();
 
-        reject(new Error(event.payload));
-      });
+          reject(new Error(event.payload));
+        });
 
-      // Call Rust command to start streaming response
-      try {
+        // Call Rust command to start streaming response
         await invoke('chat_llm_stream', { text });
       } catch (error) {
-        unlistenChunk();
-        unlistenDone();
-        unlistenError();
+        // Safely unlisten all (only if they were set up)
+        unlistenChunk?.();
+        unlistenDone?.();
+        unlistenError?.();
         reject(error);
       }
     });
@@ -360,82 +368,91 @@ export function useTauriAPI() {
       let fullResponse = '';
       let assistantMessageAdded = false;
 
+      // Track unlisten functions safely
+      let unlistenTextChunk: (() => void) | null = null;
+      let unlistenAudioChunk: (() => void) | null = null;
+      let unlistenDone: (() => void) | null = null;
+      let unlistenError: (() => void) | null = null;
+
       // Listen for streaming events
       const { listen } = await import('@tauri-apps/api/event');
 
-      const unlistenTextChunk = await listen<string>('tts-text-chunk', (event) => {
-        const chunk = event.payload;
-        fullResponse += chunk;
+      try {
+        unlistenTextChunk = await listen<string>('tts-text-chunk', (event) => {
+          const chunk = event.payload;
+          fullResponse += chunk;
 
 
-        // Real-time UI update
-        setMessages(prev => {
-          if (!assistantMessageAdded) {
-            assistantMessageAdded = true;
-            return [...prev, {
-              role: 'assistant',
-              content: fullResponse
-            }];
-          } else {
-            // Update last assistant message
-            const newMessages = [...prev];
-            const lastIndex = newMessages.length - 1;
-
-            // Check if last message is assistant
-            if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
-              newMessages[lastIndex] = {
-                role: 'assistant',
-                content: fullResponse
-              };
-              return newMessages;
-            } else {
-              // If last message is not assistant, add new message
+          // Real-time UI update
+          setMessages(prev => {
+            if (!assistantMessageAdded) {
+              assistantMessageAdded = true;
               return [...prev, {
                 role: 'assistant',
                 content: fullResponse
               }];
+            } else {
+              // Update last assistant message
+              const newMessages = [...prev];
+              const lastIndex = newMessages.length - 1;
+
+              // Check if last message is assistant
+              if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+                newMessages[lastIndex] = {
+                  role: 'assistant',
+                  content: fullResponse
+                };
+                return newMessages;
+              } else {
+                // If last message is not assistant, add new message
+                return [...prev, {
+                  role: 'assistant',
+                  content: fullResponse
+                }];
+              }
             }
-          }
+          });
         });
-      });
 
-      const unlistenAudioChunk = await listen<{ audio_path: string; text: string }>('tts-audio-chunk', (event) => {
-        const { audio_path, text: audioText } = event.payload;
+        unlistenAudioChunk = await listen<{ audio_path: string; text: string }>('tts-audio-chunk', (event) => {
+          const { audio_path, text: audioText } = event.payload;
 
-        // Add to audio queue
-        setAudioQueue(prev => [...prev, { path: audio_path, text: audioText }]);
-      });
-
-      const unlistenDone = await listen('tts-done', () => {
-        unlistenTextChunk();
-        unlistenAudioChunk();
-        unlistenDone();
-        unlistenError();
-
-        resolve({
-          success: true,
-          content: fullResponse
+          // Add to audio queue
+          setAudioQueue(prev => [...prev, { path: audio_path, text: audioText }]);
         });
-      });
 
-      const unlistenError = await listen<string>('tts-error', (event) => {
-        console.error('[TTS] Stream error:', event.payload);
-        unlistenTextChunk();
-        unlistenAudioChunk();
-        unlistenDone();
-        unlistenError();
+        unlistenDone = await listen('tts-done', () => {
+          // Safely unlisten all
+          unlistenTextChunk?.();
+          unlistenAudioChunk?.();
+          unlistenDone?.();
+          unlistenError?.();
 
-        reject(new Error(event.payload));
-      });
+          resolve({
+            success: true,
+            content: fullResponse
+          });
+        });
 
-      // Call Rust command to start TTS streaming response
-      try {
+        unlistenError = await listen<string>('tts-error', (event) => {
+          console.error('[TTS] Stream error:', event.payload);
+          // Safely unlisten all
+          unlistenTextChunk?.();
+          unlistenAudioChunk?.();
+          unlistenDone?.();
+          unlistenError?.();
+
+          reject(new Error(event.payload));
+        });
+
+        // Call Rust command to start TTS streaming response
         await invoke('chat_tts_stream', { text, autoPlay: true });
       } catch (error) {
-        unlistenTextChunk();
-        unlistenAudioChunk();
-        unlistenDone();
-        unlistenError();
+        // Safely unlisten all (only if they were set up)
+        unlistenTextChunk?.();
+        unlistenAudioChunk?.();
+        unlistenDone?.();
+        unlistenError?.();
         reject(error);
       }
     });
