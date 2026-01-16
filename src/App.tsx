@@ -11,6 +11,7 @@ import type { ToastType } from './components/SystemToast';
 import { CollapsibleInput } from './components/CollapsibleInput';
 import { historyAPI } from './useTauriAPI';
 import { useWorkMode } from './contexts/WorkModeContext';
+import type { WorkModeChangeEvent } from './types/workMode';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -247,6 +248,7 @@ function App() {
   const isProcessingRef = React.useRef(isProcessing);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const recordModeRef = React.useRef(recordMode); // Track current mode for immediate access
+  const isUpdatingFromPollingRef = React.useRef(false); // Track if update is from Alt+2 shortcut
 
   React.useEffect(() => {
     isRecordingRef.current = isRecording;
@@ -266,13 +268,73 @@ function App() {
     }
   }, [currentSessionId]);
 
+  // Poll recording mode from backend (for Alt+2 shortcut changes)
+  React.useEffect(() => {
+    if (daemonStatus !== 'ready') {
+      return;
+    }
+
+    // Initialize with current recordMode state to avoid unnecessary updates on first poll
+    let lastKnownMode: 'push-to-talk' | 'continuous' | null = recordMode;
+
+    // Poll for recording mode changes from backend (e.g., Alt+2 shortcut)
+    const pollRecordingMode = async () => {
+      try {
+        const currentMode = await invoke<string>('get_recording_mode');
+
+        if (currentMode === 'push-to-talk' || currentMode === 'continuous') {
+          // Only update if mode changed (avoid unnecessary re-renders)
+          if (currentMode !== lastKnownMode) {
+            console.log('[App] Recording mode changed (detected via polling):', currentMode);
+            isUpdatingFromPollingRef.current = true;
+            setRecordMode(currentMode);
+            lastKnownMode = currentMode;
+
+            // Update daemon and handle PTT shortcut registration
+            try {
+              await invoke('update_recording_mode', { mode: currentMode });
+            } catch (error) {
+              console.error('[App] Failed to update recording mode:', error);
+            }
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+              isUpdatingFromPollingRef.current = false;
+            }, 200);
+          }
+        }
+      } catch (error) {
+        console.error('[App] Failed to get recording mode:', error);
+      }
+    };
+
+    // Initial poll to sync state
+    pollRecordingMode();
+
+    // Poll every 500ms for mode changes (lightweight operation)
+    const intervalId = setInterval(pollRecordingMode, 500);
+
+    return () => {
+      clearInterval(intervalId);
+      isUpdatingFromPollingRef.current = false;
+    };
+  }, [daemonStatus]);
+
   // Sync recordMode to ref for immediate access in async operations
   React.useEffect(() => {
     recordModeRef.current = recordMode;
 
     // Notify Rust backend about mode change (only after daemon is ready)
+    // IMPORTANT: Skip this if the change was triggered by polling (Alt+2 shortcut)
+    // because the shortcut callback already updated the Rust state
     const notifyModeChange = async () => {
       if (daemonStatus !== 'ready') {
+        return;
+      }
+
+      // Skip if this update was triggered by Alt+2 shortcut polling
+      if (isUpdatingFromPollingRef.current) {
+        console.log('[App] Skipping set_recording_mode (update from Alt+2 shortcut)');
         return;
       }
 
@@ -482,6 +544,22 @@ function App() {
     }
   }, [recordMode]);
 
+  // Show toast when workMode changes (e.g., from hotkey or settings)
+  const previousWorkModeRef = React.useRef<WorkMode | null>(null);
+  React.useEffect(() => {
+    // Only show toast if mode actually changed (skip initial render)
+    if (previousWorkModeRef.current !== null && previousWorkModeRef.current !== workMode) {
+      console.log('[App] Work mode changed from', previousWorkModeRef.current, 'to', workMode);
+      setToast({
+        show: true,
+        type: workMode === 'conversation' ? 'work-mode-conversation' : 'work-mode-text-input',
+        workMode,
+        duration: 2000,
+      });
+    }
+    previousWorkModeRef.current = workMode;
+  }, [workMode]);
+
   // Continuous listening mode
   React.useEffect(() => {
     // Only start continuous listening after daemon is ready
@@ -606,27 +684,28 @@ function App() {
       })()
     );
 
-    // 监听工作模式切换事件 (Alt+1 快捷键)
+    // 监听工作模式变化（通过轮询检测），显示 Toast
+    // 注意：快捷键不再使用事件，而是通过配置轮询来检测变化
     unlisteners.push(
       (async () => {
-        const unlisten = await listen<string>('work-mode-changed', (event) => {
-          console.log('[Toast] Received work-mode-changed event:', event.payload);
-          const newMode = event.payload as WorkMode;
-          // 同步更新 WorkModeContext
-          setWorkMode(newMode, 'hotkey');
-          // 显示 Toast
-          setToast({
-            show: true,
-            type: newMode === 'conversation' ? 'work-mode-conversation' : 'work-mode-text-input',
-            workMode: newMode,
-            duration: 2000,
-          });
+        const unlisten = await listen<WorkModeChangeEvent>('work-mode-change', (event) => {
+          console.log('[Toast] Received work-mode-change event:', event.payload);
+          const { mode, source } = event.payload;
+          // 只对非快捷键触发的变化显示 Toast（快捷键的 Toast 由 WorkModeContext 处理）
+          if (source !== 'hotkey') {
+            setToast({
+              show: true,
+              type: mode === 'conversation' ? 'work-mode-conversation' : 'work-mode-text-input',
+              workMode: mode,
+              duration: 2000,
+            });
+          }
         });
         return unlisten;
       })()
     );
 
-    // 监听录音模式切换事件 (Alt+2 快捷键)
+    // 监听录音模式切换事件 (Alt+2 快捷键) - 这个还保留用于设置界面
     unlisteners.push(
       (async () => {
         const unlisten = await listen<string>('recording-mode-changed', (event) => {

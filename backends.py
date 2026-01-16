@@ -554,6 +554,20 @@ class CustomBackend(OpenAIBackend):
         super().__init__(system_prompt, api_key, base_url, model, max_history)
 
 
+class ZhipuBackend(OpenAIBackend):
+    """ZhipuAI (BigModel) API backend - Chinese AI service"""
+
+    def __init__(
+        self,
+        system_prompt: str,
+        api_key: str,
+        model: str = "glm-4-flash",
+        base_url: str = "https://open.bigmodel.cn/api/paas/v4",
+        max_history: int = 10,
+    ):
+        super().__init__(system_prompt, api_key, base_url, model, max_history)
+
+
 def create_backend(backend_type: str, system_prompt: str, **kwargs) -> LLMBackend:
     """Factory function to create LLM backend"""
     backends = {
@@ -562,6 +576,7 @@ def create_backend(backend_type: str, system_prompt: str, **kwargs) -> LLMBacken
         "openai": OpenAIBackend_Official,
         "openrouter": OpenRouterBackend,
         "custom": CustomBackend,
+        "zhipu": ZhipuBackend,
     }
 
     if backend_type not in backends:

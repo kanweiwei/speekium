@@ -95,6 +95,11 @@ CUSTOM_API_KEY = ""  # API key for custom endpoint
 CUSTOM_BASE_URL = ""  # Base URL (e.g., http://localhost:8000/v1)
 CUSTOM_MODEL = ""  # Model name
 
+# ZhipuAI config (only used when LLM_BACKEND="zhipu")
+ZHIPU_API_KEY = ""  # Get from https://open.bigmodel.cn/usercenter/apikeys
+ZHIPU_MODEL = "glm-4-flash"  # Model: glm-4-plus, glm-4, glm-4-flash, glm-4-air
+ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"  # ZhipuAI API endpoint
+
 # ===== Conversation Memory =====
 MAX_HISTORY = 10  # Max conversation turns to keep (each turn = user + assistant)
 CLEAR_HISTORY_KEYWORDS = [
@@ -216,6 +221,42 @@ class VoiceAssistant:
             logger.warning("tts_config_load_failed", error=str(e), fallback="edge")
             self._tts_backend = "edge"
 
+    def _load_llm_config(self):
+        """Load LLM backend configuration from config file and update global variables."""
+        try:
+            from config_manager import ConfigManager
+
+            config = ConfigManager.load()
+
+            # Update global LLM configuration variables
+            global LLM_BACKEND, OLLAMA_MODEL, OLLAMA_BASE_URL
+            global OPENAI_API_KEY, OPENAI_MODEL
+            global OPENROUTER_API_KEY, OPENROUTER_MODEL
+            global CUSTOM_API_KEY, CUSTOM_BASE_URL, CUSTOM_MODEL
+            global ZHIPU_API_KEY, ZHIPU_MODEL, ZHIPU_BASE_URL
+
+            LLM_BACKEND = config.get("llm_backend", "ollama")
+            OLLAMA_MODEL = config.get("ollama_model", OLLAMA_MODEL)
+            OLLAMA_BASE_URL = config.get("ollama_base_url", OLLAMA_BASE_URL)
+
+            OPENAI_API_KEY = config.get("openai_api_key", OPENAI_API_KEY)
+            OPENAI_MODEL = config.get("openai_model", OPENAI_MODEL)
+
+            OPENROUTER_API_KEY = config.get("openrouter_api_key", OPENROUTER_API_KEY)
+            OPENROUTER_MODEL = config.get("openrouter_model", OPENROUTER_MODEL)
+
+            CUSTOM_API_KEY = config.get("custom_api_key", CUSTOM_API_KEY)
+            CUSTOM_BASE_URL = config.get("custom_base_url", CUSTOM_BASE_URL)
+            CUSTOM_MODEL = config.get("custom_model", CUSTOM_MODEL)
+
+            ZHIPU_API_KEY = config.get("zhipu_api_key", ZHIPU_API_KEY)
+            ZHIPU_MODEL = config.get("zhipu_model", ZHIPU_MODEL)
+            ZHIPU_BASE_URL = config.get("zhipu_base_url", ZHIPU_BASE_URL)
+
+            logger.info("llm_config_loaded", backend=LLM_BACKEND)
+        except Exception as e:
+            logger.warning("llm_config_load_failed", error=str(e), fallback="default")
+
     def get_tts_backend(self):
         """Get current TTS backend from config (refreshes on each call)."""
         self._load_tts_config()  # Refresh to get latest config
@@ -247,6 +288,33 @@ class VoiceAssistant:
         return self.vad_model
 
     def load_llm(self):
+        # Always reload configuration to get latest settings
+        self._load_llm_config()
+
+        # Check if backend type changed, recreate if needed
+        if self.llm_backend is not None:
+            current_backend_type = (
+                getattr(self.llm_backend, "__class__", None).__name__
+                if hasattr(self.llm_backend, "__class__")
+                else None
+            )
+            # Map backend class names to backend types
+            backend_type_map = {
+                "OllamaBackend": "ollama",
+                "OpenAIBackend_Official": "openai",
+                "OpenRouterBackend": "openrouter",
+                "CustomBackend": "custom",
+                "ZhipuBackend": "zhipu",
+            }
+            current_backend = backend_type_map.get(current_backend_type, "")
+
+            # If backend type changed, recreate backend
+            if current_backend != LLM_BACKEND:
+                logger.info(
+                    "backend_type_changed", from_backend=current_backend, to_backend=LLM_BACKEND
+                )
+                self.llm_backend = None
+
         if self.llm_backend is None:
             set_component("LLM")
             logger.info("backend_initializing", backend=LLM_BACKEND)
@@ -281,6 +349,15 @@ class VoiceAssistant:
                     api_key=CUSTOM_API_KEY,
                     base_url=CUSTOM_BASE_URL,
                     model=CUSTOM_MODEL,
+                    max_history=MAX_HISTORY,
+                )
+            elif LLM_BACKEND == "zhipu":
+                self.llm_backend = create_backend(
+                    LLM_BACKEND,
+                    SYSTEM_PROMPT,
+                    api_key=ZHIPU_API_KEY,
+                    base_url=ZHIPU_BASE_URL,
+                    model=ZHIPU_MODEL,
                     max_history=MAX_HISTORY,
                 )
             else:

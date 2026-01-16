@@ -74,6 +74,13 @@ const CUSTOM_MODELS = [
   'llama-2-7b',
 ];
 
+const ZHIPU_MODELS = [
+  'glm-4-plus',
+  'glm-4',
+  'glm-4-flash',
+  'glm-4-air',
+];
+
 interface SettingsProps {
   isOpen: boolean;
   onClose: () => void;
@@ -114,6 +121,7 @@ export function Settings({
     openrouter: false,
     ollama: false,
     custom: false,
+    zhipu: false,
   });
   const [ollamaModels, setOllamaModels] = React.useState<string[]>(OLLAMA_MODELS);
   const [isLoadingOllamaModels, setIsLoadingOllamaModels] = React.useState(false);
@@ -123,6 +131,20 @@ export function Settings({
       setLocalConfig({ ...config });
     }
   }, [config]);
+
+  // Sync workMode prop to localConfig (for hotkey-triggered changes)
+  React.useEffect(() => {
+    if (workMode && localConfig.work_mode !== workMode) {
+      setLocalConfig(prev => ({ ...prev, work_mode: workMode }));
+    }
+  }, [workMode]);
+
+  // Sync recordMode prop to localConfig (for hotkey-triggered changes)
+  React.useEffect(() => {
+    if (recordMode && localConfig.recording_mode !== recordMode) {
+      setLocalConfig(prev => ({ ...prev, recording_mode: recordMode }));
+    }
+  }, [recordMode]);
 
   // 清理音频播放器
   React.useEffect(() => {
@@ -187,6 +209,16 @@ export function Settings({
           apiKey: localConfig.custom_api_key || '',
           baseUrl: localConfig.custom_base_url || '',
           model: localConfig.custom_model || ''
+        });
+      } else if (backend === 'zhipu') {
+        result = await invoke<{
+          success: boolean;
+          message?: string;
+          error?: string;
+        }>('test_zhipu_connection', {
+          apiKey: localConfig.zhipu_api_key || '',
+          baseUrl: localConfig.zhipu_base_url || 'https://open.bigmodel.cn/api/paas/v4',
+          model: localConfig.zhipu_model || 'glm-4-flash'
         });
       } else if (backend === 'claude') {
         // Claude Code CLI 不需要测试连接，直接返回成功
@@ -566,6 +598,7 @@ export function Settings({
                       <SelectContent className="bg-muted border-border">
                         <SelectItem value="claude">Claude Code CLI</SelectItem>
                         <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                        <SelectItem value="zhipu">智谱AI (BigModel)</SelectItem>
                         <SelectItem value="openai">OpenAI</SelectItem>
                         <SelectItem value="openrouter">OpenRouter</SelectItem>
                         <SelectItem value="custom">Custom (OpenAI-compatible)</SelectItem>
@@ -831,6 +864,103 @@ export function Settings({
                         )}
                         <p className="text-xs text-muted-foreground">
                           Select from common models or enter your model name
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ZhipuAI Configuration */}
+                  {(localConfig.llm_backend || 'ollama') === 'zhipu' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="zhipu-api-key" className="text-foreground">智谱AI API Key</Label>
+                        <div className="relative">
+                          <Input
+                            id="zhipu-api-key"
+                            type={showApiKey ? 'text' : 'password'}
+                            value={localConfig.zhipu_api_key || ''}
+                            onChange={(e) => updateLocalConfig('zhipu_api_key', e.target.value)}
+                            placeholder={t('settings.placeholders.apiKey')}
+                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.hints.apiKey')}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="zhipu-model" className="text-foreground">Model</Label>
+                        {customModelInput.zhipu ? (
+                          <div className="flex gap-2">
+                            <Input
+                              id="zhipu-model"
+                              value={localConfig.zhipu_model || ''}
+                              onChange={(e) => updateLocalConfig('zhipu_model', e.target.value)}
+                              placeholder="Enter custom model name"
+                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCustomModelInput(prev => ({ ...prev, zhipu: false }))}
+                              className="h-9 px-3"
+                            >
+                              ← Select
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Select
+                              value={localConfig.zhipu_model || 'glm-4-flash'}
+                              onValueChange={(value) => {
+                                if (value === '__custom__') {
+                                  setCustomModelInput(prev => ({ ...prev, zhipu: true }));
+                                } else {
+                                  updateLocalConfig('zhipu_model', value);
+                                }
+                              }}
+                            >
+                              <SelectTrigger id="zhipu-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1">
+                                <SelectValue placeholder="Select a model" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-muted border-border max-h-60">
+                                {ZHIPU_MODELS.map(model => (
+                                  <SelectItem key={model} value={model} className="text-foreground">
+                                    {model}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="__custom__" className="text-foreground">
+                                  Custom model...
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Select from popular ZhipuAI models or enter a custom model name
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="zhipu-base-url" className="text-foreground">API Base URL</Label>
+                        <Input
+                          id="zhipu-base-url"
+                          value={localConfig.zhipu_base_url || 'https://open.bigmodel.cn/api/paas/v4'}
+                          onChange={(e) => updateLocalConfig('zhipu_base_url', e.target.value)}
+                          placeholder="https://open.bigmodel.cn/api/paas/v4"
+                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          ZhipuAI API endpoint (default: https://open.bigmodel.cn/api/paas/v4)
                         </p>
                       </div>
                     </>

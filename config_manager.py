@@ -9,18 +9,15 @@ APP_NAME = "speekium"
 def get_config_dir() -> str:
     """Get application config directory (cross-platform)
 
-    - macOS: ~/Library/Application Support/speekium/
+    - macOS: ~/.config/speekium/
     - Windows: C:/Users/<user>/AppData/Roaming/speekium/
     - Linux: ~/.config/speekium/
     """
-    if sys.platform == "darwin":
-        # macOS
-        base = os.path.expanduser("~/Library/Application Support")
-    elif sys.platform == "win32":
+    if sys.platform == "win32":
         # Windows
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
     else:
-        # Linux and others
+        # macOS, Linux and others - use ~/.config
         base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
 
     config_dir = os.path.join(base, APP_NAME)
@@ -48,9 +45,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "max_history": 10,
     "work_mode": "conversation",  # conversation | text-input
     "push_to_talk_hotkey": {
-        "modifiers": ["CmdOrCtrl"],
+        "modifiers": ["Alt"],
         "key": "Digit3",
-        "displayName": "⌘3",
+        "displayName": "⌥3",
     },
 }
 

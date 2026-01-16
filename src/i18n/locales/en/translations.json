@@ -121,6 +121,7 @@
       "silenceTimeout": "Silence Detection Duration",
       "seconds": "s",
       "llmBackend": "Service Provider",
+      "zhipuApiKey": "ZhipuAI API Key",
       "apiKey": "API Key",
       "ollamaModel": "Model Name",
       "ollamaUrl": "API URL",
