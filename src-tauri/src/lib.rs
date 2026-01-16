@@ -931,26 +931,49 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                         let main_window = app_handle.get_webview_window("main");
                         let overlay_window = app_handle.get_webview_window("ptt-overlay");
 
+                        // Debug: check if overlay window exists
+                        if overlay_window.is_none() {
+                            println!("⚠️ PTT overlay 窗口不存在！");
+                        }
+
                         // Send state to floating window and control visibility
                         if let Some(ref overlay) = overlay_window {
                             match ptt_event {
                                 "listening" => {
                                     // Show overlay in listening state (continuous mode waiting for speech)
-                                    let _ = overlay.show();
+                                    println!("🎤 PTT: 显示 overlay (listening)");
+                                    let _ = overlay.set_ignore_cursor_events(false);
+                                    match overlay.show() {
+                                        Ok(_) => println!("✅ overlay.show() 成功"),
+                                        Err(e) => println!("❌ overlay.show() 失败: {}", e),
+                                    }
                                     let _ = overlay.emit("ptt-state", "listening");
                                 }
                                 "detected" => {
                                     // Speech detected, transitioning to recording
+                                    println!("🎤 PTT: 显示 overlay (detected)");
+                                    let _ = overlay.set_ignore_cursor_events(false);
+                                    match overlay.show() {
+                                        Ok(_) => println!("✅ overlay.show() 成功"),
+                                        Err(e) => println!("❌ overlay.show() 失败: {}", e),
+                                    }
                                     let _ = overlay.emit("ptt-state", "detected");
                                 }
                                 "recording" => {
-                                    let _ = overlay.show();
+                                    println!("🎤 PTT: 显示 overlay (recording)");
+                                    let _ = overlay.set_ignore_cursor_events(false);
+                                    match overlay.show() {
+                                        Ok(_) => println!("✅ overlay.show() 成功"),
+                                        Err(e) => println!("❌ overlay.show() 失败: {}", e),
+                                    }
                                     let _ = overlay.emit("ptt-state", "recording");
                                 }
                                 "processing" => {
+                                    println!("🎤 PTT: 处理中，不显示 overlay");
                                     let _ = overlay.emit("ptt-state", "processing");
                                 }
                                 "idle" | "error" => {
+                                    println!("🎤 PTT: 隐藏 overlay");
                                     let _ = overlay.hide();
                                     let _ = overlay.emit("ptt-state", "idle");
                                 }
@@ -2910,9 +2933,10 @@ fn calculate_overlay_position<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(
 fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<dyn std::error::Error>> {
     // Calculate initial position
     let (x, y) = calculate_overlay_position(app)?;
+    println!("🔧 创建 PTT overlay 窗口，位置: ({}, {})", x, y);
 
     // Create PTT floating window (transparent window)
-    let _overlay = WebviewWindowBuilder::new(
+    let overlay = WebviewWindowBuilder::new(
         app,
         "ptt-overlay",
         tauri::WebviewUrl::App("ptt-overlay.html".into())
@@ -2931,6 +2955,14 @@ fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<d
     .build()?;
 
     println!("✅ PTT 浮动窗口已创建 ({}x{} @ {}, {})", OVERLAY_WIDTH, OVERLAY_HEIGHT, x, y);
+    println!("🔍 Overlay label: {:?}", overlay.label());
+
+    // Verify window can be retrieved immediately after creation
+    if let Some(retrieved) = app.get_webview_window("ptt-overlay") {
+        println!("✅ 窗口创建后立即检索成功");
+    } else {
+        println!("❌ 窗口创建后立即检索失败！");
+    }
 
     Ok(())
 }
