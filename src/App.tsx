@@ -34,6 +34,7 @@ import { useTranslation } from '@/i18n';
 import type { WorkMode } from './types/workMode';
 import { parseHotkeyDisplay } from '@/utils/hotkeyParser';
 import type { HotkeyConfig } from '@/types/hotkey';
+import { SpeekiumIcon } from './components/SpeekiumIcon';
 
 // Empty state component
 function EmptyState({
@@ -59,9 +60,7 @@ function EmptyState({
     <div className="flex flex-col items-center justify-center h-full px-4">
       {/* Brand icon */}
       <div className="relative mb-8">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-          <Mic className="w-10 h-10 text-white" />
-        </div>
+        <SpeekiumIcon size={80} className="drop-shadow-lg shadow-blue-500/20" />
         <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 opacity-20 blur-xl" />
       </div>
 
