@@ -1048,6 +1048,12 @@ class SpeekiumDaemon:
         elif command == "get_daemon_state":
             # Get current daemon state
             return await self.handle_get_daemon_state()
+        elif command == "set_recording_mode":
+            # Set recording mode (push-to-talk or continuous)
+            mode = args.get("mode", "push-to-talk")
+            self._log(f"🎛️ Recording mode set to: {mode}")
+            # Note: Mode is stored in Rust side, this is just for logging/acknowledgment
+            return {"success": True, "mode": mode}
         elif command == "exit":
             self._log("👋 收到退出命令")
             self._cleanup()
