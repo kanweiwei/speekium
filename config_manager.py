@@ -95,13 +95,19 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 class ConfigManager:
     @staticmethod
-    def load() -> dict[str, Any]:
-        """Load configuration file"""
-        print(f"📖 正在加载配置文件: {CONFIG_PATH}", file=sys.stderr)
-        print(f"📖 文件是否存在: {os.path.exists(CONFIG_PATH)}", file=sys.stderr)
+    def load(silent: bool = False) -> dict[str, Any]:
+        """Load configuration file
+
+        Args:
+            silent: If True, suppress log output (useful for frequent polling)
+        """
+        if not silent:
+            print(f"📖 正在加载配置文件: {CONFIG_PATH}", file=sys.stderr)
+            print(f"📖 文件是否存在: {os.path.exists(CONFIG_PATH)}", file=sys.stderr)
 
         if not os.path.exists(CONFIG_PATH):
-            print(f"📝 配置文件不存在，创建默认配置文件", file=sys.stderr)
+            if not silent:
+                print(f"📝 配置文件不存在，创建默认配置文件", file=sys.stderr)
             ConfigManager.save(DEFAULT_CONFIG)
             return DEFAULT_CONFIG.copy()
 
@@ -110,15 +116,20 @@ class ConfigManager:
                 config = json.load(f)
                 # Merge with defaults to ensure all fields exist
                 merged = {**DEFAULT_CONFIG, **config}
-                print(f"✅ 配置文件加载成功", file=sys.stderr)
-                print(f"📊 当前 LLM 服务商: {merged.get('llm_provider')}", file=sys.stderr)
-                providers = merged.get("llm_providers", [])
-                for p in providers:
-                    if p.get("name") == "zhipu":
-                        print(f"📊 智谱 API Key 长度: {len(p.get('api_key', ''))}", file=sys.stderr)
+                if not silent:
+                    print(f"✅ 配置文件加载成功", file=sys.stderr)
+                    print(f"📊 当前 LLM 服务商: {merged.get('llm_provider')}", file=sys.stderr)
+                    providers = merged.get("llm_providers", [])
+                    for p in providers:
+                        if p.get("name") == "zhipu":
+                            print(
+                                f"📊 智谱 API Key 长度: {len(p.get('api_key', ''))}",
+                                file=sys.stderr,
+                            )
                 return merged
         except Exception as e:
-            print(f"❌ 配置文件加载失败: {e}", file=sys.stderr)
+            if not silent:
+                print(f"❌ 配置文件加载失败: {e}", file=sys.stderr)
             return DEFAULT_CONFIG.copy()
 
     @staticmethod

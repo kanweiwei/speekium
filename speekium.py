@@ -523,6 +523,7 @@ class VoiceAssistant:
             blocksize=chunk_size,
             callback=callback,
         ):
+            config_check_counter = 0
             while not recording_done:
                 # Check for interrupt signal (e.g., mode change)
                 # Check every 10ms for faster response
@@ -530,7 +531,26 @@ class VoiceAssistant:
                     logger.info("recording_interrupted")
                     recording_done = True
                     break
-                sd.sleep(10)  # Reduced from 50ms for faster interrupt response
+
+                # Also check config file for recording mode changes
+                # This ensures mode changes are detected even if interrupt command is queued
+                # Check every 5 iterations = 250ms interval (50ms sleep * 5)
+                config_check_counter += 1
+                if config_check_counter % 5 == 0:
+                    try:
+                        from config_manager import ConfigManager
+
+                        config = ConfigManager.load(silent=True)
+                        config_mode = config.get("recording_mode", "continuous")
+                        # If mode is not continuous, abort recording
+                        if config_mode != "continuous":
+                            logger.info(f"recording_mode_changed_to_{config_mode}, aborting")
+                            recording_done = True
+                            break
+                    except Exception:
+                        pass  # Ignore config read errors to avoid breaking VAD loop
+
+                sd.sleep(50)  # Sleep for 50ms
 
         if not frames or speech_chunks < min_speech_chunks:
             return None

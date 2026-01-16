@@ -570,6 +570,9 @@ static RECORDING_ABORTED: AtomicBool = AtomicBool::new(false);
 // Global app handle for shortcut management
 static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
 
+// Channel for recording mode changes (cross-thread communication)
+static RECORDING_MODE_CHANNEL: Mutex<Option<std::sync::mpsc::Sender<String>>> = Mutex::new(None);
+
 // Global audio recorder (Rust-side recording)
 static AUDIO_RECORDER: Mutex<Option<AudioRecorder>> = Mutex::new(None);
 
@@ -585,6 +588,14 @@ fn ensure_daemon_running() -> Result<(), String> {
         }
 
         if d.health_check() {
+            // Daemon is already running and healthy
+            // Send ready event to frontend in case it's waiting
+            if let Some(handle) = APP_HANDLE.get() {
+                let _ = handle.emit("daemon-status", DaemonStatusPayload {
+                    status: "ready".to_string(),
+                    message: "就绪".to_string(),
+                });
+            }
             return Ok(());  // Healthy, return directly
         }
 
@@ -2013,7 +2024,7 @@ async fn get_daemon_state() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn daemon_health() -> Result<HealthResult, String> {
+async fn daemon_health(app: tauri::AppHandle) -> Result<HealthResult, String> {
     // Check if there is an ongoing streaming operation
     if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
         println!("⏸️ 流式操作进行中，跳过健康检查");
@@ -2030,8 +2041,19 @@ async fn daemon_health() -> Result<HealthResult, String> {
 
     let result = call_daemon("health", serde_json::json!({}))?;
 
-    serde_json::from_value(result)
-        .map_err(|e| format!("Failed to parse result: {}", e))
+    let health_result: HealthResult = serde_json::from_value(result)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    // If daemon is healthy, emit daemon-status event for frontend
+    // This is important when page is refreshed - frontend needs to know daemon is ready
+    if health_result.success {
+        let _ = app.emit("daemon-status", DaemonStatusPayload {
+            status: "ready".to_string(),
+            message: "就绪".to_string(),
+        });
+    }
+
+    Ok(health_result)
 }
 
 #[tauri::command]
@@ -2651,6 +2673,68 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
     Ok(())
 }
 
+/// Write recording mode directly to config file
+/// This bypasses the daemon and allows VAD loop to detect mode changes via config polling
+fn write_recording_mode_to_config(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use std::env;
+    use std::path::PathBuf;
+
+    // Get config directory: ~/.config/speekium/ on macOS/Linux
+    let config_dir = if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(xdg).join("speekium")
+    } else {
+        // Fallback to ~/.config
+        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(home).join(".config/speekium")
+    };
+
+    let config_path = config_dir.join("config.json");
+
+    // Read existing config
+    let config_content = std::fs::read_to_string(&config_path)?;
+    let mut config: serde_json::Value = serde_json::from_str(&config_content)?;
+
+    // Update recording_mode
+    config["recording_mode"] = serde_json::json!(mode);
+
+    // Write back
+    std::fs::write(&config_path, serde_json::to_string_pretty(&config)?)?;
+
+    println!("💾 直接写入配置文件: recording_mode = {}", mode);
+    Ok(())
+}
+
+/// Start the recording mode event dispatcher thread
+/// This thread listens for mode changes from the channel and emits events to the frontend
+fn start_recording_mode_dispatcher<R: Runtime>(app: &tauri::AppHandle<R>) {
+    use std::sync::mpsc;
+
+    let (tx, rx) = mpsc::channel::<String>();
+
+    // Store the sender in the global static
+    *RECORDING_MODE_CHANNEL.lock().unwrap() = Some(tx);
+
+    let app_handle = app.clone();
+
+    // Spawn a thread to listen for mode changes and emit events
+    std::thread::spawn(move || {
+        println!("📡 Recording mode event dispatcher thread started");
+
+        while let Ok(mode_str) = rx.recv() {
+            println!("📤 Emitting recording-mode-changed event: {}", mode_str);
+
+            // Emit the event to the frontend
+            // This is called from a dedicated thread, but emit() is safe here
+            // as it handles cross-thread communication internally
+            if let Err(e) = app_handle.emit("recording-mode-changed", &mode_str) {
+                eprintln!("Failed to emit recording-mode-changed event: {}", e);
+            }
+        }
+
+        println!("📡 Recording mode event dispatcher thread stopped");
+    });
+}
+
 fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
@@ -2724,12 +2808,18 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
 
         println!("✅ 录音模式已切换为: {}", mode_name);
 
-        // Don't update daemon or modify shortcuts here to avoid deadlock
-        // Frontend polling will detect the change and handle:
-        // 1. Saving config
-        // 2. Updating daemon recording mode
-        // 3. Registering/unregistering PTT shortcut
-        // Note: All side effects handled by frontend to avoid lock conflicts
+        // Write directly to config file to notify VAD loop (bypasses daemon lock)
+        if let Err(e) = write_recording_mode_to_config(mode_name) {
+            eprintln!("⚠️ Failed to write config directly: {}", e);
+        }
+
+        // Send to channel for cross-thread event dispatch (non-blocking, safe)
+        // The dedicated dispatcher thread will emit the event to the frontend
+        if let Some(tx) = RECORDING_MODE_CHANNEL.lock().unwrap().as_ref() {
+            let _ = tx.send(mode_name.to_string()); // Non-blocking send
+        } else {
+            eprintln!("⚠️ Recording mode channel not available, event not sent");
+        }
     }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register recording mode shortcut: {}", e)))?;
 
     println!("✅ 全局快捷键已注册:");
@@ -3053,11 +3143,14 @@ pub fn run() {
             // Create tray icon
             create_tray(app.handle())?;
 
+            // Store app handle globally BEFORE starting dispatcher
+            let _ = APP_HANDLE.set(app.handle().clone());
+
+            // Start recording mode event dispatcher
+            start_recording_mode_dispatcher(app.handle());
+
             // Register shortcuts
             register_shortcuts(app.handle())?;
-
-            // Store app handle globally for shortcut management
-            let _ = APP_HANDLE.set(app.handle().clone());
 
             // Start daemon asynchronously (non-blocking)
             // This allows the UI to show immediately while daemon loads in background
