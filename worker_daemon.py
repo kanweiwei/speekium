@@ -815,11 +815,13 @@ class SpeekiumDaemon:
             from config_manager import ConfigManager
 
             self._log(f"📥 收到保存配置请求: work_mode = {config.get('work_mode', 'MISSING')}")
-            ConfigManager.save(config)
-            self._log("✅ 配置已保存")
 
-            # Verify save
-            saved_config = ConfigManager.load()
+            # CRITICAL: Load existing config and merge to preserve all fields
+            # This prevents losing fields that aren't in the settings UI
+            existing_config = ConfigManager.load()
+            merged_config = {**existing_config, **config}
+            ConfigManager.save(merged_config)
+            self._log("✅ 配置已保存 (merged with existing config to preserve all fields)")
 
             return {"success": True}
         except Exception as e:
