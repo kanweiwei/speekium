@@ -1052,7 +1052,18 @@ class SpeekiumDaemon:
             # Set recording mode (push-to-talk or continuous)
             mode = args.get("mode", "push-to-talk")
             self._log(f"🎛️ Recording mode set to: {mode}")
-            # Note: Mode is stored in Rust side, this is just for logging/acknowledgment
+
+            # Save to config file so VAD loop can detect the change
+            try:
+                from config_manager import ConfigManager
+
+                config = ConfigManager.load()
+                config["recording_mode"] = mode
+                ConfigManager.save(config)
+                self._log(f"💾 Saved recording_mode to config: {mode}")
+            except Exception as e:
+                self._log(f"⚠️ Failed to save recording_mode: {e}")
+
             return {"success": True, "mode": mode}
         elif command == "exit":
             self._log("👋 收到退出命令")

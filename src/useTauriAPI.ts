@@ -155,7 +155,8 @@ export function useTauriAPI() {
       const result = await invoke<ConfigResult>('load_config');
       if (result.success && result.config) {
         setConfig(result.config);
-      } else {
+      } else if (result.error) {
+        // Only log error if there's an actual error message
         console.error('[Config] Load failed:', result.error);
       }
     } catch (error) {

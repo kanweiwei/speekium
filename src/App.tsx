@@ -12,7 +12,7 @@ import { CollapsibleInput } from './components/CollapsibleInput';
 import { historyAPI } from './useTauriAPI';
 import { useWorkMode } from './contexts/WorkModeContext';
 import type { WorkModeChangeEvent } from './types/workMode';
-import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import {
   Mic,
@@ -33,14 +33,20 @@ import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
 import type { WorkMode } from './types/workMode';
 import { parseHotkeyDisplay } from '@/utils/hotkeyParser';
+import type { HotkeyConfig } from '@/types/hotkey';
 
 // Empty state component
-function EmptyState({ onPromptClick }: { onPromptClick: (prompt: string) => void }) {
+function EmptyState({
+  onPromptClick,
+  pushToTalkHotkey
+}: {
+  onPromptClick: (prompt: string) => void;
+  pushToTalkHotkey?: HotkeyConfig;
+}) {
   const { t } = useTranslation();
-  const { config } = useSettings();
 
   // Parse hotkey configuration for display
-  const keyParts = parseHotkeyDisplay(config?.push_to_talk_hotkey);
+  const keyParts = parseHotkeyDisplay(pushToTalkHotkey);
 
   const examplePrompts = [
     { icon: Sparkles, text: t('app.emptyState.prompts.introduce'), gradient: "from-blue-500 to-purple-500" },
@@ -227,6 +233,7 @@ function App() {
     isRecording,
     isProcessing,
     messages,
+    config,
     startRecording,
     forceStopRecording,
     chatGenerator,
@@ -249,7 +256,6 @@ function App() {
   const isSpeakingRef = React.useRef(isSpeaking);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const recordModeRef = React.useRef(recordMode); // Track current mode for immediate access
-  const isUpdatingFromPollingRef = React.useRef(false); // Track if update is from Alt+2 shortcut
 
   React.useEffect(() => {
     isRecordingRef.current = isRecording;
@@ -273,73 +279,36 @@ function App() {
     }
   }, [currentSessionId]);
 
-  // Poll recording mode from backend (for Alt+2 shortcut changes)
+  // Sync recording mode with backend on initial mount
+  // Mode changes via Alt+2 shortcut are delivered via events
   React.useEffect(() => {
     if (daemonStatus !== 'ready') {
       return;
     }
 
-    // Initialize with current recordMode state to avoid unnecessary updates on first poll
-    let lastKnownMode: 'push-to-talk' | 'continuous' | null = recordMode;
-
-    // Poll for recording mode changes from backend (e.g., Alt+2 shortcut)
-    const pollRecordingMode = async () => {
+    // Initial sync - get current mode from backend
+    const syncInitialMode = async () => {
       try {
         const currentMode = await invoke<string>('get_recording_mode');
-
         if (currentMode === 'push-to-talk' || currentMode === 'continuous') {
-          // Only update if mode changed (avoid unnecessary re-renders)
-          if (currentMode !== lastKnownMode) {
-            console.log('[App] Recording mode changed (detected via polling):', currentMode);
-            isUpdatingFromPollingRef.current = true;
-            setRecordMode(currentMode);
-            lastKnownMode = currentMode;
-
-            // Update daemon and handle PTT shortcut registration
-            try {
-              await invoke('update_recording_mode', { mode: currentMode });
-            } catch (error) {
-              console.error('[App] Failed to update recording mode:', error);
-            }
-
-            // Reset flag after a short delay
-            setTimeout(() => {
-              isUpdatingFromPollingRef.current = false;
-            }, 200);
-          }
+          setRecordMode(currentMode);
         }
       } catch (error) {
-        console.error('[App] Failed to get recording mode:', error);
+        console.error('[App] Failed to get initial recording mode:', error);
       }
     };
 
-    // Initial poll to sync state
-    pollRecordingMode();
-
-    // Poll every 500ms for mode changes (lightweight operation)
-    const intervalId = setInterval(pollRecordingMode, 500);
-
-    return () => {
-      clearInterval(intervalId);
-      isUpdatingFromPollingRef.current = false;
-    };
+    syncInitialMode();
   }, [daemonStatus]);
 
   // Sync recordMode to ref for immediate access in async operations
   React.useEffect(() => {
     recordModeRef.current = recordMode;
 
-    // Notify Rust backend about mode change (only after daemon is ready)
-    // IMPORTANT: Skip this if the change was triggered by polling (Alt+2 shortcut)
-    // because the shortcut callback already updated the Rust state
+    // Notify Rust backend about mode change when changed from Settings UI
+    // (Alt+2 shortcut changes are handled via event listener)
     const notifyModeChange = async () => {
       if (daemonStatus !== 'ready') {
-        return;
-      }
-
-      // Skip if this update was triggered by Alt+2 shortcut polling
-      if (isUpdatingFromPollingRef.current) {
-        console.log('[App] Skipping set_recording_mode (update from Alt+2 shortcut)');
         return;
       }
 
@@ -351,7 +320,7 @@ function App() {
     };
 
     notifyModeChange();
-  }, [recordMode, daemonStatus]); // Add daemonStatus dependency
+  }, [recordMode, daemonStatus]);
 
   // Listen for daemon status events
   React.useEffect(() => {
@@ -374,6 +343,18 @@ function App() {
     };
 
     const unlistenPromise = setupDaemonListener();
+
+    // After setting up the listener, check daemon health to trigger status event
+    // This is important when page is refreshed - daemon may already be running
+    // and won't emit the ready event again automatically
+    unlistenPromise.then(() => {
+      invoke('daemon_health').catch((error) => {
+        console.error('[App] Failed to check daemon health:', error);
+        // If health check fails, set error status
+        setDaemonStatus('error');
+        setLoadingMessage(String(error));
+      });
+    });
 
     return () => {
       unlistenPromise.then(unlisten => unlisten());
@@ -710,14 +691,23 @@ function App() {
       })()
     );
 
-    // 监听录音模式切换事件 (Alt+2 快捷键) - 这个还保留用于设置界面
+    // 监听录音模式切换事件 (Alt+2 快捷键)
     unlisteners.push(
       (async () => {
-        const unlisten = await listen<string>('recording-mode-changed', (event) => {
-          console.log('[Toast] Received recording-mode-changed event:', event.payload);
+        const unlisten = await listen<string>('recording-mode-changed', async (event) => {
           const newMode = event.payload as 'push-to-talk' | 'continuous';
+          console.log('[App] Received recording-mode-changed event:', newMode);
+
           // 同步更新 recordMode state
           setRecordMode(newMode);
+
+          // Update daemon and handle PTT shortcut registration
+          try {
+            await invoke('update_recording_mode', { mode: newMode });
+          } catch (error) {
+            console.error('[App] Failed to update recording mode:', error);
+          }
+
           // 显示 Toast
           setToast({
             show: true,
@@ -725,6 +715,9 @@ function App() {
             workMode,
             duration: 2000,
           });
+
+          // Save to localStorage
+          localStorage.setItem('recordMode', newMode);
         });
         return unlisten;
       })()
@@ -913,7 +906,10 @@ function App() {
           {/* 空状态或消息列表 */}
           <div className="max-w-[680px] mx-auto py-4">
             {messages.length === 0 ? (
-              <EmptyState onPromptClick={handlePromptClick} />
+              <EmptyState
+                onPromptClick={handlePromptClick}
+                pushToTalkHotkey={config?.push_to_talk_hotkey}
+              />
             ) : (
               <div className="space-y-4">
                 {messages.map((message, index) => {
