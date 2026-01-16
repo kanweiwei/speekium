@@ -80,6 +80,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       try {
         const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
         if (result.success && result.config) {
+          // Debug log
+          console.log('[SettingsContext] Raw config from backend:', result.config);
+
+          // Check zhipu provider
+          const zhipuProvider = result.config.llm_providers?.find((p: any) => p.name === 'zhipu');
+          console.log('[SettingsContext] Zhipu provider from backend:', zhipuProvider);
+
           // Ensure push_to_talk_hotkey has default value if not present
           const configWithDefaults = {
             ...result.config,

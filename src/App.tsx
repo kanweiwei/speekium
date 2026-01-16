@@ -246,6 +246,7 @@ function App() {
   const pttAssistantAddedRef = React.useRef<boolean>(false);
   const isRecordingRef = React.useRef(isRecording);
   const isProcessingRef = React.useRef(isProcessing);
+  const isSpeakingRef = React.useRef(isSpeaking);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const recordModeRef = React.useRef(recordMode); // Track current mode for immediate access
   const isUpdatingFromPollingRef = React.useRef(false); // Track if update is from Alt+2 shortcut
@@ -257,6 +258,10 @@ function App() {
   React.useEffect(() => {
     isProcessingRef.current = isProcessing;
   }, [isProcessing]);
+
+  React.useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
 
   React.useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -596,7 +601,7 @@ function App() {
           break;
         }
 
-        if (isRecordingRef.current || isProcessingRef.current) {
+        if (isRecordingRef.current || isProcessingRef.current || isSpeakingRef.current) {
           await new Promise(resolve => setTimeout(resolve, 500));
           continue;
         }

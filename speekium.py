@@ -13,6 +13,7 @@ import os
 import platform
 import re
 import stat
+import sys
 import tempfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -78,27 +79,14 @@ atexit.register(cleanup_temp_files)
 # ===== LLM Backend =====
 LLM_BACKEND = "ollama"  # Options: "claude", "ollama", "openai", "openrouter", "custom"
 
-# Ollama config (only used when LLM_BACKEND="ollama")
-OLLAMA_MODEL = "qwen2.5:1.5b"  # Ollama model (use qwen2.5:7b for smarter but slower)
-OLLAMA_BASE_URL = "http://localhost:11434"  # Ollama server URL
+# ===== LLM Provider Configuration =====
+# Loaded from config file - see _load_llm_config()
+# New unified structure: llm_provider (name) + llm_providers (array)
+LLM_PROVIDER = "ollama"  # Currently selected provider name
+LLM_PROVIDERS = []  # Array of provider configs: [{name, base_url, api_key, model}, ...]
 
-# OpenAI config (only used when LLM_BACKEND="openai")
-OPENAI_API_KEY = ""  # Get from https://platform.openai.com/api-keys
-OPENAI_MODEL = "gpt-4o-mini"  # Model: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
-
-# OpenRouter config (only used when LLM_BACKEND="openrouter")
-OPENROUTER_API_KEY = ""  # Get from https://openrouter.ai/keys
-OPENROUTER_MODEL = "google/gemini-2.5-flash"  # Any model from OpenRouter
-
-# Custom OpenAI-compatible API config (only used when LLM_BACKEND="custom")
-CUSTOM_API_KEY = ""  # API key for custom endpoint
-CUSTOM_BASE_URL = ""  # Base URL (e.g., http://localhost:8000/v1)
-CUSTOM_MODEL = ""  # Model name
-
-# ZhipuAI config (only used when LLM_BACKEND="zhipu")
-ZHIPU_API_KEY = ""  # Get from https://open.bigmodel.cn/usercenter/apikeys
-ZHIPU_MODEL = "glm-4-flash"  # Model: glm-4-plus, glm-4, glm-4-flash, glm-4-air
-ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"  # ZhipuAI API endpoint
+# Legacy individual provider configs (deprecated, for migration fallback)
+# These are no longer used - everything is in LLM_PROVIDERS array now
 
 # ===== Conversation Memory =====
 MAX_HISTORY = 10  # Max conversation turns to keep (each turn = user + assistant)
@@ -160,10 +148,15 @@ class VoiceAssistant:
         self.vad_model = None
         self.llm_backend = None
         self.was_interrupted = False  # Track if last playback was interrupted
-        self.mode_manager = ModeManager(RecordingMode.CONTINUOUS)  # 默认自由对话模式
+        self.mode_manager = ModeManager(
+            RecordingMode.CONTINUOUS
+        )  # Default: continuous conversation mode
         self.interrupt_audio_buffer = []  # Buffer for interrupt audio
         self._tts_backend = None  # Cache TTS backend setting
         self._load_tts_config()  # Load TTS config on initialization
+
+        # TTS generation/playback state - to pause VAD during TTS
+        self.is_generating_tts = False
 
         # Add interrupt event for VAD recording
         import threading
@@ -228,32 +221,34 @@ class VoiceAssistant:
 
             config = ConfigManager.load()
 
-            # Update global LLM configuration variables
-            global LLM_BACKEND, OLLAMA_MODEL, OLLAMA_BASE_URL
-            global OPENAI_API_KEY, OPENAI_MODEL
-            global OPENROUTER_API_KEY, OPENROUTER_MODEL
-            global CUSTOM_API_KEY, CUSTOM_BASE_URL, CUSTOM_MODEL
-            global ZHIPU_API_KEY, ZHIPU_MODEL, ZHIPU_BASE_URL
+            # Update global LLM configuration variables (new unified structure)
+            global LLM_PROVIDER, LLM_PROVIDERS, LLM_BACKEND
 
-            LLM_BACKEND = config.get("llm_backend", "ollama")
-            OLLAMA_MODEL = config.get("ollama_model", OLLAMA_MODEL)
-            OLLAMA_BASE_URL = config.get("ollama_base_url", OLLAMA_BASE_URL)
+            # Load current provider and providers array
+            LLM_PROVIDER = config.get("llm_provider", "ollama")
+            LLM_PROVIDERS = config.get("llm_providers", [])
 
-            OPENAI_API_KEY = config.get("openai_api_key", OPENAI_API_KEY)
-            OPENAI_MODEL = config.get("openai_model", OPENAI_MODEL)
+            # Find current provider config to log details
+            current_provider_config = {}
+            for provider in LLM_PROVIDERS:
+                if provider.get("name") == LLM_PROVIDER:
+                    current_provider_config = provider
+                    break
 
-            OPENROUTER_API_KEY = config.get("openrouter_api_key", OPENROUTER_API_KEY)
-            OPENROUTER_MODEL = config.get("openrouter_model", OPENROUTER_MODEL)
+            # For backwards compatibility, also update LLM_BACKEND
+            LLM_BACKEND = LLM_PROVIDER
 
-            CUSTOM_API_KEY = config.get("custom_api_key", CUSTOM_API_KEY)
-            CUSTOM_BASE_URL = config.get("custom_base_url", CUSTOM_BASE_URL)
-            CUSTOM_MODEL = config.get("custom_model", CUSTOM_MODEL)
-
-            ZHIPU_API_KEY = config.get("zhipu_api_key", ZHIPU_API_KEY)
-            ZHIPU_MODEL = config.get("zhipu_model", ZHIPU_MODEL)
-            ZHIPU_BASE_URL = config.get("zhipu_base_url", ZHIPU_BASE_URL)
-
-            logger.info("llm_config_loaded", backend=LLM_BACKEND)
+            logger.info(
+                "llm_config_loaded",
+                provider=LLM_PROVIDER,
+                model=current_provider_config.get("model", "N/A"),
+                base_url=current_provider_config.get("base_url", "N/A"),
+                has_api_key=bool(current_provider_config.get("api_key")),
+            )
+            print(
+                f"🤖 LLM 配置已加载: 服务商={LLM_PROVIDER}, 模型={current_provider_config.get('model', 'N/A')}",
+                file=sys.stderr,
+            )
         except Exception as e:
             logger.warning("llm_config_load_failed", error=str(e), fallback="default")
 
@@ -291,14 +286,39 @@ class VoiceAssistant:
         # Always reload configuration to get latest settings
         self._load_llm_config()
 
-        # Check if backend type changed, recreate if needed
+        # Track last used config to detect changes
+        self._last_llm_config = getattr(self, "_last_llm_config", {})
+
+        # Find current provider config from LLM_PROVIDERS array
+        provider_config = None
+        for provider in LLM_PROVIDERS:
+            if provider.get("name") == LLM_PROVIDER:
+                provider_config = provider
+                break
+
+        if provider_config is None:
+            # Fallback to empty config if provider not found
+            logger.warning("provider_not_found", provider=LLM_PROVIDER, fallback="empty_config")
+            provider_config = {"name": LLM_PROVIDER, "base_url": "", "api_key": "", "model": ""}
+
+        # Extract current config values
+        current_config = {
+            "provider": LLM_PROVIDER,
+            "base_url": provider_config.get("base_url", ""),
+            "api_key": provider_config.get("api_key", ""),
+            "model": provider_config.get("model", ""),
+        }
+
+        # Check if backend needs to be recreated
+        needs_recreate = False
+
         if self.llm_backend is not None:
+            # Check if provider type changed
             current_backend_type = (
                 getattr(self.llm_backend, "__class__", None).__name__
                 if hasattr(self.llm_backend, "__class__")
                 else None
             )
-            # Map backend class names to backend types
             backend_type_map = {
                 "OllamaBackend": "ollama",
                 "OpenAIBackend_Official": "openai",
@@ -308,63 +328,77 @@ class VoiceAssistant:
             }
             current_backend = backend_type_map.get(current_backend_type, "")
 
-            # If backend type changed, recreate backend
-            if current_backend != LLM_BACKEND:
+            # Check if any config changed
+            if current_backend != current_config["provider"]:
                 logger.info(
-                    "backend_type_changed", from_backend=current_backend, to_backend=LLM_BACKEND
+                    "backend_provider_changed",
+                    from_backend=current_backend,
+                    to_backend=current_config["provider"],
                 )
-                self.llm_backend = None
+                needs_recreate = True
+            elif self._last_llm_config.get("model") != current_config["model"]:
+                logger.info(
+                    "backend_model_changed",
+                    from_model=self._last_llm_config.get("model"),
+                    to_model=current_config["model"],
+                )
+                needs_recreate = True
+            elif self._last_llm_config.get("base_url") != current_config["base_url"]:
+                logger.info("backend_base_url_changed")
+                needs_recreate = True
+            elif self._last_llm_config.get("api_key") != current_config["api_key"]:
+                logger.info("backend_api_key_changed")
+                needs_recreate = True
+        else:
+            # No backend exists, need to create
+            needs_recreate = True
 
-        if self.llm_backend is None:
+        if needs_recreate:
             set_component("LLM")
-            logger.info("backend_initializing", backend=LLM_BACKEND)
-            if LLM_BACKEND == "ollama":
-                self.llm_backend = create_backend(
-                    LLM_BACKEND,
-                    SYSTEM_PROMPT,
-                    model=OLLAMA_MODEL,
-                    base_url=OLLAMA_BASE_URL,
-                    max_history=MAX_HISTORY,
-                )
-            elif LLM_BACKEND == "openai":
-                self.llm_backend = create_backend(
-                    LLM_BACKEND,
-                    SYSTEM_PROMPT,
-                    api_key=OPENAI_API_KEY,
-                    model=OPENAI_MODEL,
-                    max_history=MAX_HISTORY,
-                )
-            elif LLM_BACKEND == "openrouter":
-                self.llm_backend = create_backend(
-                    LLM_BACKEND,
-                    SYSTEM_PROMPT,
-                    api_key=OPENROUTER_API_KEY,
-                    model=OPENROUTER_MODEL,
-                    max_history=MAX_HISTORY,
-                )
-            elif LLM_BACKEND == "custom":
-                self.llm_backend = create_backend(
-                    LLM_BACKEND,
-                    SYSTEM_PROMPT,
-                    api_key=CUSTOM_API_KEY,
-                    base_url=CUSTOM_BASE_URL,
-                    model=CUSTOM_MODEL,
-                    max_history=MAX_HISTORY,
-                )
-            elif LLM_BACKEND == "zhipu":
-                self.llm_backend = create_backend(
-                    LLM_BACKEND,
-                    SYSTEM_PROMPT,
-                    api_key=ZHIPU_API_KEY,
-                    base_url=ZHIPU_BASE_URL,
-                    model=ZHIPU_MODEL,
-                    max_history=MAX_HISTORY,
-                )
-            else:
-                self.llm_backend = create_backend(
-                    LLM_BACKEND, SYSTEM_PROMPT, max_history=MAX_HISTORY
-                )
-            logger.info("backend_initialized")
+            logger.info(
+                "backend_initializing",
+                provider=current_config["provider"],
+                model=current_config["model"],
+            )
+            print(
+                f"🔄 正在创建 LLM backend: 服务商={current_config['provider']}, 模型={current_config['model']}",
+                file=sys.stderr,
+            )
+
+            # Create backend with unified config
+            backend_kwargs = {"max_history": MAX_HISTORY}
+            if current_config["model"]:
+                backend_kwargs["model"] = current_config["model"]
+            if current_config["base_url"]:
+                backend_kwargs["base_url"] = current_config["base_url"]
+            if current_config["api_key"]:
+                backend_kwargs["api_key"] = current_config["api_key"]
+
+            self.llm_backend = create_backend(
+                current_config["provider"],
+                SYSTEM_PROMPT,
+                **backend_kwargs,
+            )
+
+            # Save current config
+            self._last_llm_config = current_config
+
+            logger.info(
+                "backend_initialized",
+                provider=current_config["provider"],
+                model=current_config["model"],
+            )
+            print(
+                f"✅ LLM backend 已创建: {current_config['provider']} + {current_config['model']}",
+                file=sys.stderr,
+            )
+        else:
+            # Reusing existing backend
+            print(
+                f"♻️  复用现有 LLM backend: {current_config['provider']} + {current_config['model']}",
+                file=sys.stderr,
+            )
+
         return self.llm_backend
 
     def record_with_vad(self, speech_already_started=False, on_speech_detected=None):
@@ -389,6 +423,11 @@ class VoiceAssistant:
             logger.info("listening", history_count=history_count)
         else:
             logger.info("listening")
+
+        # Check if TTS is being generated/played - pause VAD during TTS
+        if self.is_generating_tts:
+            logger.info("tts_in_progress", status="vad_paused")
+            return None  # Don't start recording if TTS is in progress
 
         chunk_size = 512  # Silero VAD requires 512 samples @ 16kHz
         frames = []
@@ -956,8 +995,6 @@ class VoiceAssistant:
         logger.info("speekium_banner", mode="continuous")
         logger.info("vad_enabled")
         llm_info = LLM_BACKEND
-        if LLM_BACKEND == "ollama":
-            llm_info = f"ollama ({OLLAMA_MODEL})"
         logger.info("llm_backend_info", backend=llm_info)
         # Get TTS backend from config instead of global variable
         tts_backend = self.get_tts_backend()
@@ -967,6 +1004,9 @@ class VoiceAssistant:
         else:
             tts_info = "edge (online)"
         logger.info("tts_backend_info", backend=tts_info)
+        if USE_STREAMING:
+            logger.info("streaming_mode_enabled")
+        logger.info("memory_config", max_history=MAX_HISTORY)
         if USE_STREAMING:
             logger.info("streaming_mode_enabled")
         logger.info("memory_config", max_history=MAX_HISTORY)

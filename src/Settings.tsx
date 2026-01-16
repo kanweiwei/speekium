@@ -128,6 +128,8 @@ export function Settings({
 
   React.useEffect(() => {
     if (config) {
+      // Config is loaded from backend, contains all llm_providers
+      // Simply sync to localConfig
       setLocalConfig({ ...config });
     }
   }, [config]);
@@ -162,72 +164,115 @@ export function Settings({
     updateConfig(key, value);
   };
 
+  // Helper: Get current provider config from providers array
+  const getCurrentProviderConfig = (config: Record<string, any>) => {
+    const providerName = config.llm_provider || 'ollama';
+    const providers = config.llm_providers || [];
+    const found = providers.find((p: any) => p.name === providerName) || {};
+    console.log('[getCurrentProviderConfig]', {
+      providerName,
+      providersCount: providers.length,
+      found,
+      allProviders: providers.map((p: any) => ({ name: p.name, hasKey: !!p.api_key, keyLength: p.api_key?.length || 0 }))
+    });
+    return found;
+  };
+
+  // Helper: Update a field in the current provider config using functional update
+  const updateProviderConfig = (field: string, value: any) => {
+    setLocalConfig(prev => {
+      const providerName = prev.llm_provider || 'ollama';
+      const providers = [...(prev.llm_providers || [])];
+      const providerIndex = providers.findIndex((p: any) => p.name === providerName);
+
+      if (providerIndex >= 0) {
+        providers[providerIndex] = { ...providers[providerIndex], [field]: value };
+      } else {
+        // Provider not found, create new entry
+        providers.push({ name: providerName, [field]: value });
+      }
+
+      // Update context config as well to trigger save
+      updateConfig('llm_providers', providers);
+
+      return { ...prev, llm_providers: providers };
+    });
+  };
+
   const handleTestConnection = async () => {
     setIsTestingConnection(true);
     setConnectionStatus('idle');
     setConnectionError('');
 
-    const backend = localConfig.llm_backend || 'ollama';
+    const providerName = localConfig.llm_provider || 'ollama';
+
+    // Find provider config from providers array
+    const providers = localConfig.llm_providers || [];
+    const providerConfig = providers.find((p: any) => p.name === providerName) || {};
+
+    const base_url = providerConfig.base_url || '';
+    const api_key = providerConfig.api_key || '';
+    const model = providerConfig.model || '';
 
     try {
       let result: { success: boolean; message?: string; error?: string };
 
-      // 根据不同的后端类型调用不同的测试命令
-      if (backend === 'ollama') {
+      // 根据不同的 provider 类型调用不同的测试命令
+      if (providerName === 'ollama') {
         result = await invoke<{
           success: boolean;
           message?: string;
           error?: string;
         }>('test_ollama_connection', {
-          baseUrl: localConfig.ollama_base_url || 'http://localhost:11434',
-          model: localConfig.ollama_model || 'qwen2.5:1.5b'
+          baseUrl: base_url || 'http://localhost:11434',
+          model: model || 'qwen2.5:1.5b'
         });
-      } else if (backend === 'openai') {
+      } else if (providerName === 'openai') {
         result = await invoke<{
           success: boolean;
           message?: string;
           error?: string;
         }>('test_openai_connection', {
-          apiKey: localConfig.openai_api_key || '',
-          model: localConfig.openai_model || 'gpt-4o-mini'
+          apiKey: api_key,
+          model: model || 'gpt-4o-mini'
         });
-      } else if (backend === 'openrouter') {
+      } else if (providerName === 'openrouter') {
         result = await invoke<{
           success: boolean;
           message?: string;
           error?: string;
         }>('test_openrouter_connection', {
-          apiKey: localConfig.openrouter_api_key || '',
-          model: localConfig.openrouter_model || 'google/gemini-2.5-flash'
+          apiKey: api_key,
+          model: model || 'google/gemini-2.5-flash'
         });
-      } else if (backend === 'custom') {
+      } else if (providerName === 'custom') {
         result = await invoke<{
           success: boolean;
           message?: string;
           error?: string;
         }>('test_custom_connection', {
-          apiKey: localConfig.custom_api_key || '',
-          baseUrl: localConfig.custom_base_url || '',
-          model: localConfig.custom_model || ''
+          apiKey: api_key,
+          baseUrl: base_url,
+          model: model
         });
-      } else if (backend === 'zhipu') {
+      } else if (providerName === 'zhipu') {
         result = await invoke<{
           success: boolean;
           message?: string;
           error?: string;
         }>('test_zhipu_connection', {
-          apiKey: localConfig.zhipu_api_key || '',
-          baseUrl: localConfig.zhipu_base_url || 'https://open.bigmodel.cn/api/paas/v4',
-          model: localConfig.zhipu_model || 'glm-4-flash'
+          apiKey: api_key,
+          baseUrl: base_url || 'https://open.bigmodel.cn/api/paas/v4',
+          model: model || 'glm-4-flash'
         });
-      } else if (backend === 'claude') {
+      } else if (providerName === 'claude') {
         // Claude Code CLI 不需要测试连接，直接返回成功
         result = {
           success: true,
           message: 'Claude Code CLI is available locally'
         };
       } else {
-        throw new Error(`Unknown backend: ${backend}`);
+        throw new Error(`Unknown provider: ${providerName}`);
       }
 
       if (result.success) {
@@ -584,40 +629,53 @@ export function Settings({
               )}
 
               {/* AI Model Settings */}
-              {activeCategory === 'ai-model' && (
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="llm-backend" className="text-foreground">{t('settings.fields.llmBackend')}</Label>
-                    <Select
-                      value={localConfig.llm_backend || 'ollama'}
-                      onValueChange={(value) => updateLocalConfig('llm_backend', value)}
-                    >
-                      <SelectTrigger id="llm-backend" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
-                        <SelectValue placeholder={t('settings.placeholders.selectLlmBackend')} />
-                      </SelectTrigger>
-                      <SelectContent className="bg-muted border-border">
-                        <SelectItem value="claude">Claude Code CLI</SelectItem>
-                        <SelectItem value="ollama">Ollama (Local)</SelectItem>
-                        <SelectItem value="zhipu">智谱AI (BigModel)</SelectItem>
-                        <SelectItem value="openai">OpenAI</SelectItem>
-                        <SelectItem value="openrouter">OpenRouter</SelectItem>
-                        <SelectItem value="custom">Custom (OpenAI-compatible)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+              {activeCategory === 'ai-model' && (() => {
+                const currentProvider = localConfig.llm_provider || 'ollama';
+                const providerConfig = getCurrentProviderConfig(localConfig);
+                const { base_url = '', api_key = '', model = '' } = providerConfig;
 
-                  {/* OpenAI Configuration */}
-                  {(localConfig.llm_backend || 'ollama') === 'openai' && (
-                    <>
+                // Debug: 打印 provider config
+                console.log('[Settings] AI Model Settings:', {
+                  currentProvider,
+                  providerConfig,
+                  apiKey: api_key,
+                  apiKeyLength: api_key?.length || 0
+                });
+
+                return (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="llm-provider" className="text-foreground">{t('settings.fields.llmBackend')}</Label>
+                      <Select
+                        value={currentProvider}
+                        onValueChange={(value) => updateLocalConfig('llm_provider', value)}
+                      >
+                        <SelectTrigger id="llm-provider" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
+                          <SelectValue placeholder={t('settings.placeholders.selectLlmBackend')} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-muted border-border">
+                          <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                          <SelectItem value="openai">OpenAI</SelectItem>
+                          <SelectItem value="openrouter">OpenRouter</SelectItem>
+                          <SelectItem value="zhipu">智谱AI (BigModel)</SelectItem>
+                          <SelectItem value="custom">Custom (OpenAI-compatible)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* API Key (for providers that require it) */}
+                    {['openai', 'openrouter', 'custom', 'zhipu'].includes(currentProvider) && (
                       <div className="space-y-2">
-                        <Label htmlFor="openai-api-key" className="text-foreground">OpenAI API Key</Label>
+                        <Label htmlFor="provider-api-key" className="text-foreground">
+                          {currentProvider === 'zhipu' ? '智谱AI API Key' : `${currentProvider === 'custom' ? 'API Key (Optional)' : `${currentProvider.charAt(0).toUpperCase() + currentProvider.slice(1)} API Key`}`}
+                        </Label>
                         <div className="relative">
                           <Input
-                            id="openai-api-key"
+                            id="provider-api-key"
                             type={showApiKey ? 'text' : 'password'}
-                            value={localConfig.openai_api_key || ''}
-                            onChange={(e) => updateLocalConfig('openai_api_key', e.target.value)}
-                            placeholder={t('settings.placeholders.apiKey')}
+                            value={api_key}
+                            onChange={(e) => updateProviderConfig('api_key', e.target.value)}
+                            placeholder={currentProvider === 'custom' ? 'Optional - leave empty if not required' : t('settings.placeholders.apiKey')}
                             className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                           />
                           <button
@@ -629,360 +687,50 @@ export function Settings({
                           </button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {t('settings.hints.apiKey')}
+                          {currentProvider === 'custom' ? 'API key for your custom endpoint (if required)' : t('settings.hints.apiKey')}
                         </p>
                       </div>
+                    )}
 
+                    {/* Base URL (for providers that need it) */}
+                    {['custom', 'ollama', 'zhipu'].includes(currentProvider) && (
                       <div className="space-y-2">
-                        <Label htmlFor="openai-model" className="text-foreground">Model</Label>
-                        {customModelInput.openai ? (
-                          <div className="flex gap-2">
-                            <Input
-                              id="openai-model"
-                              value={localConfig.openai_model || ''}
-                              onChange={(e) => updateLocalConfig('openai_model', e.target.value)}
-                              placeholder="Enter custom model name"
-                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setCustomModelInput(prev => ({ ...prev, openai: false }))}
-                              className="h-9 px-3"
-                            >
-                              ← Select
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <Select
-                              value={localConfig.openai_model || 'gpt-4o-mini'}
-                              onValueChange={(value) => {
-                                if (value === '__custom__') {
-                                  setCustomModelInput(prev => ({ ...prev, openai: true }));
-                                } else {
-                                  updateLocalConfig('openai_model', value);
-                                }
-                              }}
-                            >
-                              <SelectTrigger id="openai-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1">
-                                <SelectValue placeholder="Select a model" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-muted border-border max-h-60">
-                                {OPENAI_MODELS.map(model => (
-                                  <SelectItem key={model} value={model} className="text-foreground">
-                                    {model}
-                                  </SelectItem>
-                                ))}
-                                <SelectItem value="__custom__" className="text-foreground">
-                                  Custom model...
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Select from common models or enter a custom model name
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  {/* OpenRouter Configuration */}
-                  {(localConfig.llm_backend || 'ollama') === 'openrouter' && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="openrouter-api-key" className="text-foreground">OpenRouter API Key</Label>
-                        <div className="relative">
-                          <Input
-                            id="openrouter-api-key"
-                            type={showApiKey ? 'text' : 'password'}
-                            value={localConfig.openrouter_api_key || ''}
-                            onChange={(e) => updateLocalConfig('openrouter_api_key', e.target.value)}
-                            placeholder={t('settings.placeholders.apiKey')}
-                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          >
-                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {t('settings.hints.apiKey')}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="openrouter-model" className="text-foreground">Model</Label>
-                        {customModelInput.openrouter ? (
-                          <div className="flex gap-2">
-                            <Input
-                              id="openrouter-model"
-                              value={localConfig.openrouter_model || ''}
-                              onChange={(e) => updateLocalConfig('openrouter_model', e.target.value)}
-                              placeholder="Enter custom model name"
-                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setCustomModelInput(prev => ({ ...prev, openrouter: false }))}
-                              className="h-9 px-3"
-                            >
-                              ← Select
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <Select
-                              value={localConfig.openrouter_model || 'google/gemini-2.5-flash'}
-                              onValueChange={(value) => {
-                                if (value === '__custom__') {
-                                  setCustomModelInput(prev => ({ ...prev, openrouter: true }));
-                                } else {
-                                  updateLocalConfig('openrouter_model', value);
-                                }
-                              }}
-                            >
-                              <SelectTrigger id="openrouter-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1">
-                                <SelectValue placeholder="Select a model" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-muted border-border max-h-60">
-                                {OPENROUTER_MODELS.map(model => (
-                                  <SelectItem key={model} value={model} className="text-foreground">
-                                    {model}
-                                  </SelectItem>
-                                ))}
-                                <SelectItem value="__custom__" className="text-foreground">
-                                  Custom model...
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Select from popular models or enter any OpenRouter model ID
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Custom OpenAI-Compatible Configuration */}
-                  {(localConfig.llm_backend || 'ollama') === 'custom' && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="custom-api-key" className="text-foreground">API Key</Label>
-                        <div className="relative">
-                          <Input
-                            id="custom-api-key"
-                            type={showApiKey ? 'text' : 'password'}
-                            value={localConfig.custom_api_key || ''}
-                            onChange={(e) => updateLocalConfig('custom_api_key', e.target.value)}
-                            placeholder="Optional - leave empty if not required"
-                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          >
-                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          API key for your custom endpoint (if required)
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="custom-base-url" className="text-foreground">API Base URL</Label>
+                        <Label htmlFor="provider-base-url" className="text-foreground">
+                          {currentProvider === 'ollama' ? t('settings.fields.ollamaUrl') : 'API Base URL'}
+                        </Label>
                         <Input
-                          id="custom-base-url"
-                          value={localConfig.custom_base_url || ''}
-                          onChange={(e) => updateLocalConfig('custom_base_url', e.target.value)}
-                          placeholder="http://localhost:8000/v1"
+                          id="provider-base-url"
+                          value={base_url}
+                          onChange={(e) => updateProviderConfig('base_url', e.target.value)}
+                          placeholder={
+                            currentProvider === 'ollama' ? t('settings.placeholders.ollamaUrl') :
+                            currentProvider === 'zhipu' ? 'https://open.bigmodel.cn/api/paas/v4' :
+                            'http://localhost:8000/v1'
+                          }
                           className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Base URL of your OpenAI-compatible API (e.g., http://localhost:8000/v1)
+                          {currentProvider === 'ollama' ? t('settings.hints.ollamaUrl') :
+                           currentProvider === 'zhipu' ? 'ZhipuAI API endpoint (default: https://open.bigmodel.cn/api/paas/v4)' :
+                           'Base URL of your OpenAI-compatible API (e.g., http://localhost:8000/v1)'}
                         </p>
                       </div>
+                    )}
 
-                      <div className="space-y-2">
-                        <Label htmlFor="custom-model" className="text-foreground">Model</Label>
-                        {customModelInput.custom ? (
-                          <div className="flex gap-2">
-                            <Input
-                              id="custom-model"
-                              value={localConfig.custom_model || ''}
-                              onChange={(e) => updateLocalConfig('custom_model', e.target.value)}
-                              placeholder="Enter custom model name"
-                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setCustomModelInput(prev => ({ ...prev, custom: false }))}
-                              className="h-9 px-3"
-                            >
-                              ← Select
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <Select
-                              value={localConfig.custom_model || CUSTOM_MODELS[0]}
-                              onValueChange={(value) => {
-                                if (value === '__custom__') {
-                                  setCustomModelInput(prev => ({ ...prev, custom: true }));
-                                } else {
-                                  updateLocalConfig('custom_model', value);
-                                }
-                              }}
-                            >
-                              <SelectTrigger id="custom-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1">
-                                <SelectValue placeholder="Select a model" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-muted border-border max-h-60">
-                                {CUSTOM_MODELS.map(model => (
-                                  <SelectItem key={model} value={model} className="text-foreground">
-                                    {model}
-                                  </SelectItem>
-                                ))}
-                                <SelectItem value="__custom__" className="text-foreground">
-                                  Custom model...
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Select from common models or enter your model name
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  {/* ZhipuAI Configuration */}
-                  {(localConfig.llm_backend || 'ollama') === 'zhipu' && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="zhipu-api-key" className="text-foreground">智谱AI API Key</Label>
-                        <div className="relative">
-                          <Input
-                            id="zhipu-api-key"
-                            type={showApiKey ? 'text' : 'password'}
-                            value={localConfig.zhipu_api_key || ''}
-                            onChange={(e) => updateLocalConfig('zhipu_api_key', e.target.value)}
-                            placeholder={t('settings.placeholders.apiKey')}
-                            className="bg-muted border-border text-foreground pr-10 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          >
-                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {t('settings.hints.apiKey')}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="zhipu-model" className="text-foreground">Model</Label>
-                        {customModelInput.zhipu ? (
-                          <div className="flex gap-2">
-                            <Input
-                              id="zhipu-model"
-                              value={localConfig.zhipu_model || ''}
-                              onChange={(e) => updateLocalConfig('zhipu_model', e.target.value)}
-                              placeholder="Enter custom model name"
-                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setCustomModelInput(prev => ({ ...prev, zhipu: false }))}
-                              className="h-9 px-3"
-                            >
-                              ← Select
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <Select
-                              value={localConfig.zhipu_model || 'glm-4-flash'}
-                              onValueChange={(value) => {
-                                if (value === '__custom__') {
-                                  setCustomModelInput(prev => ({ ...prev, zhipu: true }));
-                                } else {
-                                  updateLocalConfig('zhipu_model', value);
-                                }
-                              }}
-                            >
-                              <SelectTrigger id="zhipu-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1">
-                                <SelectValue placeholder="Select a model" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-muted border-border max-h-60">
-                                {ZHIPU_MODELS.map(model => (
-                                  <SelectItem key={model} value={model} className="text-foreground">
-                                    {model}
-                                  </SelectItem>
-                                ))}
-                                <SelectItem value="__custom__" className="text-foreground">
-                                  Custom model...
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Select from popular ZhipuAI models or enter a custom model name
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="zhipu-base-url" className="text-foreground">API Base URL</Label>
-                        <Input
-                          id="zhipu-base-url"
-                          value={localConfig.zhipu_base_url || 'https://open.bigmodel.cn/api/paas/v4'}
-                          onChange={(e) => updateLocalConfig('zhipu_base_url', e.target.value)}
-                          placeholder="https://open.bigmodel.cn/api/paas/v4"
-                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          ZhipuAI API endpoint (default: https://open.bigmodel.cn/api/paas/v4)
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Ollama Configuration */}
-                  {(localConfig.llm_backend || 'ollama') === 'ollama' && (
-                    <>
-                      <div className="space-y-2">
+                    {/* Model Selection */}
+                    <div className="space-y-2">
+                      {currentProvider === 'ollama' && (
                         <div className="flex items-center justify-between">
-                          <Label htmlFor="ollama-model" className="text-foreground">{t('settings.fields.ollamaModel')}</Label>
+                          <Label htmlFor="provider-model" className="text-foreground">{t('settings.fields.ollamaModel')}</Label>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={async () => {
-                              console.log('[Settings] Refresh button clicked, isLoading:', isLoadingOllamaModels);
                               setIsLoadingOllamaModels(true);
                               try {
                                 const models = await invoke<string[]>('list_ollama_models', {
-                                  baseUrl: localConfig.ollama_base_url || 'http://localhost:11434'
+                                  baseUrl: base_url || 'http://localhost:11434'
                                 });
-                                console.log('[Settings] Ollama models:', models);
                                 setOllamaModels(models);
                                 alert(`Found ${models.length} models:\n\n${models.join('\n')}`);
                               } catch (error) {
@@ -990,7 +738,6 @@ export function Settings({
                                 alert('Failed to load Ollama models. Make sure Ollama is running.');
                               } finally {
                                 setIsLoadingOllamaModels(false);
-                                console.log('[Settings] Loading finished');
                               }
                             }}
                             disabled={isLoadingOllamaModels}
@@ -1000,105 +747,112 @@ export function Settings({
                             Refresh
                           </Button>
                         </div>
-                        {customModelInput.ollama ? (
-                          <div className="flex gap-2">
-                            <Input
-                              id="ollama-model"
-                              value={localConfig.ollama_model || ''}
-                              onChange={(e) => updateLocalConfig('ollama_model', e.target.value)}
-                              placeholder="Enter custom model name"
-                              className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setCustomModelInput(prev => ({ ...prev, ollama: false }))}
-                              className="h-9 px-3"
-                            >
-                              ← Select
-                            </Button>
-                          </div>
-                        ) : (
-                          <Select
-                            value={localConfig.ollama_model || ollamaModels[0]}
-                            onValueChange={(value) => {
-                              if (value === '__custom__') {
-                                setCustomModelInput(prev => ({ ...prev, ollama: true }));
-                              } else {
-                                updateLocalConfig('ollama_model', value);
-                              }
-                            }}
-                          >
-                            <SelectTrigger id="ollama-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
-                              <SelectValue placeholder="Select a model" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-muted border-border max-h-60">
-                              {ollamaModels.map(model => (
-                                <SelectItem key={model} value={model} className="text-foreground">
-                                  {model}
-                                </SelectItem>
-                              ))}
-                              <SelectItem value="__custom__" className="text-foreground">
-                                Custom model...
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {t('settings.hints.ollamaModel')}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="ollama-base-url" className="text-foreground">{t('settings.fields.ollamaUrl')}</Label>
-                        <Input
-                          id="ollama-base-url"
-                          value={localConfig.ollama_base_url || ''}
-                          onChange={(e) => updateLocalConfig('ollama_base_url', e.target.value)}
-                          placeholder={t('settings.placeholders.ollamaUrl')}
-                          className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {t('settings.hints.ollamaUrl')}
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="pt-2 space-y-2">
-                    <Button
-                      onClick={handleTestConnection}
-                      disabled={isTestingConnection}
-                      className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border"
-                    >
-                      {isTestingConnection ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          {t('settings.connection.testing')}
-                        </>
-                      ) : connectionStatus === 'success' ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4 mr-2 text-green-400" />
-                          {t('settings.connection.success')}
-                        </>
-                      ) : connectionStatus === 'error' ? (
-                        <>
-                          <XCircle className="h-4 w-4 mr-2 text-red-400" />
-                          {t('settings.connection.failed')}
-                        </>
-                      ) : (
-                        t('settings.connection.test')
                       )}
-                    </Button>
-                    {connectionStatus === 'error' && connectionError && (
-                      <p className="text-xs text-red-400 px-2">
-                        {connectionError}
+                      {currentProvider !== 'ollama' && (
+                        <Label htmlFor="provider-model" className="text-foreground">Model</Label>
+                      )}
+                      {customModelInput[currentProvider as keyof typeof customModelInput] ? (
+                        <div className="flex gap-2">
+                          <Input
+                            id="provider-model"
+                            value={model}
+                            onChange={(e) => updateProviderConfig('model', e.target.value)}
+                            placeholder="Enter custom model name"
+                            className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setCustomModelInput(prev => ({ ...prev, [currentProvider]: false }))}
+                            className="h-9 px-3"
+                          >
+                            ← Select
+                          </Button>
+                        </div>
+                      ) : (
+                        <Select
+                          value={model || (
+                            currentProvider === 'openai' ? 'gpt-4o-mini' :
+                            currentProvider === 'openrouter' ? 'google/gemini-2.5-flash' :
+                            currentProvider === 'zhipu' ? 'glm-4-flash' :
+                            currentProvider === 'custom' ? CUSTOM_MODELS[0] :
+                            ollamaModels[0]
+                          )}
+                          onValueChange={(value) => {
+                            if (value === '__custom__') {
+                              setCustomModelInput(prev => ({ ...prev, [currentProvider]: true }));
+                            } else {
+                              updateProviderConfig('model', value);
+                            }
+                          }}
+                        >
+                          <SelectTrigger id="provider-model" className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
+                            <SelectValue placeholder="Select a model" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-muted border-border max-h-60">
+                            {currentProvider === 'openai' && OPENAI_MODELS.map(m => (
+                              <SelectItem key={m} value={m} className="text-foreground">{m}</SelectItem>
+                            ))}
+                            {currentProvider === 'openrouter' && OPENROUTER_MODELS.map(m => (
+                              <SelectItem key={m} value={m} className="text-foreground">{m}</SelectItem>
+                            ))}
+                            {currentProvider === 'zhipu' && ZHIPU_MODELS.map(m => (
+                              <SelectItem key={m} value={m} className="text-foreground">{m}</SelectItem>
+                            ))}
+                            {currentProvider === 'custom' && CUSTOM_MODELS.map(m => (
+                              <SelectItem key={m} value={m} className="text-foreground">{m}</SelectItem>
+                            ))}
+                            {currentProvider === 'ollama' && ollamaModels.map(m => (
+                              <SelectItem key={m} value={m} className="text-foreground">{m}</SelectItem>
+                            ))}
+                            <SelectItem value="__custom__" className="text-foreground">Custom model...</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {currentProvider === 'ollama' ? t('settings.hints.ollamaModel') :
+                         currentProvider === 'openai' ? 'Select from common models or enter a custom model name' :
+                         currentProvider === 'openrouter' ? 'Select from popular models or enter any OpenRouter model ID' :
+                         currentProvider === 'zhipu' ? 'Select from popular ZhipuAI models or enter a custom model name' :
+                         'Select from common models or enter your model name'}
                       </p>
-                    )}
+                    </div>
+
+                    <div className="pt-2 space-y-2">
+                      <Button
+                        onClick={handleTestConnection}
+                        disabled={isTestingConnection}
+                        className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border"
+                      >
+                        {isTestingConnection ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            {t('settings.connection.testing')}
+                          </>
+                        ) : connectionStatus === 'success' ? (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 mr-2 text-green-400" />
+                            {t('settings.connection.success')}
+                          </>
+                        ) : connectionStatus === 'error' ? (
+                          <>
+                            <XCircle className="h-4 w-4 mr-2 text-red-400" />
+                            {t('settings.connection.failed')}
+                          </>
+                        ) : (
+                          t('settings.connection.test')
+                        )}
+                      </Button>
+                      {connectionStatus === 'error' && connectionError && (
+                        <p className="text-xs text-red-400 px-2">
+                          {connectionError}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* TTS Settings */}
               {activeCategory === 'tts' && (

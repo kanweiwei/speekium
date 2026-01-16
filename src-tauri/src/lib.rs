@@ -198,6 +198,35 @@ fn detect_daemon_mode() -> Result<DaemonMode, String> {
     println!("   当前可执行文件: {:?}", current_exe);
     println!("   可执行文件目录: {:?}", exe_dir);
 
+    // Check if we're in development mode (executable is in target/debug or target/release)
+    let is_dev_mode = current_exe.to_string_lossy().contains("/target/")
+        || current_exe.to_string_lossy().contains("\\target\\");
+
+    println!("   开发模式检测: {}", is_dev_mode);
+
+    // In development mode, prioritize Python script for faster iteration
+    if is_dev_mode {
+        println!("   🔧 开发模式: 优先使用 Python 脚本");
+
+        // Check for Python script (development mode)
+        // In dev mode, the Tauri binary is in src-tauri/target/debug/
+        // The Python script is at project root: ../../../worker_daemon.py
+        let dev_script_paths = [
+            exe_dir.join("../../../worker_daemon.py"),  // From src-tauri/target/debug/
+            exe_dir.join("../../worker_daemon.py"),     // Alternative path
+            exe_dir.join("../worker_daemon.py"),        // Original relative path
+            PathBuf::from("worker_daemon.py"),          // Current directory
+        ];
+
+        for script_path in dev_script_paths.iter() {
+            if let Ok(canonical) = script_path.canonicalize() {
+                println!("✅ 开发模式: 找到 Python 脚本");
+                println!("   脚本路径: {:?}", canonical);
+                return Ok(DaemonMode::Development { script_path: canonical });
+            }
+        }
+    }
+
     // Check for sidecar executable
     #[cfg(target_os = "windows")]
     let sidecar_name = "worker_daemon.exe";
@@ -226,21 +255,23 @@ fn detect_daemon_mode() -> Result<DaemonMode, String> {
         }
     }
 
-    // Check for Python script (development mode)
-    // In dev mode, the Tauri binary is in src-tauri/target/debug/
-    // The Python script is at project root: ../../../worker_daemon.py
-    let dev_script_paths = [
-        exe_dir.join("../../../worker_daemon.py"),  // From src-tauri/target/debug/
-        exe_dir.join("../../worker_daemon.py"),     // Alternative path
-        exe_dir.join("../worker_daemon.py"),        // Original relative path
-        PathBuf::from("worker_daemon.py"),          // Current directory
-    ];
+    // Fallback: try Python script if not in dev mode but no sidecar found
+    if !is_dev_mode {
+        println!("   ⚠️  未找到 sidecar，尝试使用 Python 脚本");
 
-    for script_path in dev_script_paths.iter() {
-        if let Ok(canonical) = script_path.canonicalize() {
-            println!("✅ 开发模式: 找到 Python 脚本");
-            println!("   脚本路径: {:?}", canonical);
-            return Ok(DaemonMode::Development { script_path: canonical });
+        let dev_script_paths = [
+            exe_dir.join("../../../worker_daemon.py"),
+            exe_dir.join("../../worker_daemon.py"),
+            exe_dir.join("../worker_daemon.py"),
+            PathBuf::from("worker_daemon.py"),
+        ];
+
+        for script_path in dev_script_paths.iter() {
+            if let Ok(canonical) = script_path.canonicalize() {
+                println!("✅ 找到 Python 脚本（备用）");
+                println!("   脚本路径: {:?}", canonical);
+                return Ok(DaemonMode::Development { script_path: canonical });
+            }
         }
     }
 

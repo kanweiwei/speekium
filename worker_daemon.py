@@ -541,6 +541,9 @@ class SpeekiumDaemon:
         try:
             self._log(f"💬🔊 LLM+TTS streaming: {text[:50]}...")
 
+            # Set TTS generation state to pause VAD
+            self.assistant.is_generating_tts = True
+
             backend = self.assistant.load_llm()
 
             # Clear interrupt flag at start
@@ -558,6 +561,8 @@ class SpeekiumDaemon:
                         json.dumps({"type": "interrupted", "reason": "Interrupted before TTS"}),
                         flush=True,
                     )
+                    # Clear TTS generation state to resume VAD
+                    self.assistant.is_generating_tts = False
                     return
 
                 print(json.dumps({"type": "text_chunk", "content": response}), flush=True)
@@ -574,6 +579,8 @@ class SpeekiumDaemon:
                         ),
                         flush=True,
                     )
+                    # Clear TTS generation state to resume VAD
+                    self.assistant.is_generating_tts = False
                     return
 
                 if audio_path and auto_play:
@@ -585,6 +592,10 @@ class SpeekiumDaemon:
                     )
                     # Play audio immediately
                     await self._play_audio(audio_path)
+
+                    # Clear TTS generation state to resume VAD
+                    self.assistant.is_generating_tts = False
+                    return
 
                 print(json.dumps({"type": "done"}), flush=True)
                 return
@@ -598,6 +609,8 @@ class SpeekiumDaemon:
                         json.dumps({"type": "interrupted", "reason": "LLM streaming interrupted"}),
                         flush=True,
                     )
+                    # Clear TTS generation state to resume VAD
+                    self.assistant.is_generating_tts = False
                     break
 
                 if sentence and sentence.strip():
@@ -641,10 +654,16 @@ class SpeekiumDaemon:
             print(json.dumps({"type": "done"}), flush=True)
             self._log("✅ Streaming chat+TTS completed")
 
+            # Clear TTS generation state to resume VAD
+            self.assistant.is_generating_tts = False
+
         except Exception as e:
             self._log(f"❌ Streaming chat+TTS failed: {e}")
             traceback.print_exc(file=sys.stderr)
             print(json.dumps({"type": "error", "error": str(e)}), flush=True)
+
+            # Clear TTS generation state to resume VAD
+            self.assistant.is_generating_tts = False
 
     async def _play_audio(self, audio_path: str) -> None:
         """Play audio file (cross-platform) with interrupt support (P0-4)"""
@@ -814,14 +833,43 @@ class SpeekiumDaemon:
         try:
             from config_manager import ConfigManager
 
-            self._log(f"📥 收到保存配置请求: work_mode = {config.get('work_mode', 'MISSING')}")
+            # Log what changed
+            llm_provider = config.get("llm_provider", "未指定")
+            self._log(f"📥 收到保存配置请求 (AI 服务商: {llm_provider})")
 
             # CRITICAL: Load existing config and merge to preserve all fields
             # This prevents losing fields that aren't in the settings UI
+            # ConfigManager.load() will clean up old fields automatically
             existing_config = ConfigManager.load()
             merged_config = {**existing_config, **config}
             ConfigManager.save(merged_config)
-            self._log("✅ 配置已保存 (merged with existing config to preserve all fields)")
+            self._log("✅ 配置已保存到文件")
+
+            # CRITICAL: Reload all configuration immediately
+            # This ensures all changes take effect without needing to track what changed
+            if self.assistant:
+                # Reload VAD settings
+                if hasattr(self.assistant, "_load_vad_config"):
+                    self.assistant._load_vad_config()
+
+                # Reload TTS settings
+                if hasattr(self.assistant, "_load_tts_config"):
+                    self.assistant._load_tts_config()
+
+                # Reload LLM settings (including provider and model)
+                if hasattr(self.assistant, "_load_llm_config"):
+                    self.assistant._load_llm_config()
+
+                # Reset backend so it will be recreated with new config
+                old_backend = self.assistant.llm_backend
+                self.assistant.llm_backend = None
+
+                # Log the change
+                backend_name = old_backend.__class__.__name__ if old_backend else "None"
+                self._log(f"✅ 所有配置已重新加载 (VAD, TTS, LLM)")
+                self._log(
+                    f"🔄 LLM backend 已重置: {backend_name} → 将在下次对话时使用新配置 ({llm_provider})"
+                )
 
             return {"success": True}
         except Exception as e:
