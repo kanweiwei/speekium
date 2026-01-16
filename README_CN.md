@@ -33,7 +33,7 @@
 ---
 
 <p align="center">
-  <img src="./docs/screenshots/main.png" width="600" alt="Speekium 主界面">
+  <img src="./docs/screenshots/main_cn.png" width="600" alt="Speekium 主界面">
 </p>
 
 ## 为什么选择 Speekium？
@@ -77,13 +77,13 @@
 <summary>点击查看更多截图</summary>
 
 ### 设置
-<img src="./docs/screenshots/settings.png" width="600" alt="设置">
+<img src="./docs/screenshots/settings_cn.png" width="600" alt="设置">
 
 ### LLM 后端配置
-<img src="./docs/screenshots/llm-backends.png" width="600" alt="LLM 后端">
+<img src="./docs/screenshots/llm-backends_cn.png" width="600" alt="LLM 后端">
 
 ### 深色 & 浅色主题
-<img src="./docs/screenshots/themes.png" width="600" alt="主题">
+<img src="./docs/screenshots/themes_cn.png" width="600" alt="主题">
 
 </details>
 

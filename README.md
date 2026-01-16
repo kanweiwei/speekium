@@ -33,7 +33,7 @@
 ---
 
 <p align="center">
-  <img src="./docs/screenshots/main.png" width="600" alt="Speekium Main Interface">
+  <img src="./docs/screenshots/main_en.png" width="600" alt="Speekium Main Interface">
 </p>
 
 ## Why Speekium?
@@ -77,13 +77,13 @@
 <summary>Click to view more screenshots</summary>
 
 ### Settings
-<img src="./docs/screenshots/settings.png" width="600" alt="Settings">
+<img src="./docs/screenshots/settings_en.png" width="600" alt="Settings">
 
 ### LLM Backend Configuration
-<img src="./docs/screenshots/llm-backends.png" width="600" alt="LLM Backends">
+<img src="./docs/screenshots/llm-backends_en.png" width="600" alt="LLM Backends">
 
 ### Dark & Light Theme
-<img src="./docs/screenshots/themes.png" width="600" alt="Themes">
+<img src="./docs/screenshots/themes_en.png" width="600" alt="Themes">
 
 </details>
 
