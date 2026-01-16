@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { HotkeyConfig, ModifierKey } from '../types/hotkey';
+import { parseHotkeyDisplay } from '../utils/hotkeyParser';
 import styles from './HotkeyRecorder.module.css';
 
 interface HotkeyRecorderProps {
@@ -14,6 +15,12 @@ const MODIFIER_DISPLAY: Record<ModifierKey, string> = {
   'Alt': '⌥',
   'Meta': '◆',
 };
+
+// Helper function to parse hotkey config into display keys
+function getDisplayKeys(config: HotkeyConfig): string[] {
+  // Use the same parsing logic as parseHotkeyDisplay for consistency
+  return parseHotkeyDisplay(config);
+}
 
 export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
@@ -109,8 +116,8 @@ export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProp
             <span className={styles.hint}>按下快捷键...</span>
           )
         ) : (
-          value.displayName.split('').map((char, i) => (
-            <span key={i} className={styles.key}>{char}</span>
+          getDisplayKeys(value).map((key, i) => (
+            <span key={i} className={styles.key}>{key}</span>
           ))
         )}
       </div>

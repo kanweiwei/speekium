@@ -924,9 +924,9 @@ export function Settings({
                     </p>
                     <HotkeyRecorder
                       value={config?.push_to_talk_hotkey || {
-                        modifiers: ['CmdOrCtrl'],
+                        modifiers: ['Alt'],
                         key: 'Digit3',
-                        displayName: '⌘3',
+                        displayName: '⌥3',
                       }}
                       onChange={(hotkey) => updateHotkey(hotkey)}
                       disabled={saveStatus === 'saving'}

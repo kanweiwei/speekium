@@ -7,7 +7,7 @@ import type { HotkeyConfig } from '@/types/hotkey';
  */
 export function parseHotkeyDisplay(config?: HotkeyConfig | null): string[] {
   if (!config) {
-    return ['⌘', '3']; // Default fallback: CmdOrCtrl+3
+    return ['⌥', '3']; // Default fallback: Alt+3
   }
 
   const keyParts: string[] = [];
@@ -43,11 +43,11 @@ export function parseHotkeyDisplay(config?: HotkeyConfig | null): string[] {
 /**
  * Get hotkey display name from config
  * @param config - Hotkey configuration object
- * @returns Display name (e.g., '⌘+⌥')
+ * @returns Display name (e.g., '⌥+3')
  */
 export function getHotkeyDisplayName(config?: HotkeyConfig | null): string {
-  if (!config) {
-    return '⌘3'; // Default fallback: CmdOrCtrl+3
-  }
-  return config.displayName || '⌘3';
+  // Always parse dynamically from modifiers and key, don't use stored displayName
+  // This ensures display is always in sync with the actual configuration
+  const parts = parseHotkeyDisplay(config);
+  return parts.join('+');
 }
