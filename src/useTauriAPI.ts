@@ -198,12 +198,10 @@ export function useTauriAPI() {
       });
 
       if (result.success && result.text) {
-
-        // 🔧 Bug fix: Handle text-input mode by calling type_text_command
+        // Handle text-input mode by calling type_text_command
         if (workMode === 'text-input') {
           try {
             await invoke<string>('type_text_command', { text: result.text! });
-            console.log('[Recording] Text input completed:', result.text!.slice(0, 30) + '...');
           } catch (error) {
             console.error('[Recording] Text input failed:', error);
             throw error;
@@ -243,7 +241,6 @@ export function useTauriAPI() {
     setIsProcessing(true);
 
     try {
-
       if (useTTS && useStreaming) {
         // TTS streaming mode
         return await chatTTSStream(text);

@@ -674,16 +674,22 @@ class SpeekiumDaemon:
 
         try:
             system = platform.system()
+            self._log(f"🔊 Playing audio on {system}: {audio_path}")
 
             if system == "Darwin":  # macOS
+                # Check if audio file exists
+                if not os.path.exists(audio_path):
+                    self._log(f"⚠️ Audio file not found: {audio_path}")
+                    return
+
                 # Use afplay (built-in macOS command)
+                self._log(f"🔊 Playing audio")
                 process = await asyncio.create_subprocess_exec(
                     "afplay",
                     audio_path,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )
-                self._log(f"🔊 Playing audio: {audio_path}")
 
                 # Wait for playback with interrupt checking
                 while True:
@@ -695,7 +701,7 @@ class SpeekiumDaemon:
                         except asyncio.TimeoutError:
                             process.kill()
                         return
-                    if process.poll() is not None:
+                    if process.returncode is not None:
                         break  # Process finished
                     await asyncio.sleep(0.1)  # Check every 100ms
 
@@ -721,7 +727,7 @@ class SpeekiumDaemon:
                             except asyncio.TimeoutError:
                                 process.kill()
                             return
-                        if process.poll() is not None:
+                        if process.returncode is not None:
                             break
                         await asyncio.sleep(0.1)
 
@@ -747,7 +753,7 @@ class SpeekiumDaemon:
                             except asyncio.TimeoutError:
                                 process.kill()
                             return
-                        if process.poll() is not None:
+                        if process.returncode is not None:
                             break
                         await asyncio.sleep(0.1)
 
@@ -789,7 +795,7 @@ class SpeekiumDaemon:
                         except asyncio.TimeoutError:
                             process.kill()
                         return
-                    if process.poll() is not None:
+                    if process.returncode is not None:
                         break
                     await asyncio.sleep(0.1)
 
@@ -797,7 +803,10 @@ class SpeekiumDaemon:
                 self._log(f"⚠️ Unsupported operating system: {system}")
 
         except Exception as e:
+            import traceback
+
             self._log(f"⚠️ Audio playback failed: {e}")
+            traceback.print_exc(file=sys.stderr)
 
     async def handle_tts(self, text: str, language: str | None = None) -> dict:
         """Handle TTS generation command"""

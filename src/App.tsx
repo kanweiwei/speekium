@@ -696,6 +696,14 @@ function App() {
               await new Promise(resolve => setTimeout(resolve, 1000));
               continue;
             }
+            // Check if error is "No audio recorded" - this is normal in continuous mode when no speech detected
+            // Just wait briefly and retry, don't show error
+            if (result.error?.includes('No audio recorded')) {
+              console.log('No speech detected, continuing to listen...');
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              continue;
+            }
+            // For other errors, show error and wait longer before retry
             setError(result.error || t('app.errors.listenFailed'));
             await new Promise(resolve => setTimeout(resolve, 2000));
           }

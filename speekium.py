@@ -129,6 +129,7 @@ MIN_SPEECH_DURATION = 0.4  # Minimum speech duration (seconds) - increased
 SILENCE_AFTER_SPEECH = 0.8  # Silence duration to stop recording (seconds)
 MAX_RECORDING_DURATION = 30  # Maximum recording duration (seconds)
 INTERRUPT_CHECK_DURATION = 1.5  # Duration to check for speech continuation after pause (seconds)
+INITIAL_SPEECH_TIMEOUT = 60  # Maximum time to wait for initial speech to start (seconds)
 
 # ===== System Prompt (optimized for voice output) =====
 SYSTEM_PROMPT = """You are Speekium, an intelligent voice assistant. Follow these rules:
@@ -451,6 +452,10 @@ class VoiceAssistant:
         pre_buffer = deque(maxlen=pre_buffer_size)
 
         recording_done = False
+        # Track start time for initial speech detection timeout
+        import time
+
+        start_time = time.time()
 
         def callback(indata, frame_count, time_info, status):
             nonlocal is_speaking, silence_chunks, speech_chunks, consecutive_speech, recording_done
@@ -531,6 +536,14 @@ class VoiceAssistant:
                     logger.info("recording_interrupted")
                     recording_done = True
                     break
+
+                # Check initial speech timeout (only before speech starts)
+                if not is_speaking:
+                    elapsed = time.time() - start_time
+                    if elapsed > INITIAL_SPEECH_TIMEOUT:
+                        logger.info("initial_speech_timeout", elapsed=elapsed)
+                        recording_done = True
+                        break
 
                 # Also check config file for recording mode changes
                 # This ensures mode changes are detected even if interrupt command is queued
