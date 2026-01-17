@@ -66,14 +66,12 @@ pub fn type_text(text: &str) -> Result<(), String> {
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
     use objc::{msg_send, sel, sel_impl, class};
 
-    println!("⌨️  使用剪贴板输入文字: {}", text);
 
     // 1. Save current clipboard content
     let pasteboard: id = unsafe { msg_send![class!(NSPasteboard), generalPasteboard] };
     let pasteboard_type = unsafe { CFString::alloc(nil).init_str("public.utf8-plain-text") };
     let old_content: id = unsafe { msg_send![pasteboard, stringForType: pasteboard_type] };
 
-    println!("📋 已保存旧剪贴板内容");
 
     // Define clipboard restoration function
     let restore_clipboard = || -> Result<(), String> {
@@ -85,11 +83,9 @@ pub fn type_text(text: &str) -> Result<(), String> {
                 let success: bool = msg_send![pasteboard, setString: old_content forType: pasteboard_type];
 
                 if !success {
-                    eprintln!("⚠️  警告：剪贴板恢复失败，用户数据可能丢失");
                     return Err("Failed to restore clipboard".to_string());
                 }
             }
-            println!("🔄 已恢复原剪贴板内容");
         }
         Ok(())
     };
@@ -104,13 +100,11 @@ pub fn type_text(text: &str) -> Result<(), String> {
         let success: bool = msg_send![pasteboard, setString: ns_string forType: pasteboard_type];
 
         if !success {
-            println!("⚠️  剪贴板设置失败");
             let _ = restore_clipboard();
             return Err("Failed to set clipboard content".to_string());
         }
     }
 
-    println!("✅ 已设置新剪贴板内容");
 
     // 3. Create event source
     let event_source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
@@ -125,27 +119,23 @@ pub fn type_text(text: &str) -> Result<(), String> {
         .map_err(|e| format!("Failed to create Cmd key down event: {:?}", e))?;
     cmd_down.set_flags(CGEventFlags::CGEventFlagCommand);
     cmd_down.post(CGEventTapLocation::Session);
-    println!("⌨️  按下 Cmd");
 
     // Press V
     let v_down = CGEvent::new_keyboard_event(event_source.clone(), v_key_code, true)
         .map_err(|e| format!("Failed to create V key down event: {:?}", e))?;
     v_down.set_flags(CGEventFlags::CGEventFlagCommand);
     v_down.post(CGEventTapLocation::Session);
-    println!("⌨️  按下 V");
 
     // Release V
     let v_up = CGEvent::new_keyboard_event(event_source.clone(), v_key_code, false)
         .map_err(|e| format!("Failed to create V key up event: {:?}", e))?;
     v_up.set_flags(CGEventFlags::CGEventFlagCommand);
     v_up.post(CGEventTapLocation::Session);
-    println!("⌨️  释放 V");
 
     // Release Cmd
     let cmd_up = CGEvent::new_keyboard_event(event_source.clone(), cmd_key_code, false)
         .map_err(|e| format!("Failed to create Cmd key up event: {:?}", e))?;
     cmd_up.post(CGEventTapLocation::Session);
-    println!("⌨️  释放 Cmd");
 
     // Wait for paste to complete
     std::thread::sleep(std::time::Duration::from_millis(50));
@@ -153,6 +143,5 @@ pub fn type_text(text: &str) -> Result<(), String> {
     // 5. Restore original clipboard content
     restore_clipboard()?;
 
-    println!("⌨️  文字输入完成");
     Ok(())
 }

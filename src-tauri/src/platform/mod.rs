@@ -11,7 +11,6 @@ pub use macos::type_text;
 // Tauri command - must be in the same module where it's registered
 #[tauri::command]
 pub async fn type_text_command(text: String) -> Result<String, String> {
-    println!("⌨️  Typing text: {} ({} chars)", text, text.chars().count());
 
     #[cfg(target_os = "macos")]
     {

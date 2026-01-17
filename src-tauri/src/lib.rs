@@ -1,10 +1,4 @@
-use tauri::{
-    image::Image,
-    menu::{MenuBuilder, MenuItemBuilder},
-    tray::{TrayIconBuilder, TrayIconEvent},
-    webview::WebviewWindowBuilder,
-    Emitter, Manager, Runtime, State,
-};
+use tauri::{Emitter, Manager, Runtime, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout, ChildStderr};
 use std::io::{BufReader, BufWriter, Write, BufRead, Read};
@@ -17,6 +11,7 @@ mod audio;
 mod types;
 mod state;
 mod platform;
+mod ui;
 use database::{Database, Session, Message, PaginatedResult};
 use audio::AudioRecorder;
 use types::{RecordingMode, WorkMode, AppStatus, DaemonMode, DaemonStatusPayload};
@@ -37,19 +32,14 @@ fn detect_daemon_mode() -> Result<DaemonMode, String> {
     let exe_dir = current_exe.parent()
         .ok_or_else(|| "Failed to get executable directory".to_string())?;
 
-    println!("🔍 检测守护进程模式...");
-    println!("   当前可执行文件: {:?}", current_exe);
-    println!("   可执行文件目录: {:?}", exe_dir);
 
     // Check if we're in development mode (executable is in target/debug or target/release)
     let is_dev_mode = current_exe.to_string_lossy().contains("/target/")
         || current_exe.to_string_lossy().contains("\\target\\");
 
-    println!("   开发模式检测: {}", is_dev_mode);
 
     // In development mode, prioritize Python script for faster iteration
     if is_dev_mode {
-        println!("   🔧 开发模式: 优先使用 Python 脚本");
 
         // Check for Python script (development mode)
         // In dev mode, the Tauri binary is in src-tauri/target/debug/
@@ -63,8 +53,6 @@ fn detect_daemon_mode() -> Result<DaemonMode, String> {
 
         for script_path in dev_script_paths.iter() {
             if let Ok(canonical) = script_path.canonicalize() {
-                println!("✅ 开发模式: 找到 Python 脚本");
-                println!("   脚本路径: {:?}", canonical);
                 return Ok(DaemonMode::Development { script_path: canonical });
             }
         }
@@ -92,15 +80,12 @@ fn detect_daemon_mode() -> Result<DaemonMode, String> {
     for sidecar_path in sidecar_paths.iter() {
         // Use is_file() to ensure we found an executable, not a directory
         if sidecar_path.is_file() {
-            println!("✅ 生产模式: 找到 sidecar 可执行文件");
-            println!("   Sidecar 路径: {:?}", sidecar_path);
             return Ok(DaemonMode::Production { executable_path: sidecar_path.clone() });
         }
     }
 
     // Fallback: try Python script if not in dev mode but no sidecar found
     if !is_dev_mode {
-        println!("   ⚠️  未找到 sidecar，尝试使用 Python 脚本");
 
         let dev_script_paths = [
             exe_dir.join("../../../worker_daemon.py"),
@@ -111,15 +96,12 @@ fn detect_daemon_mode() -> Result<DaemonMode, String> {
 
         for script_path in dev_script_paths.iter() {
             if let Ok(canonical) = script_path.canonicalize() {
-                println!("✅ 找到 Python 脚本（备用）");
-                println!("   脚本路径: {:?}", canonical);
                 return Ok(DaemonMode::Development { script_path: canonical });
             }
         }
     }
 
     // Fallback: try the original relative path (will fail if not found, but provides useful error)
-    println!("⚠️ 开发模式: 使用默认相对路径");
     let fallback_path = exe_dir.join("../worker_daemon.py");
     Ok(DaemonMode::Development { script_path: fallback_path })
 }
@@ -132,7 +114,6 @@ struct PythonDaemon {
 
 impl PythonDaemon {
     fn new() -> Result<Self, String> {
-        println!("🚀 启动 Python 守护进程...");
 
         // Detect execution mode
         let daemon_mode = detect_daemon_mode()?;
@@ -147,7 +128,6 @@ impl PythonDaemon {
         // Build command based on mode
         let mut child = match daemon_mode {
             DaemonMode::Production { ref executable_path } => {
-                println!("📦 生产模式: 启动 sidecar 可执行文件");
                 // Include _internal directory in PATH for bundled dependencies
                 let internal_dir = executable_path.parent()
                     .map(|p| p.join("_internal"))
@@ -157,7 +137,6 @@ impl PythonDaemon {
                     extra_paths,
                     current_path
                 );
-                println!("📂 PATH 包含: {}", internal_dir.display());
 
                 Command::new(&executable_path)
                     .arg("daemon")
@@ -169,17 +148,14 @@ impl PythonDaemon {
                     .map_err(|e| format!("Failed to start sidecar daemon: {} (path: {:?})", e, executable_path))?
             }
             DaemonMode::Development { script_path } => {
-                println!("🔧 开发模式: 使用 Python 运行脚本");
 
                 // Try to use venv Python if available (in project root)
                 let project_root = script_path.parent().unwrap_or(std::path::Path::new("."));
                 let venv_python = project_root.join(".venv/bin/python3");
 
                 let python_cmd = if venv_python.exists() {
-                    println!("🐍 使用虚拟环境 Python: {:?}", venv_python);
                     venv_python
                 } else {
-                    println!("🐍 使用系统 Python: python3");
                     std::path::PathBuf::from("python3")
                 };
 
@@ -218,21 +194,18 @@ impl PythonDaemon {
         let timeout = Duration::from_secs(25);
         let mut initialized = false;
 
-        println!("⏳ 等待守护进程初始化...");
 
         while start.elapsed() < timeout {
             let mut line = String::new();
             match stdout.read_line(&mut line) {
                 Ok(0) => {
                     // EOF - daemon exited unexpectedly
-                    println!("❌ 守护进程在初始化期间退出");
 
                     // Try to read stderr to get the error message
                     if let Some(mut stderr_reader) = PTT_STDERR.lock().unwrap().take() {
                         let mut stderr_content = String::new();
                         if let Ok(_) = stderr_reader.read_to_string(&mut stderr_content) {
                             if !stderr_content.is_empty() {
-                                println!("📛 守护进程错误输出:\n{}", stderr_content);
                             }
                         }
                     }
@@ -243,14 +216,12 @@ impl PythonDaemon {
                     // Parse JSON log events
                     if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
                         if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
-                            println!("📋 守护进程事件: {}", event_type);
 
                             // Check if this is the "ready" daemon_success event (last init event)
                             if event_type == "daemon_success" {
                                 if let Some(message) = event.get("message").and_then(|v| v.as_str()) {
                                     if message.contains("就绪") || message.contains("ready") {
                                         initialized = true;
-                                        println!("✨ 守护进程初始化完成");
                                         break;
                                     }
                                 }
@@ -259,18 +230,15 @@ impl PythonDaemon {
                     }
                 }
                 Err(e) => {
-                    println!("❌ 读取守护进程输出失败: {}", e);
                     return Err(format!("Failed to read daemon output: {}", e));
                 }
             }
         }
 
         if !initialized {
-            println!("❌ 守护进程初始化超时 (25 秒)");
             return Err("Daemon initialization timeout (25 seconds)".to_string());
         }
 
-        println!("✅ Python 守护进程已启动");
 
         Ok(PythonDaemon {
             process: child,
@@ -286,7 +254,6 @@ impl PythonDaemon {
             "args": args
         });
 
-        println!("📤 发送命令: {}", command);
 
         // Send to stdin
         writeln!(self.stdin, "{}", request.to_string())
@@ -295,14 +262,12 @@ impl PythonDaemon {
         self.stdin.flush()
             .map_err(|e| format!("Failed to flush stdin: {}", e))?;
 
-        println!("⏳ 等待响应...");
 
         // Read response from stdout, skip log events
         // Daemon log events have "event" field, command responses have "success" field
         loop {
             // Check if recording should be aborted (for continuous mode)
             if RECORDING_ABORTED.load(Ordering::SeqCst) {
-                println!("🚫 Recording aborted during wait");
                 RECORDING_ABORTED.store(false, Ordering::SeqCst);
                 return Ok(serde_json::json!({
                     "success": false,
@@ -313,25 +278,21 @@ impl PythonDaemon {
             let mut line = String::new();
             self.stdout.read_line(&mut line)
                 .map_err(|e| {
-                    println!("❌ 读取响应失败: {}", e);
                     format!("Failed to read response: {}", e)
                 })?;
 
             // Parse JSON
             let result: serde_json::Value = serde_json::from_str(&line)
                 .map_err(|e| {
-                    println!("❌ JSON 解析失败: {} | 原始内容: {}", e, line);
                     format!("Failed to parse JSON: {}", e)
                 })?;
 
             // Check if this is a log event (has "event" field)
             if result.get("event").is_some() {
-                println!("📋 跳过日志事件: {}", result.get("event").unwrap().as_str().unwrap_or("unknown"));
                 continue;  // Skip log, continue reading next line
             }
 
             // This is a command response (has "success" field or other response fields)
-            println!("📥 收到命令响应: {}", line.trim());
             return Ok(result);
         }
     }
@@ -344,7 +305,6 @@ impl PythonDaemon {
             "args": args
         });
 
-        println!("📤 发送命令（不等待响应）: {}", command);
 
         // Send to stdin
         writeln!(self.stdin, "{}", request.to_string())
@@ -353,27 +313,21 @@ impl PythonDaemon {
         self.stdin.flush()
             .map_err(|e| format!("Failed to flush stdin: {}", e))?;
 
-        println!("✅ 命令已发送（异步模式）");
         Ok(())
     }
 
     fn health_check(&mut self) -> bool {
-        println!("🏥 执行健康检查...");
         match self.send_command("health", serde_json::json!({})) {
             Ok(result) => {
-                println!("✅ 健康检查响应: {:?}", result);
                 if let Some(obj) = result.as_object() {
                     let success = obj.get("success")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-                    println!("🔍 success 字段: {}", success);
                     return success;
                 }
-                println!("⚠️ 响应不是对象");
                 false
             }
             Err(e) => {
-                println!("❌ 健康检查失败: {}", e);
                 false
             }
         }
@@ -429,7 +383,6 @@ fn ensure_daemon_running() -> Result<(), String> {
     if let Some(ref mut d) = *daemon {
         // Skip health check during streaming
         if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
-            println!("⏸️ 流式操作进行中，跳过 ensure_daemon 健康检查");
             return Ok(());
         }
 
@@ -446,7 +399,6 @@ fn ensure_daemon_running() -> Result<(), String> {
         }
 
         // Unhealthy, terminate and restart
-        println!("⚠️ 守护进程不健康，正在重启...");
         let _ = d.process.kill();
     }
 
@@ -460,7 +412,6 @@ fn ensure_daemon_running() -> Result<(), String> {
 fn is_daemon_ready() -> bool {
     let ready = DAEMON_READY.load(std::sync::atomic::Ordering::Acquire);
     if !ready {
-        println!("⚠️ Daemon not ready: DAEMON_READY flag is false");
     }
     ready
 }
@@ -469,7 +420,6 @@ fn is_daemon_ready() -> bool {
 /// This allows the UI to show immediately while daemon loads in background
 fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
     std::thread::spawn(move || {
-        println!("🚀 异步启动 Python 守护进程...");
 
         // Send initial loading status
         let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
@@ -481,7 +431,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
         let daemon_mode = match detect_daemon_mode() {
             Ok(mode) => mode,
             Err(e) => {
-                println!("❌ 检测守护进程模式失败: {}", e);
                 let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                     status: "error".to_string(),
                     message: format!("启动失败: {}", e),
@@ -498,7 +447,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
         // Build command based on mode
         let mut child = match daemon_mode {
             DaemonMode::Production { ref executable_path } => {
-                println!("📦 生产模式: 启动 sidecar 可执行文件");
                 let internal_dir = executable_path.parent()
                     .map(|p| p.join("_internal"))
                     .unwrap_or_default();
@@ -527,7 +475,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                 }
             }
             DaemonMode::Development { script_path } => {
-                println!("🔧 开发模式: 使用 Python 运行脚本");
                 let project_root = script_path.parent().unwrap_or(std::path::Path::new("."));
                 let venv_python = project_root.join(".venv/bin/python3");
                 let python_cmd = if venv_python.exists() {
@@ -597,7 +544,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
 
         // Wait for daemon initialization with progress updates
         // No timeout - let it load as long as needed
-        println!("⏳ 等待守护进程初始化...");
         let mut initialized = false;
 
         loop {
@@ -605,7 +551,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
             match stdout.read_line(&mut line) {
                 Ok(0) => {
                     // EOF - daemon exited
-                    println!("❌ 守护进程在初始化期间退出");
                     let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                         status: "error".to_string(),
                         message: "语音服务意外退出".to_string(),
@@ -616,7 +561,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                     // Parse JSON log events and forward status to frontend
                     if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
                         if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
-                            println!("📋 守护进程事件: {}", event_type);
 
                             // Map daemon events to user-friendly messages
                             let status_message = match event_type {
@@ -660,7 +604,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                     }
                 }
                 Err(e) => {
-                    println!("❌ 读取守护进程输出失败: {}", e);
                     let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                         status: "error".to_string(),
                         message: format!("读取输出失败: {}", e),
@@ -680,7 +623,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
             });
         }
 
-        println!("✅ Python 守护进程已启动");
 
         // CRITICAL: Load config and sync work_mode/recording_mode to Rust globals
         // This ensures backend state matches config file on startup
@@ -695,7 +637,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                 if let Some(work_mode) = WorkMode::from_str(work_mode_str) {
                                     let old_mode = *WORK_MODE.lock().unwrap();
                                     *WORK_MODE.lock().unwrap() = work_mode;
-                                    println!("🔄 Work mode synced from config: {} → {}", old_mode.as_str(), work_mode.as_str());
                                 }
                             }
 
@@ -704,13 +645,11 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                 if let Some(recording_mode) = RecordingMode::from_str(recording_mode_str) {
                                     let old_mode = *RECORDING_MODE.lock().unwrap();
                                     *RECORDING_MODE.lock().unwrap() = recording_mode;
-                                    println!("🔄 Recording mode synced from config: {} → {}", old_mode.as_str(), recording_mode.as_str());
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        println!("⚠️ Failed to load config during daemon startup: {}", e);
                     }
                 }
             }
@@ -723,7 +662,6 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
 
         // Mark daemon as ready - this allows commands to be executed
         DAEMON_READY.store(true, std::sync::atomic::Ordering::Release);
-        println!("✅ Daemon marked as ready");
 
         // Send ready status to frontend
         let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
@@ -755,7 +693,6 @@ fn call_daemon(command: &str, args: serde_json::Value) -> Result<serde_json::Val
 /// Listen to Python daemon stderr in background thread, parse PTT events and forward to frontend
 fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
     std::thread::spawn(move || {
-        println!("🎧 PTT 事件读取器启动");
 
         loop {
             // Get stderr reader
@@ -765,12 +702,10 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                     let mut line = String::new();
                     match stderr.read_line(&mut line) {
                         Ok(0) => {
-                            println!("🔚 PTT: stderr EOF - 守护进程可能已退出");
                             break;
                         }
                         Ok(_) => Some(line),
                         Err(e) => {
-                            println!("❌ PTT: 读取 stderr 失败: {}", e);
                             None
                         }
                     }
@@ -791,7 +726,6 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                 // Try to parse as JSON PTT event
                 if let Ok(event) = serde_json::from_str::<serde_json::Value>(line) {
                     if let Some(ptt_event) = event.get("ptt_event").and_then(|v| v.as_str()) {
-                        println!("🎤 PTT 事件: {}", ptt_event);
 
                         // Get main window and floating window
                         let main_window = app_handle.get_webview_window("main");
@@ -799,7 +733,6 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
 
                         // Debug: check if overlay window exists
                         if overlay_window.is_none() {
-                            println!("⚠️ PTT overlay 窗口不存在！");
                         }
 
                         // Send state to floating window and control visibility
@@ -807,39 +740,25 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                             match ptt_event {
                                 "listening" => {
                                     // Show overlay in listening state (continuous mode waiting for speech)
-                                    println!("🎤 PTT: 显示 overlay (listening)");
                                     let _ = overlay.set_ignore_cursor_events(false);
-                                    match overlay.show() {
-                                        Ok(_) => println!("✅ overlay.show() 成功"),
-                                        Err(e) => println!("❌ overlay.show() 失败: {}", e),
-                                    }
+                                    let _ = overlay.show();
                                     let _ = overlay.emit("ptt-state", "listening");
                                 }
                                 "detected" => {
                                     // Speech detected, transitioning to recording
-                                    println!("🎤 PTT: 显示 overlay (detected)");
                                     let _ = overlay.set_ignore_cursor_events(false);
-                                    match overlay.show() {
-                                        Ok(_) => println!("✅ overlay.show() 成功"),
-                                        Err(e) => println!("❌ overlay.show() 失败: {}", e),
-                                    }
+                                    let _ = overlay.show();
                                     let _ = overlay.emit("ptt-state", "detected");
                                 }
                                 "recording" => {
-                                    println!("🎤 PTT: 显示 overlay (recording)");
                                     let _ = overlay.set_ignore_cursor_events(false);
-                                    match overlay.show() {
-                                        Ok(_) => println!("✅ overlay.show() 成功"),
-                                        Err(e) => println!("❌ overlay.show() 失败: {}", e),
-                                    }
+                                    let _ = overlay.show();
                                     let _ = overlay.emit("ptt-state", "recording");
                                 }
                                 "processing" => {
-                                    println!("🎤 PTT: 处理中，不显示 overlay");
                                     let _ = overlay.emit("ptt-state", "processing");
                                 }
                                 "idle" | "error" => {
-                                    println!("🎤 PTT: 隐藏 overlay");
                                     let _ = overlay.hide();
                                     let _ = overlay.emit("ptt-state", "idle");
                                 }
@@ -871,19 +790,13 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     // User speech recognition result - hide overlay, show message
                                     // Set processing flag to prevent overlay from reappearing
                                     PTT_PROCESSING.store(true, Ordering::SeqCst);
-                                    println!("🎤 用户消息事件 - 隐藏浮动窗口，设置 PTT_PROCESSING=true");
                                     let _ = window.emit("ptt-state", "idle");
                                     if let Some(ref overlay) = overlay_window {
-                                        println!("🎤 调用 overlay.hide()");
                                         // First make it ignore cursor events, then hide
                                         let _ = overlay.set_ignore_cursor_events(true);
-                                        match overlay.hide() {
-                                            Ok(_) => println!("🎤浮动窗口已隐藏"),
-                                            Err(e) => println!("❌ 隐藏浮动窗口失败: {}", e),
-                                        }
+                                        let _ = overlay.hide();
                                         let _ = overlay.emit("ptt-state", "idle");
                                     } else {
-                                        println!("⚠️ 浮动窗口不存在");
                                     }
                                     if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
                                         let _ = window.emit("ptt-user-message", text);
@@ -904,7 +817,6 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                     // LLM response complete - ensure overlay is hidden
                                     // Clear processing flag to allow future recordings
                                     PTT_PROCESSING.store(false, Ordering::SeqCst);
-                                    println!("🎤 Assistant 完成事件 - 清除 PTT_PROCESSING 标志");
                                     let _ = window.emit("ptt-state", "idle");
                                     if let Some(ref overlay) = overlay_window {
                                         let _ = overlay.set_ignore_cursor_events(true);
@@ -928,26 +840,22 @@ fn start_ptt_reader<R: Runtime>(app_handle: tauri::AppHandle<R>) {
                                 "error" => {
                                     // Clear processing flag on error
                                     PTT_PROCESSING.store(false, Ordering::SeqCst);
-                                    println!("🎤 PTT 错误事件 - 清除 PTT_PROCESSING 标志");
                                     let _ = window.emit("ptt-state", "error");
                                     if let Some(error) = event.get("error").and_then(|v| v.as_str()) {
                                         let _ = window.emit("ptt-error", error);
                                     }
                                 }
                                 _ => {
-                                    println!("⚠️ PTT: 未知事件类型: {}", ptt_event);
                                 }
                             }
                         }
                     }
                 } else {
                     // Not a PTT event JSON, output as regular log
-                    println!("📋 daemon stderr: {}", line);
                 }
             }
         }
 
-        println!("🛑 PTT 事件读取器退出");
     });
 }
 
@@ -1047,7 +955,6 @@ fn greet(name: &str) -> String {
 async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Option<String>) -> Result<RecordResult, String> {
     // Block recording during streaming operations (TTS, chat streaming)
     if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
-        println!("⏸️ Recording blocked: streaming operation in progress");
         return Ok(RecordResult {
             success: false,
             text: None,
@@ -1058,10 +965,9 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
 
     // Check if recording should be aborted
     if RECORDING_ABORTED.load(Ordering::SeqCst) {
-        println!("🚫 Recording aborted by mode change");
         RECORDING_ABORTED.store(false, Ordering::SeqCst);
         // Send idle state to hide floating window
-        emit_ptt_state(&app_handle, "idle");
+        ui::emit_ptt_state(&app_handle, "idle");
         return Ok(RecordResult {
             success: false,
             text: None,
@@ -1075,9 +981,8 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
     let is_continuous_mode = mode == "continuous";
 
     if is_continuous_mode && current_mode != RecordingMode::Continuous {
-        println!("🚫 Continuous recording aborted (mode changed to {})", current_mode.as_str());
         // Send idle state to hide floating window
-        emit_ptt_state(&app_handle, "idle");
+        ui::emit_ptt_state(&app_handle, "idle");
         return Ok(RecordResult {
             success: false,
             text: None,
@@ -1091,8 +996,7 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
         // Just switched from continuous to push-to-talk
         // Check if there's a recording in progress by checking the abort flag
         if RECORDING_ABORTED.load(Ordering::SeqCst) {
-            println!("🚫 Recording aborted (mode changed from continuous)");
-            emit_ptt_state(&app_handle, "idle");
+            ui::emit_ptt_state(&app_handle, "idle");
             return Ok(RecordResult {
                 success: false,
                 text: None,
@@ -1119,15 +1023,14 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
         "duration": duration_val
     });
 
-    println!("🎤 调用守护进程: record {} (current mode: {})", args, current_mode.as_str());
 
     // Send recording start state to all windows (unified state sync)
-    emit_ptt_state(&app_handle, "recording");
+    ui::emit_ptt_state(&app_handle, "recording");
 
     let result = call_daemon("record", args);
 
     // Send processing state
-    emit_ptt_state(&app_handle, "processing");
+    ui::emit_ptt_state(&app_handle, "processing");
 
     // Handle result
     let parsed_result = result.and_then(|r| {
@@ -1136,7 +1039,7 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
     });
 
     // Send idle state
-    emit_ptt_state(&app_handle, "idle");
+    ui::emit_ptt_state(&app_handle, "idle");
 
     parsed_result
 }
@@ -1144,7 +1047,6 @@ async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: Opti
 /// Set recording mode (continuous or push-to-talk)
 #[tauri::command]
 fn set_recording_mode(mode: String) -> Result<(), String> {
-    println!("🎛️ Setting recording mode to: {}", mode);
 
     // Parse mode from string
     let new_mode = RecordingMode::from_str(mode.as_str())
@@ -1157,23 +1059,17 @@ fn set_recording_mode(mode: String) -> Result<(), String> {
     if new_mode == RecordingMode::Continuous {
         // Switching to continuous: clear abort flag to allow new recordings
         RECORDING_ABORTED.store(false, Ordering::SeqCst);
-        println!("✅ Cleared abort flag (switched to continuous)");
     } else {
         // Switching away from continuous: abort any ongoing recording
         RECORDING_ABORTED.store(true, Ordering::SeqCst);
-        println!("🛑 Aborting continuous recording (switched to {})", new_mode.as_str());
 
         // 🔧 Fix: Send interrupt signal asynchronously to avoid blocking UI
         // Use try_lock to prevent deadlock
         if let Ok(mut daemon_guard) = DAEMON.try_lock() {
             if let Some(ref mut daemon) = *daemon_guard {
-                match daemon.send_command_no_wait("interrupt", serde_json::json!({"priority": 1})) {
-                    Ok(_) => println!("📤 Interrupt signal sent to Python daemon"),
-                    Err(e) => println!("❌ Failed to send interrupt: {}", e),
-                }
+                let _ = daemon.send_command_no_wait("interrupt", serde_json::json!({"priority": 1}));
             }
         } else {
-            println!("⚠️ Daemon busy, interrupt signal deferred (will be picked up by next recording check)");
         }
     }
 
@@ -1190,7 +1086,6 @@ fn get_work_mode() -> Result<String, String> {
 /// Set work mode (conversation or text-input)
 #[tauri::command]
 fn set_work_mode(mode: String) -> Result<(), String> {
-    println!("🎛️ Setting work mode to: {}", mode);
 
     // Parse mode from string
     let new_mode = WorkMode::from_str(mode.as_str())
@@ -1200,7 +1095,6 @@ fn set_work_mode(mode: String) -> Result<(), String> {
     let old_mode = *WORK_MODE.lock().unwrap();
     *WORK_MODE.lock().unwrap() = new_mode;
 
-    println!("✅ Work mode changed: {} → {}", old_mode.as_str(), new_mode.as_str());
 
     Ok(())
 }
@@ -1274,7 +1168,6 @@ fn transition_status(new_status: AppStatus) -> Result<(), String> {
 
     // Log transition
     if current_status != new_status {
-        println!("📊 Status transition: {} → {}", current_status.as_str(), new_status.as_str());
     }
 
     // Update status
@@ -1288,34 +1181,27 @@ fn transition_status(new_status: AppStatus) -> Result<(), String> {
 fn interrupt_operation(priority: u8) -> Result<String, String> {
     let current_status = *APP_STATUS.lock().unwrap();
 
-    println!("🚨 Interrupt request (priority {}): current status = {}", priority, current_status.as_str());
 
     if current_status.can_be_interrupted(priority) {
         // Perform interrupt based on current status
         match current_status {
             AppStatus::Recording => {
                 RECORDING_ABORTED.store(true, Ordering::SeqCst);
-                println!("✅ Recording interrupted (priority {})", priority);
             }
             AppStatus::Listening => {
                 // Stop listening logic will be handled by the recording loop
-                println!("✅ Listening will stop (priority {})", priority);
             }
             AppStatus::LlmProcessing | AppStatus::TtsProcessing | AppStatus::Playing => {
                 // Send interrupt signal to Python daemon
-                println!("📤 Sending interrupt signal to Python daemon (priority {})", priority);
                 match call_daemon("interrupt", serde_json::json!({"priority": priority})) {
                     Ok(_) => {
-                        println!("✅ Interrupt signal sent to Python daemon");
                     }
                     Err(e) => {
-                        println!("⚠️ Failed to send interrupt to Python daemon: {}", e);
                         // Continue anyway, as the interrupt flag may have been set elsewhere
                     }
                 }
             }
             _ => {
-                println!("ℹ️ No interrupt needed for status: {}", current_status.as_str());
             }
         }
 
@@ -1334,55 +1220,12 @@ fn interrupt_operation(priority: u8) -> Result<String, String> {
     }
 }
 
-/// Send PTT state to all windows
-fn emit_ptt_state(app_handle: &tauri::AppHandle, state: &str) {
-    // Send to main window
-    if let Some(main_window) = app_handle.get_webview_window("main") {
-        let _ = main_window.emit("ptt-state", state);
-    }
-    // Send to floating window
-    if let Some(overlay) = app_handle.get_webview_window("ptt-overlay") {
-        let _ = overlay.emit("ptt-state", state);
-        // Control floating window visibility
-        match state {
-            "listening" | "detected" | "recording" | "processing" => {
-                // Show overlay for listening, detected, recording, processing states
-                // Don't show overlay if PTT processing (ASR/LLM/TTS) is in progress
-                if PTT_PROCESSING.load(Ordering::SeqCst) {
-                    println!("🚫 PTT 正在处理中，跳过显示浮动窗口 (state: {})", state);
-                    return;
-                }
-                // Recalculate position before showing (in case screen config changed)
-                match calculate_overlay_position(app_handle) {
-                    Ok((x, y)) => {
-                        if let Err(e) = overlay.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y })) {
-                            eprintln!("❌ Failed to set PTT overlay position: {}", e);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("❌ Failed to calculate PTT overlay position: {}, showing anyway", e);
-                    }
-                }
-                let _ = overlay.set_ignore_cursor_events(false);
-                let _ = overlay.show();
-            }
-            "idle" | "error" => {
-                // Force hide overlay - use set_ignore_cursor_events to make it "invisible"
-                let _ = overlay.set_ignore_cursor_events(true);
-                let _ = overlay.hide();
-            }
-            _ => {}
-        }
-    }
-}
-
 #[tauri::command]
 async fn chat_llm(text: String) -> Result<ChatResult, String> {
     let args = serde_json::json!({
         "text": text
     });
 
-    println!("💬 调用守护进程: chat");
 
     let result = call_daemon("chat", args)?;
 
@@ -1395,7 +1238,6 @@ async fn chat_llm_stream(
     window: tauri::Window,
     text: String
 ) -> Result<(), String> {
-    println!("💬 调用守护进程: chat_stream");
 
     // Set streaming operation flag
     STREAMING_IN_PROGRESS.store(true, Ordering::SeqCst);
@@ -1472,7 +1314,6 @@ async fn chat_llm_stream(
                                 break;
                             }
                             _ => {
-                                println!("⚠️ Unknown chunk type: {}", chunk_type);
                             }
                         }
                     }
@@ -1495,26 +1336,22 @@ async fn chat_tts_stream(
     text: String,
     auto_play: Option<bool>
 ) -> Result<(), String> {
-    println!("💬🔊 调用守护进程: chat_tts_stream");
 
     // Set streaming operation flag
     STREAMING_IN_PROGRESS.store(true, Ordering::SeqCst);
 
     // Handle streaming response in separate thread
     std::thread::spawn(move || {
-        println!("🧵 TTS 流式线程启动");
         let mut daemon = DAEMON.lock().unwrap();
         let daemon = match daemon.as_mut() {
             Some(d) => d,
             None => {
-                println!("❌ TTS 流式线程：守护进程不可用");
                 let _ = window.emit("tts-error", "Daemon not available");
                 STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                 return;
             }
         };
 
-        println!("🔒 TTS 流式线程：已获取守护进程锁");
 
         // Send streaming command
         let request = serde_json::json!({
@@ -1525,23 +1362,19 @@ async fn chat_tts_stream(
             }
         });
 
-        println!("📤 TTS 流式线程：发送命令 - {}", text);
 
         if let Err(e) = writeln!(daemon.stdin, "{}", request.to_string()) {
-            println!("❌ TTS 流式线程：写入失败 - {}", e);
             let _ = window.emit("tts-error", format!("Write error: {}", e));
             STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
         if let Err(e) = daemon.stdin.flush() {
-            println!("❌ TTS 流式线程：刷新失败 - {}", e);
             let _ = window.emit("tts-error", format!("Flush error: {}", e));
             STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
-        println!("✅ TTS 流式线程：命令已发送，开始读取响应...");
 
         // Loop to read streaming output
         loop {
@@ -1549,26 +1382,21 @@ async fn chat_tts_stream(
             match daemon.stdout.read_line(&mut line) {
                 Ok(0) => {
                     // EOF - daemon may have crashed
-                    println!("❌ TTS 流式线程：读到 EOF");
                     let _ = window.emit("tts-error", "Daemon connection lost");
                     STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                     break;
                 }
                 Ok(n) => {
-                    println!("📥 TTS 流式线程：读到 {} 字节: {}", n, line.trim());
 
                     // Parse JSON
                     if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(&line) {
-                        println!("✅ TTS 流式线程：JSON 解析成功: {:?}", chunk);
 
                         // Skip log events (have "event" field)
                         if chunk.get("event").is_some() {
-                            println!("⏭️ TTS 流式线程：跳过日志事件");
                             continue;
                         }
 
                         let chunk_type = chunk.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                        println!("🔍 TTS 流式线程：chunk_type = {}", chunk_type);
 
                         match chunk_type {
                             "text_chunk" => {
@@ -1602,15 +1430,12 @@ async fn chat_tts_stream(
                                 break;
                             }
                             _ => {
-                                println!("⚠️ TTS 流式线程：Unknown chunk type: {}", chunk_type);
                             }
                         }
                     } else {
-                        println!("❌ TTS 流式线程：JSON 解析失败，原始内容: {}", line.trim());
                     }
                 }
                 Err(e) => {
-                    println!("❌ TTS 流式线程：读取错误: {}", e);
                     let _ = window.emit("tts-error", format!("Read error: {}", e));
                     STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
                     break;
@@ -1628,7 +1453,6 @@ async fn generate_tts(text: String) -> Result<TTSResult, String> {
         "text": text
     });
 
-    println!("🔊 调用守护进程: tts");
 
     let result = call_daemon("tts", args)?;
 
@@ -1638,7 +1462,6 @@ async fn generate_tts(text: String) -> Result<TTSResult, String> {
 
 #[tauri::command]
 async fn load_config() -> Result<ConfigResult, String> {
-    println!("⚙️ 调用守护进程: config");
 
     let result = call_daemon("config", serde_json::json!({}))?;
 
@@ -1648,7 +1471,6 @@ async fn load_config() -> Result<ConfigResult, String> {
 
 #[tauri::command]
 async fn save_config(config: serde_json::Value) -> Result<serde_json::Value, String> {
-    println!("💾 调用守护进程: save_config, work_mode = {}", config.get("work_mode").and_then(|v| v.as_str()).unwrap_or("MISSING"));
 
     // Pass config directly, do not re-wrap
     // Frontend already passed { config: updatedConfig }
@@ -1659,7 +1481,6 @@ async fn save_config(config: serde_json::Value) -> Result<serde_json::Value, Str
 #[tauri::command]
 async fn update_hotkey(hotkey_config: serde_json::Value) -> Result<serde_json::Value, String> {
     let display_name = hotkey_config.get("displayName").and_then(|v| v.as_str()).unwrap_or("unknown");
-    println!("⌨️  调用守护进程: update_hotkey, hotkey = {}", display_name);
 
     // Update daemon config
     let result = call_daemon("update_hotkey", hotkey_config.clone())?;
@@ -1668,15 +1489,11 @@ async fn update_hotkey(hotkey_config: serde_json::Value) -> Result<serde_json::V
     if let Some(shortcut_str) = hotkey_config_to_shortcut_string(&hotkey_config) {
         if let Some(app_handle) = APP_HANDLE.get() {
             if let Err(e) = register_ptt_shortcut(app_handle, &shortcut_str) {
-                println!("❌ 更新 Tauri PTT 快捷键失败: {}", e);
             } else {
-                println!("✅ Tauri PTT 快捷键已更新: {}", shortcut_str);
             }
         } else {
-            println!("⚠️ APP_HANDLE 未初始化");
         }
     } else {
-        println!("⚠️ 无法解析快捷键配置");
     }
 
     serde_json::from_value(result)
@@ -1686,7 +1503,6 @@ async fn update_hotkey(hotkey_config: serde_json::Value) -> Result<serde_json::V
 #[tauri::command]
 async fn get_daemon_state() -> Result<serde_json::Value, String> {
     // Get comprehensive daemon state
-    println!("📊 调用守护进程: get_daemon_state");
 
     let result = call_daemon("get_daemon_state", serde_json::json!({}))?;
 
@@ -1698,7 +1514,6 @@ async fn get_daemon_state() -> Result<serde_json::Value, String> {
 async fn daemon_health(app: tauri::AppHandle) -> Result<HealthResult, String> {
     // Check if there is an ongoing streaming operation
     if STREAMING_IN_PROGRESS.load(Ordering::SeqCst) {
-        println!("⏸️ 流式操作进行中，跳过健康检查");
         return Ok(HealthResult {
             success: true,
             status: Some("streaming".to_string()),
@@ -1708,7 +1523,6 @@ async fn daemon_health(app: tauri::AppHandle) -> Result<HealthResult, String> {
         });
     }
 
-    println!("🏥 守护进程健康检查");
 
     let result = call_daemon("health", serde_json::json!({}))?;
 
@@ -1729,7 +1543,6 @@ async fn daemon_health(app: tauri::AppHandle) -> Result<HealthResult, String> {
 
 #[tauri::command]
 async fn test_ollama_connection(base_url: String, model: String) -> Result<serde_json::Value, String> {
-    println!("🔗 测试 Ollama 连接: {} ({})", base_url, model);
 
     // Use reqwest to test Ollama connection directly
     let client = reqwest::Client::builder()
@@ -1747,7 +1560,6 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
     match response {
         Ok(resp) => {
             if resp.status().is_success() {
-                println!("✅ Ollama 服务运行正常");
 
                 // Test 2: Check if specified model exists
                 let models = resp.json::<serde_json::Value>()
@@ -1763,13 +1575,11 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
                     });
 
                     if model_exists {
-                        println!("✅ 模型 {} 已安装", model);
                         return Ok(serde_json::json!({
                             "success": true,
                             "message": format!("连接成功，模型 {} 已安装", model)
                         }));
                     } else {
-                        println!("⚠️ 模型 {} 未找到", model);
                         return Ok(serde_json::json!({
                             "success": false,
                             "error": format!("模型 {} 未安装，请先运行: ollama pull {}", model, model)
@@ -1782,7 +1592,6 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
                     }));
                 }
             } else {
-                println!("❌ Ollama 服务返回错误: {}", resp.status());
                 return Ok(serde_json::json!({
                     "success": false,
                     "error": format!("Ollama 服务返回错误状态: {}", resp.status())
@@ -1790,7 +1599,6 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
             }
         }
         Err(e) => {
-            println!("❌ 连接 Ollama 失败: {}", e);
             return Ok(serde_json::json!({
                 "success": false,
                 "error": format!("无法连接到 Ollama 服务: {}", e)
@@ -1802,7 +1610,6 @@ async fn test_ollama_connection(base_url: String, model: String) -> Result<serde
 /// Get list of installed Ollama models
 #[tauri::command]
 async fn list_ollama_models(baseUrl: String) -> Result<Vec<String>, String> {
-    println!("📋 获取 Ollama 模型列表: {}", baseUrl);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -1834,9 +1641,7 @@ async fn list_ollama_models(baseUrl: String) -> Result<Vec<String>, String> {
         .map(|s| s.to_string())
         .collect();
 
-    println!("✅ 找到 {} 个模型", model_names.len());
     for model in &model_names {
-        println!("  - {}", model);
     }
 
     Ok(model_names)
@@ -1845,7 +1650,6 @@ async fn list_ollama_models(baseUrl: String) -> Result<Vec<String>, String> {
 /// Test OpenAI API connection
 #[tauri::command]
 async fn test_openai_connection(api_key: String, model: String) -> Result<serde_json::Value, String> {
-    println!("🔗 测试 OpenAI 连接: model={}", model);
 
     if api_key.is_empty() {
         return Ok(serde_json::json!({
@@ -1881,7 +1685,6 @@ async fn test_openai_connection(api_key: String, model: String) -> Result<serde_
     match response {
         Ok(resp) => {
             if resp.status().is_success() {
-                println!("✅ OpenAI API 连接成功");
                 return Ok(serde_json::json!({
                     "success": true,
                     "message": "OpenAI API connection successful"
@@ -1889,7 +1692,6 @@ async fn test_openai_connection(api_key: String, model: String) -> Result<serde_
             } else {
                 let status = resp.status();
                 let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                println!("❌ OpenAI API 错误: {} - {}", status, error_text);
                 return Ok(serde_json::json!({
                     "success": false,
                     "error": format!("API error: {} - {}", status, error_text)
@@ -1897,7 +1699,6 @@ async fn test_openai_connection(api_key: String, model: String) -> Result<serde_
             }
         }
         Err(e) => {
-            println!("❌ 连接失败: {}", e);
             return Ok(serde_json::json!({
                 "success": false,
                 "error": format!("Connection failed: {}", e)
@@ -1909,7 +1710,6 @@ async fn test_openai_connection(api_key: String, model: String) -> Result<serde_
 /// Test OpenRouter API connection
 #[tauri::command]
 async fn test_openrouter_connection(api_key: String, model: String) -> Result<serde_json::Value, String> {
-    println!("🔗 测试 OpenRouter 连接: model={}", model);
 
     if api_key.is_empty() {
         return Ok(serde_json::json!({
@@ -1945,7 +1745,6 @@ async fn test_openrouter_connection(api_key: String, model: String) -> Result<se
     match response {
         Ok(resp) => {
             if resp.status().is_success() {
-                println!("✅ OpenRouter API 连接成功");
                 return Ok(serde_json::json!({
                     "success": true,
                     "message": "OpenRouter API connection successful"
@@ -1953,7 +1752,6 @@ async fn test_openrouter_connection(api_key: String, model: String) -> Result<se
             } else {
                 let status = resp.status();
                 let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                println!("❌ OpenRouter API 错误: {} - {}", status, error_text);
                 return Ok(serde_json::json!({
                     "success": false,
                     "error": format!("API error: {} - {}", status, error_text)
@@ -1961,7 +1759,6 @@ async fn test_openrouter_connection(api_key: String, model: String) -> Result<se
             }
         }
         Err(e) => {
-            println!("❌ 连接失败: {}", e);
             return Ok(serde_json::json!({
                 "success": false,
                 "error": format!("Connection failed: {}", e)
@@ -1973,7 +1770,6 @@ async fn test_openrouter_connection(api_key: String, model: String) -> Result<se
 /// Test Custom OpenAI-compatible API connection
 #[tauri::command]
 async fn test_custom_connection(api_key: String, base_url: String, model: String) -> Result<serde_json::Value, String> {
-    println!("🔗 测试 Custom API 连接: url={}, model={}", base_url, model);
 
     if base_url.is_empty() {
         return Ok(serde_json::json!({
@@ -2022,7 +1818,6 @@ async fn test_custom_connection(api_key: String, base_url: String, model: String
     match response {
         Ok(resp) => {
             if resp.status().is_success() {
-                println!("✅ Custom API 连接成功");
                 return Ok(serde_json::json!({
                     "success": true,
                     "message": "Custom API connection successful"
@@ -2030,7 +1825,6 @@ async fn test_custom_connection(api_key: String, base_url: String, model: String
             } else {
                 let status = resp.status();
                 let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                println!("❌ Custom API 错误: {} - {}", status, error_text);
                 return Ok(serde_json::json!({
                     "success": false,
                     "error": format!("API error: {} - {}", status, error_text)
@@ -2038,7 +1832,6 @@ async fn test_custom_connection(api_key: String, base_url: String, model: String
             }
         }
         Err(e) => {
-            println!("❌ 连接失败: {}", e);
             return Ok(serde_json::json!({
                 "success": false,
                 "error": format!("Connection failed: {}", e)
@@ -2050,7 +1843,6 @@ async fn test_custom_connection(api_key: String, base_url: String, model: String
 /// Test ZhipuAI API connection
 #[tauri::command]
 async fn test_zhipu_connection(api_key: String, base_url: String, model: String) -> Result<serde_json::Value, String> {
-    println!("🔗 测试 ZhipuAI 连接: url={}, model={}", base_url, model);
 
     if api_key.is_empty() {
         return Ok(serde_json::json!({
@@ -2093,7 +1885,6 @@ async fn test_zhipu_connection(api_key: String, base_url: String, model: String)
     match response {
         Ok(resp) => {
             if resp.status().is_success() {
-                println!("✅ ZhipuAI 连接成功");
                 return Ok(serde_json::json!({
                     "success": true,
                     "message": "ZhipuAI connection successful"
@@ -2101,7 +1892,6 @@ async fn test_zhipu_connection(api_key: String, base_url: String, model: String)
             } else {
                 let status = resp.status();
                 let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                println!("❌ ZhipuAI 错误: {} - {}", status, error_text);
                 return Ok(serde_json::json!({
                     "success": false,
                     "error": format!("API error: {} - {}", status, error_text)
@@ -2109,7 +1899,6 @@ async fn test_zhipu_connection(api_key: String, base_url: String, model: String)
             }
         }
         Err(e) => {
-            println!("❌ 连接失败: {}", e);
             return Ok(serde_json::json!({
                 "success": false,
                 "error": format!("Connection failed: {}", e)
@@ -2121,29 +1910,6 @@ async fn test_zhipu_connection(api_key: String, base_url: String, model: String)
 // ============================================================================
 // Global Shortcuts
 // ============================================================================
-
-/// Send PTT state to all windows (static version for shortcut callbacks)
-fn emit_ptt_state_static(app_handle: &tauri::AppHandle, state: &str) {
-    // Send to main window
-    if let Some(main_window) = app_handle.get_webview_window("main") {
-        let _ = main_window.emit("ptt-state", state);
-    }
-    // Send to floating window
-    if let Some(overlay) = app_handle.get_webview_window("ptt-overlay") {
-        let _ = overlay.emit("ptt-state", state);
-        // Control floating window visibility
-        match state {
-            "listening" | "detected" | "recording" | "processing" => {
-                // Show overlay for listening, detected, recording, processing states
-                let _ = overlay.show();
-            }
-            "idle" | "error" => {
-                let _ = overlay.hide();
-            }
-            _ => {}
-        }
-    }
-}
 
 /// Convert hotkey config JSON to Tauri shortcut string
 /// e.g., {"key": "Digit3", "modifiers": ["CmdOrCtrl"]} -> "CommandOrControl+3"
@@ -2221,7 +1987,6 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
         if let Some(ref old_shortcut_str) = *current {
             if let Ok(old_shortcut) = old_shortcut_str.parse::<Shortcut>() {
                 let _ = app_handle.global_shortcut().unregister(old_shortcut);
-                println!("🔄 注销旧 PTT 快捷键: {}", old_shortcut_str);
             }
         }
         *current = Some(shortcut_str.to_string());
@@ -2239,7 +2004,6 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                     // Already pressed, ignore key repeat
                     return;
                 }
-                println!("🎤 PTT: Key pressed (Tauri)");
 
                 // Start Rust-side audio recording
                 {
@@ -2248,36 +2012,30 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                         match AudioRecorder::new() {
                             Ok(r) => *recorder_guard = Some(r),
                             Err(e) => {
-                                println!("❌ Failed to create AudioRecorder: {}", e);
                                 return;
                             }
                         }
                     }
                     if let Some(ref mut recorder) = *recorder_guard {
                         if let Err(e) = recorder.start_recording() {
-                            println!("❌ Failed to start recording: {}", e);
                             return;
                         }
                     }
                 }
 
                 // Emit recording state to frontend
-                emit_ptt_state_static(app, "recording");
+                ui::emit_ptt_state_static(app, "recording");
 
                 // Notify Python daemon (for UI state only, no recording) - async mode
                 if let Ok(mut daemon_guard) = DAEMON.lock() {
                     if let Some(ref mut daemon) = *daemon_guard {
-                        match daemon.send_command_no_wait("ptt_press", serde_json::json!({})) {
-                            Ok(_) => println!("✅ PTT press command sent (async)"),
-                            Err(e) => println!("❌ PTT press command failed: {}", e),
-                        }
+                        let _ = daemon.send_command_no_wait("ptt_press", serde_json::json!({}));
                     }
                 }
             }
             ShortcutState::Released => {
                 // Reset key state
                 PTT_KEY_PRESSED.store(false, Ordering::SeqCst);
-                println!("🎤 PTT: Key released (Tauri)");
 
                 // Stop Rust-side audio recording and get audio data
                 let audio_data = {
@@ -2286,7 +2044,6 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                         match recorder.stop_recording() {
                             Ok(data) => Some(data),
                             Err(e) => {
-                                println!("❌ Failed to stop recording: {}", e);
                                 None
                             }
                         }
@@ -2296,13 +2053,10 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                 };
 
                 // Emit processing state
-                emit_ptt_state_static(app, "processing");
+                ui::emit_ptt_state_static(app, "processing");
 
                 // Send audio file path to Python daemon for ASR (async, don't wait)
                 if let Some(audio) = audio_data {
-                    println!("📤 Sending audio file ({:.2}s) to Python: {}",
-                             audio.duration_secs, audio.file_path);
-
                     // Determine auto_chat based on work mode (conversation = auto chat, text-input = no chat)
                     let work_mode = *WORK_MODE.lock().unwrap();
                     let auto_chat = work_mode == WorkMode::Conversation;
@@ -2316,12 +2070,8 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                                 "auto_chat": auto_chat,
                                 "use_tts": true
                             });
-                            println!("🎤 Work mode: {:?}, auto_chat: {}", work_mode, auto_chat);
                             // Use send_command_no_wait to avoid blocking UI
-                            match daemon.send_command_no_wait("ptt_audio", args) {
-                                Ok(_) => println!("✅ PTT audio command sent (async)"),
-                                Err(e) => println!("❌ PTT audio command failed: {}", e),
-                            }
+                            let _ = daemon.send_command_no_wait("ptt_audio", args);
                         }
                     }
                 } else {
@@ -2329,10 +2079,7 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
                     if let Ok(mut daemon_guard) = DAEMON.lock() {
                         if let Some(ref mut daemon) = *daemon_guard {
                             // Use send_command_no_wait to avoid blocking UI
-                            match daemon.send_command_no_wait("ptt_release", serde_json::json!({})) {
-                                Ok(_) => println!("✅ PTT release command sent (async)"),
-                                Err(e) => println!("❌ PTT release command failed: {}", e),
-                            }
+                            let _ = daemon.send_command_no_wait("ptt_release", serde_json::json!({}));
                         }
                     }
                 }
@@ -2340,7 +2087,6 @@ fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> R
         }
     }).map_err(|e| format!("Failed to register PTT shortcut: {}", e))?;
 
-    println!("✅ PTT 快捷键已注册: {}", shortcut_str);
     Ok(())
 }
 
@@ -2379,7 +2125,6 @@ fn write_recording_mode_to_config(mode: &str) -> Result<(), Box<dyn std::error::
     // Write back
     std::fs::write(&config_path, serde_json::to_string_pretty(&config)?)?;
 
-    println!("💾 Direct write to config: recording_mode = {}", mode);
     Ok(())
 }
 
@@ -2397,20 +2142,16 @@ fn start_recording_mode_dispatcher<R: Runtime>(app: &tauri::AppHandle<R>) {
 
     // Spawn a thread to listen for mode changes and emit events
     std::thread::spawn(move || {
-        println!("📡 Recording mode event dispatcher thread started");
 
         while let Ok(mode_str) = rx.recv() {
-            println!("📤 Emitting recording-mode-changed event: {}", mode_str);
 
             // Emit the event to the frontend
             // This is called from a dedicated thread, but emit() is safe here
             // as it handles cross-thread communication internally
             if let Err(e) = app_handle.emit("recording-mode-changed", &mode_str) {
-                eprintln!("Failed to emit recording-mode-changed event: {}", e);
             }
         }
 
-        println!("📡 Recording mode event dispatcher thread stopped");
     });
 }
 
@@ -2440,7 +2181,6 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             return;
         }
 
-        println!("🔄 工作模式切换快捷键触发 (Alt+1)");
 
         // Acquire lock, toggle mode, extract name, then release immediately
         let mode_name = {
@@ -2455,7 +2195,6 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             }
         }; // Lock released here
 
-        println!("✅ 工作模式已切换为: {}", mode_name);
 
         // Don't save config here to avoid deadlock in shortcut callback thread
         // Frontend polling will detect the change and trigger save
@@ -2470,7 +2209,6 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             return;
         }
 
-        println!("🔄 录音模式切换快捷键触发 (Alt+2)");
 
         // Acquire lock, toggle mode, extract name, then release immediately
         let mode_name = {
@@ -2485,11 +2223,9 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             }
         }; // Lock released here
 
-        println!("✅ 录音模式已切换为: {}", mode_name);
 
         // Write directly to config file to notify VAD loop (bypasses daemon lock)
         if let Err(e) = write_recording_mode_to_config(mode_name) {
-            eprintln!("⚠️ Failed to write config directly: {}", e);
         }
 
         // Send to channel for cross-thread event dispatch (non-blocking, safe)
@@ -2497,14 +2233,9 @@ fn register_shortcuts<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
         if let Some(tx) = RECORDING_MODE_CHANNEL.lock().unwrap().as_ref() {
             let _ = tx.send(mode_name.to_string()); // Non-blocking send
         } else {
-            eprintln!("⚠️ Recording mode channel not available, event not sent");
         }
     }).map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to register recording mode shortcut: {}", e)))?;
 
-    println!("✅ 全局快捷键已注册:");
-    println!("   • Command+Shift+Space - 显示/隐藏窗口");
-    println!("   • Alt+1 - 切换工作模式 (对话模式/文字输入模式)");
-    println!("   • Alt+2 - 切换录音模式 (按键录音/连续录音)");
 
     // PTT shortcut will be registered after daemon starts and config is loaded
     // See register_ptt_from_config() which is called after daemon initialization
@@ -2522,7 +2253,6 @@ fn register_ptt_from_config(app_handle: &tauri::AppHandle) {
     };
 
     if !should_register {
-        println!("⏭️  跳过 PTT 快捷键注册 (当前为连续录音模式)");
         return;
     }
 
@@ -2533,9 +2263,7 @@ fn register_ptt_from_config(app_handle: &tauri::AppHandle) {
     };
 
     if is_recording {
-        println!("⏭️  跳过 PTT 快捷键注册 (正在录音)");
         // Use default shortcut without calling daemon
-        println!("⚠️ 使用默认 PTT 快捷键: Alt+3");
         let _ = register_ptt_shortcut(app_handle, "Alt+3");
         return;
     }
@@ -2550,7 +2278,6 @@ fn register_ptt_from_config(app_handle: &tauri::AppHandle) {
                         if let Some(hotkey_config) = config.get("push_to_talk_hotkey") {
                             if let Some(shortcut_str) = hotkey_config_to_shortcut_string(hotkey_config) {
                                 if let Err(e) = register_ptt_shortcut(app_handle, &shortcut_str) {
-                                    println!("❌ 注册 PTT 快捷键失败: {}", e);
                                     // Fallback to default
                                     let _ = register_ptt_shortcut(app_handle, "Alt+3");
                                 }
@@ -2560,196 +2287,50 @@ fn register_ptt_from_config(app_handle: &tauri::AppHandle) {
                     }
                 }
                 Err(e) => {
-                    println!("❌ 获取配置失败: {}", e);
                 }
             }
         }
     } else {
-        println!("⚠️ 无法获取 daemon 锁，使用默认 PTT 快捷键");
     }
 
     // Fallback to default shortcut
-    println!("⚠️ 使用默认 PTT 快捷键: Alt+3");
     if let Err(e) = register_ptt_shortcut(app_handle, "Alt+3") {
-        println!("❌ 注册默认 PTT 快捷键失败: {}", e);
     }
 }
 
-// ============================================================================
-// Tray Icon
-// ============================================================================
-
-fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-    // Create menu items
-    let show_item = MenuItemBuilder::new("显示窗口").id("show").build(app)?;
-    let hide_item = MenuItemBuilder::new("隐藏窗口").id("hide").build(app)?;
-    let quit_item = MenuItemBuilder::new("退出").id("quit").build(app)?;
-
-    // Build menu
-    let menu = MenuBuilder::new(app)
-        .item(&show_item)
-        .item(&hide_item)
-        .separator()
-        .item(&quit_item)
-        .build()?;
-
-    // Load tray icon (template icon for macOS menu bar)
-    let icon_bytes = include_bytes!("../icons/tray-template.png");
-    let icon_image = image::load_from_memory(icon_bytes)
-        .expect("Failed to load tray icon");
-    let rgba = icon_image.to_rgba8();
-    let (width, height) = rgba.dimensions();
-    let tray_icon = Image::new_owned(rgba.into_raw(), width, height);
-
-    // Create tray icon
-    let _tray = TrayIconBuilder::new()
-        .menu(&menu)
-        .icon(tray_icon)
-        .icon_as_template(true)
-        .tooltip("Speekium")
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            "hide" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.hide();
-                }
-            }
-            "quit" => {
-                // Clean up daemon
-                cleanup_daemon();
-                app.exit(0);
-            }
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { .. } = event {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    if window.is_visible().unwrap_or(false) {
-                        let _ = window.hide();
-                    } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-                }
-            }
-        })
-        .build(app)?;
-
-    Ok(())
-}
 
 // ============================================================================
 // Cleanup
 // ============================================================================
 
+/// Cleanup daemon and release resources
 fn cleanup_daemon() {
-    println!("🧹 Cleaning up resources...");
 
-    // 1. First, clean up AUDIO_RECORDER to release the microphone
+    // First, clean up AUDIO_RECORDER to release the microphone
     {
-        let mut recorder = AUDIO_RECORDER.lock().unwrap();
-        if let Some(mut audio_rec) = recorder.take() {
-            println!("🎤 Stopping recording and releasing microphone...");
-            if audio_rec.is_recording() {
-                let _ = audio_rec.stop_recording();
+        #[cfg(target_os = "macos")]
+        {
+            let mut recorder = AUDIO_RECORDER.lock().unwrap();
+            if let Some(mut audio_rec) = recorder.take() {
+                if audio_rec.is_recording() {
+                    let _ = audio_rec.stop_recording();
+                }
             }
-            // audio_rec is dropped here, which releases the audio device
-            println!("✅ Microphone released");
         }
     }
 
-    // 2. Then clean up the daemon
+    // Then clean up the daemon
     let mut daemon = DAEMON.lock().unwrap();
     if let Some(mut d) = daemon.take() {
-        println!("🧹 Cleaning up daemon...");
         // Send exit command
         let _ = d.send_command("exit", serde_json::json!({}));
 
         // Wait for process to exit
         let _ = d.process.wait();
 
-        println!("✅ Daemon closed");
     }
 }
 
-// ============================================================================
-// PTT Overlay Window
-// ============================================================================
-
-// PTT Overlay window constants
-const OVERLAY_WIDTH: f64 = 140.0;
-const OVERLAY_HEIGHT: f64 = 50.0;
-const BOTTOM_MARGIN: f64 = 60.0;
-
-/// Calculate PTT overlay window position based on current screen size
-fn calculate_overlay_position<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(f64, f64), Box<dyn std::error::Error>> {
-    let monitor = app.primary_monitor()?.ok_or_else(|| Box::<dyn std::error::Error>::from("No primary monitor found"))?;
-    let screen_size = monitor.size();
-    let scale_factor = monitor.scale_factor();
-
-    // Validate scale factor
-    if scale_factor <= 0.0 {
-        return Err(format!("Invalid scale factor: {}", scale_factor).into());
-    }
-
-    // Calculate scaled screen dimensions
-    let scaled_width = screen_size.width as f64 / scale_factor;
-    let scaled_height = screen_size.height as f64 / scale_factor;
-
-    // Calculate bottom center position with boundary validation
-    let x = (scaled_width / 2.0 - OVERLAY_WIDTH / 2.0).max(0.0);
-    let y = (scaled_height - OVERLAY_HEIGHT - BOTTOM_MARGIN).max(0.0);
-
-    // Final boundary check
-    if x + OVERLAY_WIDTH > scaled_width || y + OVERLAY_HEIGHT > scaled_height {
-        eprintln!("⚠️ Warning: Calculated PTT overlay position may exceed screen bounds");
-    }
-
-    Ok((x, y))
-}
-
-fn create_ptt_overlay<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Box<dyn std::error::Error>> {
-    // Calculate initial position
-    let (x, y) = calculate_overlay_position(app)?;
-    println!("🔧 创建 PTT overlay 窗口，位置: ({}, {})", x, y);
-
-    // Create PTT floating window (transparent window)
-    let overlay = WebviewWindowBuilder::new(
-        app,
-        "ptt-overlay",
-        tauri::WebviewUrl::App("ptt-overlay.html".into())
-    )
-    .title("PTT Status")
-    .inner_size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
-    .position(x, y)
-    .always_on_top(true)
-    .decorations(false)
-    .resizable(false)
-    .skip_taskbar(true)
-    .focused(false)
-    .visible(false)
-    .transparent(true)
-    .shadow(false)  // Disable window shadow for better transparency
-    .build()?;
-
-    println!("✅ PTT 浮动窗口已创建 ({}x{} @ {}, {})", OVERLAY_WIDTH, OVERLAY_HEIGHT, x, y);
-    println!("🔍 Overlay label: {:?}", overlay.label());
-
-    // Verify window can be retrieved immediately after creation
-    if let Some(retrieved) = app.get_webview_window("ptt-overlay") {
-        println!("✅ 窗口创建后立即检索成功");
-    } else {
-        println!("❌ 窗口创建后立即检索失败！");
-    }
-
-    Ok(())
-}
 
 // ============================================================================
 // Main Entry Point
@@ -2815,10 +2396,8 @@ pub fn run() {
                     match AudioRecorder::new() {
                         Ok(r) => {
                             *recorder_guard = Some(r);
-                            println!("✅ AudioRecorder 已初始化");
                         }
                         Err(e) => {
-                            println!("⚠️ AudioRecorder 初始化失败: {}", e);
                         }
                     }
                 }
@@ -2832,10 +2411,9 @@ pub fn run() {
                 .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to initialize database: {}", e)))?;
 
             app.manage(AppState { db });
-            println!("✅ 数据库已初始化");
 
             // Create tray icon
-            create_tray(app.handle())?;
+            ui::create_tray(app.handle(), cleanup_daemon)?;
 
             // Store app handle globally BEFORE starting dispatcher
             let _ = APP_HANDLE.set(app.handle().clone());
@@ -2856,11 +2434,9 @@ pub fn run() {
             start_ptt_reader(app.handle().clone());
 
             // Create PTT floating state window
-            if let Err(e) = create_ptt_overlay(app.handle()) {
-                println!("⚠️ 创建 PTT 浮动窗口失败: {}", e);
+            if let Err(e) = ui::create_ptt_overlay(app.handle()) {
             }
 
-            println!("✅ Speekium 应用已启动 (异步守护进程模式)");
 
             Ok(())
         })
@@ -2894,7 +2470,6 @@ pub fn run() {
 /// Note: This does NOT modify RECORDING_MODE state - the shortcut callback already did that
 #[tauri::command]
 fn update_recording_mode(mode: String) -> Result<(), String> {
-    println!("Handling recording mode change: {}", mode);
 
     // Parse mode
     let current_mode = match mode.as_str() {
@@ -2903,12 +2478,10 @@ fn update_recording_mode(mode: String) -> Result<(), String> {
         _ => Err(format!("Invalid recording mode: {}", mode)),
     }?;
 
-    println!("Processing side effects for mode: {:?}", current_mode);
 
     // IMPORTANT: Write directly to config file FIRST so VAD loop can detect mode change immediately
     // This ensures VAD recording stops promptly when switching from continuous to push-to-talk
     if let Err(e) = write_recording_mode_to_config(&mode) {
-        eprintln!("⚠️ Failed to write recording mode to config: {}", e);
     }
 
     // Also notify daemon (for UI state sync)
@@ -2917,10 +2490,8 @@ fn update_recording_mode(mode: String) -> Result<(), String> {
             let _ = daemon.send_command_no_wait("set_recording_mode", serde_json::json!({
                 "mode": mode
             }));
-            println!("Sent recording mode update to daemon");
         }
     } else {
-        println!("Daemon busy, skipping daemon update (config already written)");
     }
 
     // Handle PTT shortcut registration/unregistration
@@ -2938,7 +2509,6 @@ fn update_recording_mode(mode: String) -> Result<(), String> {
                     let handle_clone = handle.clone();
                     std::thread::spawn(move || {
                         register_ptt_from_config(&handle_clone);
-                        println!("PTT shortcut registered (switched to push-to-talk)");
                     });
                 }
                 RecordingMode::Continuous => {
@@ -2947,7 +2517,6 @@ fn update_recording_mode(mode: String) -> Result<(), String> {
                     if let Some(ref shortcut_str) = *current {
                         if let Ok(shortcut) = shortcut_str.parse::<Shortcut>() {
                             let _ = handle.global_shortcut().unregister(shortcut);
-                            println!("PTT shortcut unregistered (switched to continuous)");
                         }
                     }
                     *current = None;
@@ -2955,7 +2524,6 @@ fn update_recording_mode(mode: String) -> Result<(), String> {
             }
         }
     } else {
-        println!("Skipping PTT shortcut update (recording in progress)");
     }
 
     Ok(())
