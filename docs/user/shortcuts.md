@@ -10,7 +10,7 @@ Speekium 桌面应用支持自定义快捷键，让你以最舒适的方式控�
 
 ### 按键通话 (Push-to-Talk)
 
-**默认快捷键**: `⌘1` (macOS) / `Ctrl+1` (Windows/Linux)
+**默认快捷键**: `Alt+3` (跨平台统一)
 
 按住此快捷键开始语音识别，松开时停止。
 
@@ -54,7 +54,7 @@ Speekium desktop application supports customizable keyboard shortcuts for voice 
 
 ### Push-to-Talk
 
-**Default Shortcut**: `⌘1` (macOS) / `Ctrl+1` (Windows/Linux)
+**Default Shortcut**: `Alt+3` (Cross-platform)
 
 Hold to start voice recognition, release to stop.
 
