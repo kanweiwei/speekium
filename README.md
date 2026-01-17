@@ -61,6 +61,7 @@
 - **Ollama** - Run AI completely offline with local models
 - **OpenAI** - GPT-4o, GPT-4o-mini, GPT-3.5-turbo
 - **OpenRouter** - Access Claude, Gemini, and 100+ models
+- **ZhipuAI (智谱AI)** - glm-4-plus, glm-4, glm-4-flash, glm-4-air
 - **Claude Code CLI** - Direct Claude integration
 - **Custom** - Any OpenAI-compatible API
 
@@ -152,17 +153,17 @@ Enter your API key in settings.
 
 ### 3. Start Talking
 
-- **PTT Mode**: Hold `⌘1` (Mac) or `Ctrl+1` (Windows) to record
+- **PTT Mode**: Hold `Alt+3` to record
 - **Continuous Mode**: Just start speaking
 
 ## Configuration
 
 ### Hotkeys
 
-| Action | macOS | Windows |
-|--------|-------|---------|
-| Push-to-Talk | `⌘1` | `Ctrl+1` |
-| Show/Hide Window | `⌘⇧Space` | `Ctrl+Shift+Space` |
+| Action | Hotkey |
+|--------|--------|
+| Push-to-Talk | `Alt+3` |
+| Show/Hide Window | `⌘⇧Space` / `Ctrl+Shift+Space` |
 
 > PTT hotkey can be customized in Settings → Shortcuts
 

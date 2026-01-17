@@ -61,6 +61,7 @@
 - **Ollama** - 完全离线运行本地模型
 - **OpenAI** - GPT-4o、GPT-4o-mini、GPT-3.5-turbo
 - **OpenRouter** - 访问 Claude、Gemini 等 100+ 模型
+- **智谱AI (ZhipuAI)** - glm-4-plus、glm-4、glm-4-flash、glm-4-air
 - **Claude Code CLI** - 直接 Claude 集成
 - **自定义** - 任何 OpenAI 兼容的 API
 
@@ -152,17 +153,17 @@ ollama pull qwen2.5:7b
 
 ### 3. 开始对话
 
-- **PTT 模式**：按住 `⌘1`（Mac）或 `Ctrl+1`（Windows）录音
+- **PTT 模式**：按住 `Alt+3` 录音
 - **连续模式**：直接开始说话
 
 ## 配置
 
 ### 快捷键
 
-| 操作 | macOS | Windows |
-|------|-------|---------|
-| 按键说话 | `⌘1` | `Ctrl+1` |
-| 显示/隐藏窗口 | `⌘⇧Space` | `Ctrl+Shift+Space` |
+| 操作 | 快捷键 |
+|------|--------|
+| 按键说话 | `Alt+3` |
+| 显示/隐藏窗口 | `⌘⇧Space` / `Ctrl+Shift+Space` |
 
 > PTT 快捷键可在 设置 → 快捷键 中自定义
 
