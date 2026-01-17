@@ -5,6 +5,9 @@ description = "Talk to AI with your voice. Locally. Privately. Open Source."
 authors = ["kanweiwei"]
 edition = "2021"
 
+[lints.rust]
+unexpected_cfgs = "allow"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]

@@ -2,9 +2,8 @@
 //
 // macOS 文字输入实现
 
-use tauri::command;
-
 #[cfg(target_os = "macos")]
+#[allow(dead_code)]
 fn char_to_key_code(ch: char) -> Option<u16> {
     // macOS virtual key codes
     // Reference: https://cdecl.org/wiki/Virtual_Key_Codes
@@ -59,7 +58,6 @@ fn char_to_key_code(ch: char) -> Option<u16> {
 
 #[cfg(target_os = "macos")]
 pub fn type_text(text: &str) -> Result<(), String> {
-    use cocoa::appkit::NSPasteboard;
     use cocoa::base::{id, nil};
     use cocoa::foundation::NSString as CFString;
     use core_graphics::event::{CGEvent, CGEventTapLocation, CGEventFlags};

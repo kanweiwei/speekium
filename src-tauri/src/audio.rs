@@ -73,7 +73,7 @@ impl AudioRecorder {
 
         // Spawn recording thread
         let handle = thread::spawn(move || {
-            if let Err(e) = run_recording_thread(is_recording.clone(), buffer, rx) {
+            if let Err(_e) = run_recording_thread(is_recording.clone(), buffer, rx) {
             }
             is_recording.store(false, Ordering::SeqCst);
         });
@@ -182,7 +182,7 @@ fn run_recording_thread(
 
 
     // Create error callback
-    let err_fn = |err| {
+    let err_fn = |_err| {
     };
 
     // Clone shared state for the callback
