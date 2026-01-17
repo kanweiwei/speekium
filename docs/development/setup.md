@@ -1,329 +1,195 @@
-# Speekium 开发指南
+# Speekium Development Guide
 
-## 🚀 快速开始
+Speekium is built with [Tauri 2.0](https://tauri.app/), combining React frontend, Rust backend, and Python daemon.
 
-### 方式 1: 一键启动 (推荐)
+## Prerequisites
 
-```bash
-./dev.sh
-```
+- **Node.js** 20+
+- **Rust** 1.70+
+- **Python** 3.10+
+- **[uv](https://github.com/astral-sh/uv)** (Python package manager)
+- **macOS** or **Windows** (Linux support planned)
 
-**特性**:
-- ✅ 自动启动前端 Vite 开发服务器 (http://localhost:5173)
-- ✅ 自动启动后端并连接到开发服务器
-- ✅ 前端热重载 (保存即刷新)
-- ✅ 浏览器开发者工具 (右键 → 检查元素 或 Cmd+Option+I)
-- ✅ Ctrl+C 自动清理所有进程
+## Quick Start
 
-### 方式 2: 手动启动
-
-**终端 1 - 启动前端开发服务器**:
-```bash
-cd web
-npm run dev
-```
-
-**终端 2 - 启动后端（开发模式）**:
-```bash
-python web_app.py --dev
-```
-
-### 方式 3: 生产模式
+### Clone and Install
 
 ```bash
-# 1. 构建前端
-cd web
-npm run build
-cd ..
+# Clone the repository
+git clone https://github.com/kanweiwei/speekium.git
+cd speekium
 
-# 2. 运行应用（使用编译后的静态文件）
-python web_app.py
-```
+# Install frontend dependencies
+npm install
 
-## 📝 命令参数
-
-### `web_app.py` 参数
-
-```bash
-python web_app.py [选项]
-
-选项:
-  --dev           开发模式：连接到 Vite 开发服务器
-  --port PORT     指定 Vite 服务器端口 (默认: 5173)
-```
-
-**示例**:
-```bash
-# 开发模式，默认端口 5173
-python web_app.py --dev
-
-# 开发模式，自定义端口 5174
-python web_app.py --dev --port 5174
-
-# 生产模式（使用编译后的静态文件）
-python web_app.py
-```
-
-## 🔧 开发工作流
-
-### 前端开发
-
-1. **启动开发环境**:
-   ```bash
-   ./dev.sh
-   ```
-
-2. **修改代码**:
-   - 编辑 `web/src/` 下的文件
-   - 保存后自动热重载，无需刷新
-
-3. **调试**:
-   - 右键点击 → "检查元素" 打开开发者工具
-   - 查看 Console 日志
-   - 使用 Network 标签查看 API 调用
-
-### 后端开发
-
-1. **修改 Python 代码**:
-   - 编辑 `web_app.py` 或 `speekium.py`
-   - **需要重启应用** (Ctrl+C → `./dev.sh`)
-
-2. **查看日志**:
-   - 终端会显示所有 Python 打印输出
-   - TTS 生成状态、错误信息等
-
-## 🛠️ 脚本说明
-
-### `dev.sh` - 开发模式 (推荐)
-
-**用途**: 一键启动完整开发环境
-
-**功能**:
-- 清理旧进程
-- 检查端口占用
-- 启动前端开发服务器
-- 启动后端（--dev 模式）
-- Ctrl+C 自动清理
-
-**使用**:
-```bash
-./dev.sh
-```
-
-### `run.sh` - 兼容脚本
-
-**用途**: 同 `dev.sh`，但前端在前台运行
-
-**区别**:
-- `dev.sh`: 前后端都在后台，等待任一退出
-- `run.sh`: 前端在后台，后端在前台
-
-**使用**:
-```bash
-./run.sh
-```
-
-## 🐛 常见问题
-
-### Q: 修改前端代码后没有更新？
-
-**A**: 确保使用 `--dev` 模式:
-```bash
-./dev.sh
-# 或
-python web_app.py --dev
-```
-
-### Q: 报错 "端口 5173 已被占用"？
-
-**A**: 停止占用端口的进程:
-```bash
-# 查看占用端口的进程
-lsof -ti:5173
-
-# 杀死进程
-kill -9 $(lsof -ti:5173)
-
-# 或使用清理脚本
-pkill -f "vite.*dev"
-```
-
-### Q: 开发者工具打不开？
-
-**A**: 确保 `web_app.py` 启用了 `debug=True`:
-```python
-webview.start(debug=True)
-```
-
-### Q: API 调用报错 `r.getConfig is not a function`？
-
-**A**: TypeScript 类型定义和实际调用要使用 snake_case:
-```typescript
-// ✅ 正确
-api.get_config()
-api.save_config()
-api.start_recording()
-
-// ❌ 错误
-api.getConfig()
-api.saveConfig()
-api.startRecording()
-```
-
-## 📦 构建生产版本
-
-```bash
-# 1. 构建前端
-cd web
-npm run build
-
-# 2. 验证构建
-ls -lh ../dist/
-
-# 3. 运行生产版本
-cd ..
-python web_app.py
-```
-
-## 🎯 最佳实践
-
-1. **开发时始终使用 `--dev` 模式**
-2. **修改前端后自动重载，修改后端需要重启**
-3. **使用开发者工具调试前端问题**
-4. **使用终端输出调试后端问题**
-5. **提交代码前先构建并测试生产版本**
-
----
-
-## 🆕 新功能说明 (v0.2.0)
-
-### Python 后端新增模块
-
-#### 1. 模式管理器 (`mode_manager.py`)
-- **按键录音模式** (Push-to-Talk): 按住快捷键录音，松开发送
-- **自由对话模式** (Continuous): 自动VAD检测，持续监听
-- 模式切换和状态管理
-
-#### 2. 快捷键管理器 (`hotkey_manager.py`)
-- 全局快捷键: **Ctrl/Cmd + Alt + Space**
-- 跨平台支持 (macOS/Windows/Linux)
-- 按下/松开事件回调
-
-#### 3. 悬浮窗管理器 (`floating_window.py`)
-- 独立的录音状态窗口
-- 尺寸: 240x100px
-- 位置: 屏幕底部居中，距底部80px
-- 特性: 无边框、置顶、玻璃态效果
-
-#### 4. 系统托盘 (`tray_manager.py`)
-- 系统托盘图标和菜单
-- 左键点击: 显示主窗口
-- 右键菜单: 模式切换、清空历史、设置、退出
-- 监听状态指示器
-
-#### 5. Web App 集成更新
-- 新增命令行参数: `--show` (启动时显示主窗口，默认隐藏到托盘)
-- 集成所有管理器
-- 窗口协调和事件处理
-
-### 前端界面重构
-
-#### 1. 主题系统 (`hooks/useTheme.ts`)
-- 深色模式
-- 浅色模式
-- 跟随系统主题
-- 主题切换按钮（右上角）
-
-#### 2. 左侧导航栏 (`components/Sidebar.tsx`)
-- 主页
-- 设置
-- 关于
-- 版本信息
-
-#### 3. 顶部状态栏 (`components/StatusBar.tsx`)
-- 当前模式显示 (按键录音 / 自由对话)
-- 对话统计
-- LLM后端显示
-- 主题切换按钮
-
-#### 4. 对话历史重构
-- 居中布局，最大宽度限制
-- 改进的欢迎界面
-- 快捷键提示
-
-#### 5. 悬浮窗 UI (`web/floating.html`)
-- 玻璃态半透明背景
-- 实时音频波形动画
-- 状态文字显示
-- 自适应主题
-
-### 快捷键
-
-| 快捷键 | 功能 |
-|--------|------|
-| `Cmd + Alt` (macOS) | 按键录音 (按住说话，松开发送) |
-| `Ctrl + Alt` (Win/Linux) | 按键录音 (按住说话，松开发送) |
-| 左键点击托盘 | 显示/隐藏主窗口 |
-| 右键点击托盘 | 打开菜单 |
-
-### 新增依赖
-
-```bash
-# Python
-pynput>=1.7.6        # 全局快捷键
-pystray>=0.19.5      # 系统托盘
-Pillow>=10.2.0       # 图标生成
-
-# 安装
+# Install Python dependencies
 uv sync
-# 或
-pip install -e .
 ```
 
-### 测试新功能
+### Development Mode
 
-**1. 测试快捷键**
 ```bash
-python web_app.py --dev --show
-# 按住 Ctrl+Alt+Space，观察悬浮窗
+# Start Tauri dev (runs frontend, Rust backend, and Python daemon)
+npm run tauri:dev
 ```
 
-**2. 测试托盘**
+This will:
+- Start Vite dev server on `http://localhost:1420`
+- Compile and run Rust backend
+- Start Python daemon automatically
+- Enable hot-reload for frontend changes
+
+### Build for Production
+
 ```bash
-python web_app.py --dev
-# 应用启动后隐藏到托盘
-# 点击托盘图标显示窗口
+# Build release binaries
+npm run tauri:build
 ```
 
-**3. 测试主题切换**
-```bash
-python web_app.py --dev --show
-# 点击右上角主题按钮
-# 切换: 浅色 → 深色 → 跟随系统
-```
+Output:
+- **macOS**: `src-tauri/target/release/bundle/dmg/Speekium_[version].dmg`
+- **Windows**: `src-tauri/target/release/bundle/msi/Speekium_[version]_x64_en-US.msi`
 
-### 项目结构更新
+## Project Structure
 
 ```
 speekium/
-├── mode_manager.py          # [新增] 模式管理
-├── hotkey_manager.py        # [新增] 快捷键管理
-├── floating_window.py       # [新增] 悬浮窗管理
-├── tray_manager.py          # [新增] 系统托盘
-├── web_app.py               # [更新] 集成所有功能
-├── docs/
-│   └── plans/
-│       └── 2026-01-07-ui-redesign.md  # [新增] 设计文档
-└── web/
-    ├── src/
-    │   ├── components/
-    │   │   ├── Sidebar.tsx         # [新增] 左侧导航
-    │   │   ├── StatusBar.tsx       # [新增] 顶部状态栏
-    │   │   ├── ChatHistory.tsx     # [重构]
-    │   │   └── ...
-    │   ├── hooks/
-    │   │   └── useTheme.ts         # [新增] 主题hook
-    │   ├── App.tsx                 # [重构] 新布局
-    │   └── index.css               # [更新] 主题变量
-    └── floating.html               # [新增] 悬浮窗UI
+├── src/                    # React frontend
+│   ├── components/         # UI components
+│   ├── contexts/           # React contexts
+│   └── main.tsx           # Entry point
+├── src-tauri/             # Rust backend
+│   ├── src/               # Rust source code
+│   │   └── lib.rs         # Main Tauri commands
+│   └── tauri.conf.json    # Tauri configuration
+├── python/                # Python daemon (via worker_daemon.py)
+├── speekium.py            # Main Python entry point
+├── worker_daemon.py       # Daemon process
+└── config_manager.py      # Configuration management
 ```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Speekium Desktop App                     │
+│                      (Tauri + React)                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    │
+│   │   Frontend  │    │    Rust     │    │   Python    │    │
+│   │   (React)   │◄──►│   Backend   │◄──►│   Daemon    │    │
+│   └─────────────┘    └─────────────┘    └─────────────┘    │
+│                                                │             │
+│                                          ┌─────┴─────┐      │
+│                                          │           │      │
+│                                     ┌────▼───┐ ┌────▼───┐  │
+│                                     │  VAD   │ │  ASR   │  │
+│                                     │(Silero)│ │(Sense- │  │
+│                                     │        │ │ Voice) │  │
+│                                     └────────┘ └────────┘  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │          LLM Backends         │
+              ├───────────────────────────────┤
+              │ Ollama │ OpenAI │ OpenRouter  │
+              │ ZhipuAI │ Custom API           │
+              └───────────────────────────────┘
+```
+
+## Development Tips
+
+### Frontend Hot-Reload
+
+Changes to `src/` files automatically trigger hot-reload.
+
+### Rust Backend Changes
+
+After modifying Rust code in `src-tauri/src/`, restart the dev process:
+
+```bash
+# Stop: Ctrl+C
+# Start again:
+npm run tauri:dev
+```
+
+### Python Daemon Changes
+
+After modifying Python files, the daemon auto-reloads. No restart needed.
+
+### Debugging
+
+**Frontend:**
+- Use Chrome DevTools (included in Tauri dev window)
+- `Cmd+Option+I` (macOS) or `Ctrl+Shift+I` (Windows)
+
+**Rust Backend:**
+```bash
+# Enable debug output
+RUST_LOG=debug npm run tauri:dev
+```
+
+**Python Daemon:**
+- Check console output for daemon logs
+- Logs are prefixed with `[DAEMON]`
+
+## Tauri Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run tauri:dev` | Start development mode |
+| `npm run tauri:build` | Build release binaries |
+| `npm run tauri info` | Show Tauri environment info |
+
+## Adding New Tauri Commands
+
+1. Define command in `src-tauri/src/lib.rs`:
+```rust
+#[tauri::command]
+async fn my_command(arg: String) -> Result<String, String> {
+    Ok(format!("Received: {}", arg))
+}
+```
+
+2. Register in `tauri::Builder`:
+```rust
+.invoke_handler(tauri::generate_handler![
+    my_command,
+    // ... other commands
+])
+```
+
+3. Call from frontend:
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+const result = await invoke<string>('my_command', { arg: 'test' });
+```
+
+## Testing
+
+```bash
+# Python tests
+uv run pytest
+
+# TypeScript type check
+npx tsc --noEmit
+```
+
+## Troubleshooting
+
+**Port 1420 already in use:**
+```bash
+# Kill process using the port
+lsof -ti:1420 | xargs kill -9
+```
+
+**Daemon won't start:**
+- Check Python dependencies: `uv sync`
+- Check config file: `~/.config/speekium/config.json`
+
+**Build fails:**
+- Ensure Rust is installed: `rustc --version`
+- Update Tauri CLI: `npm install -g @tauri-apps/cli`
