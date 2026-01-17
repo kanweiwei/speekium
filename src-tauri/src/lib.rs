@@ -540,6 +540,9 @@ impl PythonDaemon {
 // Global daemon instance
 static DAEMON: Mutex<Option<PythonDaemon>> = Mutex::new(None);
 
+// Daemon ready flag - set to true only after daemon is fully initialized
+static DAEMON_READY: AtomicBool = AtomicBool::new(false);
+
 // PTT stderr reader handle
 static PTT_STDERR: Mutex<Option<BufReader<ChildStderr>>> = Mutex::new(None);
 
@@ -612,10 +615,9 @@ fn ensure_daemon_running() -> Result<(), String> {
 
 /// Check if daemon is ready (for commands to check before execution)
 fn is_daemon_ready() -> bool {
-    let daemon = DAEMON.lock().unwrap();
-    let ready = daemon.is_some();
+    let ready = DAEMON_READY.load(std::sync::atomic::Ordering::Acquire);
     if !ready {
-        println!("⚠️ Daemon not ready: DAEMON is None");
+        println!("⚠️ Daemon not ready: DAEMON_READY flag is false");
     }
     ready
 }
@@ -876,6 +878,10 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
             register_ptt_from_config(handle);
         }
 
+        // Mark daemon as ready - this allows commands to be executed
+        DAEMON_READY.store(true, std::sync::atomic::Ordering::Release);
+        println!("✅ Daemon marked as ready");
+
         // Send ready status to frontend
         let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
             status: "ready".to_string(),
@@ -885,9 +891,15 @@ fn start_daemon_async<R: Runtime>(app_handle: tauri::AppHandle<R>) {
 }
 
 fn call_daemon(command: &str, args: serde_json::Value) -> Result<serde_json::Value, String> {
-    // Check if daemon is ready (don't block waiting for it)
-    if !is_daemon_ready() {
-        return Err("语音服务正在启动中，请稍候...".to_string());
+    // Wait for daemon to be ready (up to 30 seconds)
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(30);
+
+    while !is_daemon_ready() {
+        if start.elapsed() > timeout {
+            return Err("语音服务启动超时，请重启应用".to_string());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
     let mut daemon = DAEMON.lock().unwrap();
