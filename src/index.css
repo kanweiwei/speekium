@@ -108,4 +108,75 @@
   .animate-cursor-blink {
     animation: cursor-blink 1s step-end infinite;
   }
+
+  /* Loading screen animations */
+
+  /* Wave ring expansion - simulates sound waves spreading */
+  @keyframes wave-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.6;
+    }
+    100% {
+      transform: scale(2.5);
+      opacity: 0;
+    }
+  }
+
+  .animate-wave-ring {
+    animation: wave-ring 3s ease-out infinite;
+  }
+
+  /* Logo gentle glow pulse */
+  @keyframes logo-glow {
+    0%, 100% {
+      filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.3));
+    }
+    50% {
+      filter: drop-shadow(0 0 35px rgba(168, 85, 247, 0.5));
+    }
+  }
+
+  .animate-logo-glow {
+    animation: logo-glow 3s ease-in-out infinite;
+  }
+
+  /* Rhythmic dot wave - creates wave pattern with dots */
+  @keyframes dot-wave {
+    0%, 100% {
+      transform: scaleY(1);
+      opacity: 0.5;
+    }
+    50% {
+      transform: scaleY(1.8);
+      opacity: 1;
+    }
+  }
+
+  .animate-dot-wave {
+    animation: dot-wave 1.2s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  /* Fade in animation */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.8s ease-out forwards;
+  }
+
+  /* Fade in with delay */
+  .animate-fade-in-delayed {
+    animation: fade-in 0.8s ease-out 0.3s forwards;
+    opacity: 0;
+  }
 }

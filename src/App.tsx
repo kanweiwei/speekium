@@ -110,83 +110,167 @@ function EmptyState({
 function LoadingScreen({ message, status }: { message: string; status: 'loading' | 'error' }) {
   const { t } = useTranslation();
 
+  // Determine visual display state based on message content
+  // Even if status is 'error', show loading style if message indicates loading is in progress
+  const displayStatus = React.useMemo(() => {
+    const loadingKeywords = ['loading', '加载', 'starting', '启动', 'initializing', '初始化', 'waiting', '等待'];
+    const messageLower = (message || '').toLowerCase();
+    const isLoadingMessage = loadingKeywords.some(keyword => messageLower.includes(keyword));
+    return isLoadingMessage ? 'loading' : status;
+  }, [message, status]);
+
   const handleRetry = () => {
     // Reload the app to retry daemon initialization
     window.location.reload();
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-background">
-      {/* Subtle ambient background - single, slow breathing */}
-      {status === 'loading' && (
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div className="flex flex-col items-center justify-center h-screen bg-background relative overflow-hidden">
+      {/* Animated gradient mesh background */}
+      {displayStatus === 'loading' && (
+        <>
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {/* Layer 1 - Slow blue gradient */}
+            <div
+              className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-blue-500/8 rounded-full blur-3xl animate-pulse"
+              style={{ animationDuration: '8s', animationDelay: '0s' }}
+            />
+            {/* Layer 2 - Purple gradient, offset timing */}
+            <div
+              className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-purple-500/8 rounded-full blur-3xl animate-pulse"
+              style={{ animationDuration: '10s', animationDelay: '2s' }}
+            />
+            {/* Layer 3 - Small accent */}
+            <div
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-cyan-500/5 rounded-full blur-3xl animate-pulse"
+              style={{ animationDuration: '12s', animationDelay: '4s' }}
+            />
+          </div>
+
+          {/* Subtle grid overlay */}
           <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-3xl animate-pulse"
-            style={{ animationDuration: '10s' }}
+            className="absolute inset-0 opacity-[0.02]"
+            style={{
+              backgroundImage: `
+                linear-gradient(to right, currentColor 1px, transparent 1px),
+                linear-gradient(to bottom, currentColor 1px, transparent 1px)
+              `,
+              backgroundSize: '60px 60px'
+            }}
           />
-        </div>
+        </>
       )}
 
       {/* Content container */}
       <div className="relative z-10 flex flex-col items-center">
-        {/* Logo - static, serves as visual anchor */}
-        <div className="relative mb-8">
+        {/* Logo with animated sound wave rings */}
+        <div className="relative mb-10">
+          {/* Outer glow */}
           <div className={cn(
-            "w-24 h-24 transition-all duration-300",
-            status === 'error' && "opacity-60 scale-95"
+            "absolute -inset-8 rounded-full bg-gradient-to-br opacity-20 blur-2xl -z-10 transition-all duration-500",
+            displayStatus === 'loading'
+              ? "from-blue-500 via-purple-500 to-cyan-500 animate-pulse"
+              : "from-destructive to-destructive/50"
+          )}
+          style={displayStatus === 'loading' ? { animationDuration: '3s' } : {}}
+          />
+
+          {/* Animated wave rings - only when loading */}
+          {displayStatus === 'loading' && (
+            <>
+              {/* Ring 1 */}
+              <div
+                className="absolute inset-0 rounded-full border border-blue-500/30 animate-wave-ring"
+                style={{ animationDelay: '0s' }}
+              />
+              {/* Ring 2 */}
+              <div
+                className="absolute inset-0 rounded-full border border-purple-500/25 animate-wave-ring"
+                style={{ animationDelay: '0.8s' }}
+              />
+              {/* Ring 3 */}
+              <div
+                className="absolute inset-0 rounded-full border border-cyan-500/20 animate-wave-ring"
+                style={{ animationDelay: '1.6s' }}
+              />
+            </>
+          )}
+
+          {/* Logo container */}
+          <div className={cn(
+            "w-28 h-28 transition-all duration-500 relative",
+            displayStatus === 'loading' && "animate-logo-glow",
+            displayStatus === 'error' && "opacity-50 scale-90"
           )}>
             <img
               src="/logo.svg"
               alt="Speekium"
-              className="w-full h-full"
+              className="w-full h-full drop-shadow-2xl"
             />
           </div>
-
-          {/* Static glow effect */}
-          <div className={cn(
-            "absolute -inset-2 rounded-full bg-gradient-to-br opacity-15 blur-2xl -z-10",
-            status === 'loading'
-              ? "from-blue-500 to-purple-600"
-              : "from-destructive to-destructive/50"
-          )} />
         </div>
 
-        {/* Title */}
-        <h1 className="text-2xl font-semibold text-foreground mb-6">
-          {t('app.title')}
+        {/* Title with subtle gradient */}
+        <h1 className={cn(
+          "text-3xl font-semibold mb-8 tracking-tight transition-all duration-300",
+          displayStatus === 'loading' ? "animate-fade-in" : "opacity-60"
+        )}>
+          <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent dark:from-blue-400 dark:via-purple-400 dark:to-cyan-400">
+            {t('app.title')}
+          </span>
         </h1>
+
+        {/* Rhythmic loading dots - only when loading */}
+        {displayStatus === 'loading' && (
+          <div className="flex items-center gap-2 mb-6">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="w-1.5 h-6 rounded-full bg-gradient-to-t from-blue-500 to-purple-500 animate-dot-wave"
+                style={{
+                  animationDelay: `${i * 0.1}s`,
+                  height: `${12 + Math.sin(i * 0.8) * 8}px`
+                }}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Status message */}
         <div className={cn(
-          "flex items-center gap-2 px-4 py-2 rounded-full transition-colors duration-300",
-          status === 'error'
-            ? "bg-destructive/10 text-destructive"
-            : "text-muted-foreground"
+          "flex items-center gap-3 px-5 py-3 rounded-2xl transition-all duration-300 backdrop-blur-sm",
+          displayStatus === 'error'
+            ? "bg-destructive/10 border border-destructive/30 text-destructive"
+            : "bg-muted/50 border border-border/30 text-muted-foreground"
         )}>
-          {status === 'loading' ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+          {displayStatus === 'loading' ? (
+            <div className="relative">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+              <div className="absolute inset-0 w-5 h-5 rounded-full border-2 border-transparent border-t-purple-500/50 animate-spin" style={{ animationDuration: '1.5s' }} />
+            </div>
           ) : (
-            <AlertCircle className="w-4 h-4" />
+            <AlertCircle className="w-5 h-5" />
           )}
-          <span className="text-sm">{message || t('app.loading.startingService')}</span>
+          <span className="text-sm font-medium">{message || t('app.loading.startingService')}</span>
         </div>
 
         {/* First launch hint */}
-        {status === 'loading' && (
-          <p className="text-xs text-muted-foreground/60 mt-4">
+        {displayStatus === 'loading' && (
+          <p className="text-sm text-muted-foreground/60 mt-6 animate-fade-in-delayed flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500/60 animate-pulse" />
             {t('app.loading.firstLaunchHint')}
           </p>
         )}
 
         {/* Retry button for error state */}
-        {status === 'error' && (
+        {displayStatus === 'error' && (
           <Button
             variant="outline"
             size="sm"
-            className="mt-4"
+            className="mt-6 gap-2"
             onClick={handleRetry}
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
+            <RefreshCw className="w-4 h-4" />
             {t('app.loading.retry')}
           </Button>
         )}
