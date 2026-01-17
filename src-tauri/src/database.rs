@@ -174,6 +174,7 @@ impl Database {
     }
 
     /// List sessions with pagination
+    #[allow(dead_code)]
     pub fn list_sessions(&self, page: i32, page_size: i32) -> Result<PaginatedResult<Session>, String> {
         self.list_sessions_filtered(page, page_size, None)
     }

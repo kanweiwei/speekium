@@ -73,15 +73,13 @@ impl AudioRecorder {
 
         // Spawn recording thread
         let handle = thread::spawn(move || {
-            if let Err(e) = run_recording_thread(is_recording.clone(), buffer, rx) {
-                eprintln!("❌ Recording thread error: {}", e);
+            if let Err(_e) = run_recording_thread(is_recording.clone(), buffer, rx) {
             }
             is_recording.store(false, Ordering::SeqCst);
         });
 
         self.thread_handle = Some(handle);
 
-        println!("🔴 Recording started (background thread)");
         Ok(())
     }
 
@@ -108,7 +106,6 @@ impl AudioRecorder {
         };
 
         let duration_secs = samples.len() as f32 / SAMPLE_RATE as f32;
-        println!("⏹️ Recording stopped: {} samples ({:.2}s)", samples.len(), duration_secs);
 
         if samples.is_empty() {
             return Err("No audio data recorded".to_string());
@@ -124,7 +121,6 @@ impl AudioRecorder {
         file.write_all(&wav_data)
             .map_err(|e| format!("Failed to write WAV data: {}", e))?;
 
-        println!("💾 Audio saved to: {}", temp_path);
 
         Ok(AudioData {
             file_path: temp_path,
@@ -178,18 +174,15 @@ fn run_recording_thread(
     let device = host.default_input_device()
         .ok_or_else(|| "No input device available".to_string())?;
 
-    println!("🎤 Using input device: {}", device.name().unwrap_or_default());
 
     // Configure stream
     let config = find_suitable_config(&device)?;
     let actual_sample_rate = config.sample_rate();
     let actual_channels = config.channels();
 
-    println!("🎵 Audio config: {} Hz, {} channel(s)", actual_sample_rate, actual_channels);
 
     // Create error callback
-    let err_fn = |err| {
-        eprintln!("❌ Audio stream error: {}", err);
+    let err_fn = |_err| {
     };
 
     // Clone shared state for the callback
@@ -259,21 +252,18 @@ fn run_recording_thread(
     // Start the stream
     stream.play().map_err(|e| format!("Failed to start stream: {}", e))?;
 
-    println!("🎵 Audio stream started");
 
     // Wait for stop command (with timeout check)
     loop {
         // Check for stop command (non-blocking with timeout)
         match rx.recv_timeout(std::time::Duration::from_millis(100)) {
             Ok(RecordingCommand::Stop) => {
-                println!("🛑 Received stop command");
                 break;
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 // Continue recording
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                println!("⚠️ Command channel disconnected");
                 break;
             }
         }
@@ -286,7 +276,6 @@ fn run_recording_thread(
 
     // Stream will be dropped here, releasing the audio device
     drop(stream);
-    println!("🎵 Audio stream stopped");
 
     Ok(())
 }
