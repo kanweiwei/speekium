@@ -63,7 +63,7 @@ pub static CURRENT_PTT_SHORTCUT: Mutex<Option<String>> = Mutex::new(None);
 pub static PTT_KEY_PRESSED: AtomicBool = AtomicBool::new(false);
 
 /// Global audio recorder (Rust-side recording)
-pub static AUDIO_RECORDER: Mutex<Option<crate::AudioRecorder>> = Mutex::new(None);
+pub static AUDIO_RECORDER: Mutex<Option<crate::audio::AudioRecorder>> = Mutex::new(None);
 
 /// Channel for recording mode changes (cross-thread communication)
 pub static RECORDING_MODE_CHANNEL: Mutex<Option<std::sync::mpsc::Sender<String>>> = Mutex::new(None);
