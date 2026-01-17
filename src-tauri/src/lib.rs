@@ -2690,9 +2690,17 @@ fn write_recording_mode_to_config(mode: &str) -> Result<(), Box<dyn std::error::
 
     let config_path = config_dir.join("config.json");
 
-    // Read existing config
-    let config_content = std::fs::read_to_string(&config_path)?;
-    let mut config: serde_json::Value = serde_json::from_str(&config_content)?;
+    // Ensure config directory exists
+    std::fs::create_dir_all(&config_dir)?;
+
+    // Read existing config or create default if not exists
+    let mut config = if config_path.exists() {
+        let config_content = std::fs::read_to_string(&config_path)?;
+        serde_json::from_str(&config_content)?
+    } else {
+        // Create minimal default config
+        serde_json::json!({})
+    };
 
     // Update recording_mode
     config["recording_mode"] = serde_json::json!(mode);
@@ -2700,7 +2708,7 @@ fn write_recording_mode_to_config(mode: &str) -> Result<(), Box<dyn std::error::
     // Write back
     std::fs::write(&config_path, serde_json::to_string_pretty(&config)?)?;
 
-    println!("💾 直接写入配置文件: recording_mode = {}", mode);
+    println!("💾 Direct write to config: recording_mode = {}", mode);
     Ok(())
 }
 
@@ -2970,17 +2978,32 @@ fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
 // ============================================================================
 
 fn cleanup_daemon() {
-    println!("🧹 清理守护进程...");
+    println!("🧹 Cleaning up resources...");
 
+    // 1. First, clean up AUDIO_RECORDER to release the microphone
+    {
+        let mut recorder = AUDIO_RECORDER.lock().unwrap();
+        if let Some(mut audio_rec) = recorder.take() {
+            println!("🎤 Stopping recording and releasing microphone...");
+            if audio_rec.is_recording() {
+                let _ = audio_rec.stop_recording();
+            }
+            // audio_rec is dropped here, which releases the audio device
+            println!("✅ Microphone released");
+        }
+    }
+
+    // 2. Then clean up the daemon
     let mut daemon = DAEMON.lock().unwrap();
     if let Some(mut d) = daemon.take() {
+        println!("🧹 Cleaning up daemon...");
         // Send exit command
         let _ = d.send_command("exit", serde_json::json!({}));
 
         // Wait for process to exit
         let _ = d.process.wait();
 
-        println!("✅ 守护进程已关闭");
+        println!("✅ Daemon closed");
     }
 }
 
@@ -3211,8 +3234,13 @@ fn update_recording_mode(mode: String) -> Result<(), String> {
 
     println!("Processing side effects for mode: {:?}", current_mode);
 
-    // IMPORTANT: Use try_lock to avoid blocking - if daemon is busy, skip the update
-    // This is critical because update_recording_mode may be called during recording
+    // IMPORTANT: Write directly to config file FIRST so VAD loop can detect mode change immediately
+    // This ensures VAD recording stops promptly when switching from continuous to push-to-talk
+    if let Err(e) = write_recording_mode_to_config(&mode) {
+        eprintln!("⚠️ Failed to write recording mode to config: {}", e);
+    }
+
+    // Also notify daemon (for UI state sync)
     if let Ok(mut daemon_guard) = DAEMON.try_lock() {
         if let Some(ref mut daemon) = *daemon_guard {
             let _ = daemon.send_command_no_wait("set_recording_mode", serde_json::json!({
@@ -3221,7 +3249,7 @@ fn update_recording_mode(mode: String) -> Result<(), String> {
             println!("Sent recording mode update to daemon");
         }
     } else {
-        println!("Daemon busy, skipping recording mode update (will retry on next poll)");
+        println!("Daemon busy, skipping daemon update (config already written)");
     }
 
     // Handle PTT shortcut registration/unregistration

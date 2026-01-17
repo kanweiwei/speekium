@@ -66,7 +66,7 @@ export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProp
       const newConfig: HotkeyConfig = {
         modifiers,
         key: e.code,
-        displayName: keys.join(''),
+        displayName: keys.join('+'),
       };
 
       onChange(newConfig);
