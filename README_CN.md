@@ -62,7 +62,6 @@
 - **OpenAI** - GPT-4o、GPT-4o-mini、GPT-3.5-turbo
 - **OpenRouter** - 访问 Claude、Gemini 等 100+ 模型
 - **智谱AI (ZhipuAI)** - glm-4-plus、glm-4、glm-4-flash、glm-4-air
-- **Claude Code CLI** - 直接 Claude 集成
 - **自定义** - 任何 OpenAI 兼容的 API
 
 ### 更多功能

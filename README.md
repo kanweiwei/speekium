@@ -62,7 +62,6 @@
 - **OpenAI** - GPT-4o, GPT-4o-mini, GPT-3.5-turbo
 - **OpenRouter** - Access Claude, Gemini, and 100+ models
 - **ZhipuAI (智谱AI)** - glm-4-plus, glm-4, glm-4-flash, glm-4-air
-- **Claude Code CLI** - Direct Claude integration
 - **Custom** - Any OpenAI-compatible API
 
 ### More
