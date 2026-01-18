@@ -238,6 +238,12 @@ Enter your API key in settings.
 
 ## Changelog
 
+### v0.2.2 (2026-01-18)
+
+**Fixes**
+- Fix macOS notarization errors for PyInstaller's Python framework
+- Properly sign Python interpreter and bundled libraries
+
 ### v0.2.1 (2026-01-18)
 
 **Features**
