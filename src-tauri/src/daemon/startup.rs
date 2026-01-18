@@ -10,7 +10,7 @@ use std::io::{BufReader, BufWriter, BufRead};
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use crate::types::{DaemonMode, DaemonStatusPayload};
 
 use super::state::{
@@ -142,10 +142,25 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             }
         };
 
+        // Get config directory for daemon
+        let config_dir = match app_handle.path().app_data_dir() {
+            Ok(dir) => dir,
+            Err(e) => {
+                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                    status: "error".to_string(),
+                    message: format!("无法获取配置目录: {}", e),
+                });
+                return;
+            }
+        };
+
         // Build PATH environment variable
         let current_path = std::env::var("PATH").unwrap_or_default();
         let extra_paths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
         let enhanced_path = format!("{}:{}", extra_paths, current_path);
+
+        // Convert config_dir to string for environment variable
+        let config_dir_str = config_dir.to_string_lossy().to_string();
 
         // Build command based on mode
         let mut child = match daemon_mode {
@@ -162,6 +177,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                 match Command::new(&executable_path)
                     .arg("daemon")
                     .env("PATH", production_path)
+                    .env("SPEEKIUM_CONFIG_DIR", &config_dir_str)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
@@ -190,6 +206,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                     .arg(&script_path)
                     .arg("daemon")
                     .env("PATH", enhanced_path)
+                    .env("SPEEKIUM_CONFIG_DIR", &config_dir_str)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())

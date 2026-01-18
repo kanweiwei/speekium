@@ -18,7 +18,15 @@ use crate::daemon::{
 // Application Setup
 // ============================================================================
 
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
+
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    // macOS: Set activation policy to Regular
+    // App appears in Dock initially, but hides when window is closed
+    // Tray icon remains active for showing the window again
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(ActivationPolicy::Regular);
     // Initialize AudioRecorder singleton (only once at startup)
     // This triggers microphone permission request on first access
     // cpal 0.17 fixes the repeated permission popup issue
@@ -81,9 +89,31 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
 fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-        // Prevent window close, hide instead
+        // Prevent window close, hide window and app instead
         api.prevent_close();
         window.hide().unwrap();
+        // macOS: Hide app and change to Accessory policy (removes from Dock)
+        #[cfg(target_os = "macos")]
+        {
+            let _ = window.app_handle().hide();
+            set_activation_policy_accessory();
+        }
+    }
+}
+
+// macOS: Set activation policy to Accessory (removes app from Dock)
+#[cfg(target_os = "macos")]
+fn set_activation_policy_accessory() {
+    use cocoa::foundation::NSUInteger;
+    use objc::{msg_send, sel, sel_impl, class};
+
+    // NSApplicationActivationPolicyAccessory = 1
+    const NS_APPLICATION_ACTIVATION_POLICY_ACCESSORY: NSUInteger = 1;
+
+    unsafe {
+        let app = class!(NSObject);
+        let nsapp: cocoa::base::id = msg_send![class!(NSApplication), sharedApplication];
+        let _: () = msg_send![nsapp, setActivationPolicy: NS_APPLICATION_ACTIVATION_POLICY_ACCESSORY];
     }
 }
 

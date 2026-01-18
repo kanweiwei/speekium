@@ -190,16 +190,35 @@ pub fn register_ptt_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) 
 /// Write recording mode directly to config file
 /// This bypasses the daemon and allows VAD loop to detect mode changes via config polling
 pub fn write_recording_mode_to_config(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
-    use std::env;
+    use crate::daemon::APP_HANDLE;
     use std::path::PathBuf;
 
-    // Get config directory: ~/.config/speekium/ on macOS/Linux
-    let config_dir = if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {
-        PathBuf::from(xdg).join("speekium")
+    // Get config directory from app_data_dir (same as Python daemon)
+    let config_dir = if let Some(app_handle) = APP_HANDLE.get() {
+        app_handle.path().app_data_dir()
+            .map_err(|e| format!("Failed to get app data dir: {}", e))?
     } else {
-        // Fallback to ~/.config
-        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home).join(".config/speekium")
+        // Fallback if APP_HANDLE not set (shouldn't happen in normal operation)
+        #[cfg(target_os = "macos")]
+        {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            PathBuf::from(home).join("Library/Application Support/com.speekium.app")
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+            PathBuf::from(appdata).join("com.speekium.app")
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let xdg = std::env::var("XDG_CONFIG_HOME")
+                .unwrap_or_else(|_| format!("{}/.config", std::env::var("HOME").unwrap_or_else(|_| ".".to_string())));
+            PathBuf::from(xdg).join("com.speekium.app")
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        {
+            PathBuf::from(".")
+        }
     };
 
     let config_path = config_dir.join("config.json");

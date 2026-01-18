@@ -60,6 +60,9 @@
       "signingIdentity": null,
       "infoPlist": "Info.plist"
     },
+    "iOS": {},
+    "linux": {},
+    "android": {},
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",

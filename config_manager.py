@@ -9,18 +9,33 @@ APP_NAME = "speekium"
 def get_config_dir() -> str:
     """Get application config directory (cross-platform)
 
-    - macOS: ~/.config/speekium/
-    - Windows: C:/Users/<user>/AppData/Roaming/speekium/
-    - Linux: ~/.config/speekium/
-    """
-    if sys.platform == "win32":
-        # Windows
-        base = os.environ.get("APPDATA", os.path.expanduser("~"))
-    else:
-        # macOS, Linux and others - use ~/.config
-        base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    Uses SPEEKIUM_CONFIG_DIR environment variable if set (provided by Rust app),
+    otherwise falls back to platform-specific defaults:
 
-    config_dir = os.path.join(base, APP_NAME)
+    - macOS: ~/Library/Application Support/com.speekium.app/
+    - Windows: C:/Users/<user>/AppData/Roaming/com.speekium.app/
+    - Linux: ~/.config/com.speekium.app/ or ~/.local/share/com.speekium.app/
+    """
+    # Check if environment variable is set (from Rust app)
+    if "SPEEKIUM_CONFIG_DIR" in os.environ:
+        config_dir = os.environ["SPEEKIUM_CONFIG_DIR"]
+        print(f"📂 配置目录路径 (from env): {config_dir}", file=sys.stderr)
+        os.makedirs(config_dir, exist_ok=True)
+        return config_dir
+
+    # Fallback to platform-specific defaults
+    if sys.platform == "win32":
+        # Windows: AppData/Roaming
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+        config_dir = os.path.join(base, "com.speekium.app")
+    elif sys.platform == "darwin":
+        # macOS: ~/Library/Application Support
+        base = os.path.expanduser("~/Library/Application Support")
+        config_dir = os.path.join(base, "com.speekium.app")
+    else:
+        # Linux: XDG_CONFIG_HOME or ~/.config
+        base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+        config_dir = os.path.join(base, "com.speekium.app")
 
     # Ensure directory exists
     os.makedirs(config_dir, exist_ok=True)

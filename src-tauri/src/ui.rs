@@ -9,6 +9,37 @@ use tauri::{
 };
 use std::sync::atomic::Ordering;
 
+// macOS: Set activation policy to Regular (shows app in Dock)
+#[cfg(target_os = "macos")]
+fn set_activation_policy_regular() {
+    use cocoa::foundation::NSUInteger;
+    use objc::{msg_send, sel, sel_impl, class};
+
+    // NSApplicationActivationPolicyRegular = 0
+    const NS_APPLICATION_ACTIVATION_POLICY_REGULAR: NSUInteger = 0;
+
+    unsafe {
+        let nsapp: cocoa::base::id = msg_send![class!(NSApplication), sharedApplication];
+        let _: () = msg_send![nsapp, setActivationPolicy: NS_APPLICATION_ACTIVATION_POLICY_REGULAR];
+        let _: () = msg_send![nsapp, activateIgnoringOtherApps: true];
+    }
+}
+
+// macOS: Set activation policy to Accessory (removes app from Dock)
+#[cfg(target_os = "macos")]
+fn set_activation_policy_accessory() {
+    use cocoa::foundation::NSUInteger;
+    use objc::{msg_send, sel, sel_impl, class};
+
+    // NSApplicationActivationPolicyAccessory = 1
+    const NS_APPLICATION_ACTIVATION_POLICY_ACCESSORY: NSUInteger = 1;
+
+    unsafe {
+        let nsapp: cocoa::base::id = msg_send![class!(NSApplication), sharedApplication];
+        let _: () = msg_send![nsapp, setActivationPolicy: NS_APPLICATION_ACTIVATION_POLICY_ACCESSORY];
+    }
+}
+
 // Re-export from lib.rs for use in this module
 use crate::PTT_PROCESSING;
 
@@ -192,6 +223,10 @@ pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
         .tooltip("Speekium")
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "show" => {
+                #[cfg(target_os = "macos")]
+                {
+                    set_activation_policy_regular();
+                }
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -200,6 +235,11 @@ pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
             "hide" => {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = app.hide();
+                    set_activation_policy_accessory();
                 }
             }
             "quit" => {
@@ -210,14 +250,27 @@ pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { .. } = event {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    if window.is_visible().unwrap_or(false) {
-                        let _ = window.hide();
-                    } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+            if let TrayIconEvent::Click { button, .. } = event {
+                // Only toggle window on left click
+                // Right click shows the menu (default behavior)
+                if button == tauri::tray::MouseButton::Left {
+                    let app = tray.app_handle();
+                    if let Some(window) = app.get_webview_window("main") {
+                        if window.is_visible().unwrap_or(false) {
+                            let _ = window.hide();
+                            #[cfg(target_os = "macos")]
+                            {
+                                let _ = app.hide();
+                                set_activation_policy_accessory();
+                            }
+                        } else {
+                            #[cfg(target_os = "macos")]
+                            {
+                                set_activation_policy_regular();
+                            }
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
                     }
                 }
             }

@@ -42,6 +42,10 @@ else
   exit 1
 fi
 
+# Show current bundle ID
+echo "📝 Using bundle ID from tauri.conf.json:"
+grep '"identifier"' src-tauri/tauri.conf.json
+
 if [ "$SKIP_SIGN" = true ]; then
   echo "🔧 Building Speekium (without signing/notarization)..."
 else
@@ -67,24 +71,6 @@ fi
 echo "🏗️  Building for architecture: $RUST_TARGET"
 
 cd "$(dirname "$0")/.."
-
-# Temporarily change bundle ID to macOS-specific one
-TAURI_CONF="src-tauri/tauri.conf.json"
-ORIGINAL_BUNDLE_ID="com.speekium.app"
-MACOS_BUNDLE_ID="com.speekium.mac"
-
-# Function to restore bundle ID
-restore_bundle_id() {
-  echo "🔄 Restoring bundle ID to $ORIGINAL_BUNDLE_ID..."
-  sed -i '' "s/\"identifier\": \"$MACOS_BUNDLE_ID\"/\"identifier\": \"$ORIGINAL_BUNDLE_ID\"/" "$TAURI_CONF"
-}
-
-# Set trap to restore on exit (success or failure)
-trap restore_bundle_id EXIT
-
-echo "📝 Changing bundle ID to $MACOS_BUNDLE_ID..."
-sed -i '' "s/\"identifier\": \"$ORIGINAL_BUNDLE_ID\"/\"identifier\": \"$MACOS_BUNDLE_ID\"/" "$TAURI_CONF"
-grep "identifier" "$TAURI_CONF"
 
 # Step 1: Build Python daemon with PyInstaller
 echo "📦 Building Python daemon..."
