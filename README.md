@@ -40,12 +40,14 @@
 
 | Feature | Speekium | Siri/Alexa | ChatGPT Voice |
 |---------|:--------:|:----------:|:-------------:|
-| **Runs locally** | ✅ | ❌ | ❌ |
+| **Local LLM support** | ✅ | ❌ | ❌ |
 | **Your data stays private** | ✅ | ❌ | ❌ |
 | **Choose your own LLM** | ✅ | ❌ | ❌ |
 | **Open source** | ✅ | ❌ | ❌ |
-| **Works offline** | ✅ | ❌ | ❌ |
+| **Works offline** | ⚠️* | ❌ | ❌ |
 | **No subscription required** | ✅ | ✅ | ❌ |
+
+\* Fully offline with Ollama. Edge TTS requires internet connection.
 
 ## Features
 
@@ -58,14 +60,14 @@
 - **Text Mode**: Voice-to-text input for any application
 
 ### LLM Backends
-- **Ollama** - Run AI completely offline with local models
+- **Ollama** - Run AI completely offline with local models ⚡
 - **OpenAI** - GPT-4o, GPT-4o-mini, GPT-3.5-turbo
 - **OpenRouter** - Access Claude, Gemini, and 100+ models
 - **ZhipuAI (智谱AI)** - glm-4-plus, glm-4, glm-4-flash, glm-4-air
 - **Custom** - Any OpenAI-compatible API
 
 ### More
-- Real-time streaming TTS (Edge TTS)
+- Streaming TTS (Edge TTS, requires internet)
 - Dark/Light theme
 - i18n support (English, Chinese)
 - Customizable hotkeys
