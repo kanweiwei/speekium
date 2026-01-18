@@ -530,10 +530,27 @@ pub async fn daemon_health(app: tauri::AppHandle) -> Result<HealthResult, String
     if health_result.success {
         let _ = app.emit("daemon-status", DaemonStatusPayload {
             status: "ready".to_string(),
-            message: "就绪".to_string(),
+            message: crate::ui::get_daemon_message("ready"),
         });
     }
 
     Ok(health_result)
 }
 
+// ============================================================================
+// Config Commands (3 commands)
+// ============================================================================
+
+#[tauri::command]
+pub fn get_app_language() -> String {
+    crate::ui::get_language_from_config()
+}
+
+#[tauri::command]
+pub fn set_app_language(language: String, app: tauri::AppHandle) -> Result<(), String> {
+    crate::ui::write_language_to_config(&language)
+        .map_err(|e| format!("Failed to write language to config: {}", e))?;
+    // Update tray menu with new language
+    crate::ui::update_tray_menu(&app)
+        .map_err(|e| format!("Failed to update tray menu: {}", e))
+}

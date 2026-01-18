@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{Emitter, Manager};
 use crate::types::{DaemonMode, DaemonStatusPayload};
+use crate::ui;
 
 use super::state::{
     DAEMON, DAEMON_READY, PTT_STDERR, STREAMING_IN_PROGRESS,
@@ -41,7 +42,7 @@ pub fn ensure_daemon_running() -> Result<(), String> {
             if let Some(handle) = APP_HANDLE.get() {
                 let _ = handle.emit("daemon-status", DaemonStatusPayload {
                     status: "ready".to_string(),
-                    message: "就绪".to_string(),
+                    message: ui::get_daemon_message("ready"),
                 });
             }
             return Ok(());  // Healthy, return directly
@@ -71,7 +72,7 @@ pub fn call_daemon(command: &str, args: serde_json::Value) -> Result<serde_json:
 
     while !is_daemon_ready() {
         if start.elapsed() > timeout {
-            return Err("语音服务启动超时，请重启应用".to_string());
+            return Err(ui::get_daemon_message("timeout"));
         }
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -127,7 +128,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
         // Send initial loading status
         let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
             status: "loading".to_string(),
-            message: "正在启动语音服务...".to_string(),
+            message: ui::get_daemon_message("starting"),
         });
 
         // Detect execution mode
@@ -136,7 +137,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             Err(e) => {
                 let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                     status: "error".to_string(),
-                    message: format!("启动失败: {}", e),
+                    message: format!("{}: {}", ui::get_daemon_message("startup_failed"), e),
                 });
                 return;
             }
@@ -148,7 +149,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             Err(e) => {
                 let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                     status: "error".to_string(),
-                    message: format!("无法获取配置目录: {}", e),
+                    message: format!("{}: {}", ui::get_daemon_message("config_dir_error"), e),
                 });
                 return;
             }
@@ -187,7 +188,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                     Err(e) => {
                         let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                             status: "error".to_string(),
-                            message: format!("启动失败: {}", e),
+                            message: format!("{}: {}", ui::get_daemon_message("startup_failed"), e),
                         });
                         return;
                     }
@@ -216,7 +217,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                     Err(e) => {
                         let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                             status: "error".to_string(),
-                            message: format!("启动失败: {}", e),
+                            message: format!("{}: {}", ui::get_daemon_message("startup_failed"), e),
                         });
                         return;
                     }
@@ -230,7 +231,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             None => {
                 let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                     status: "error".to_string(),
-                    message: "无法获取进程输入流".to_string(),
+                    message: ui::get_daemon_message("stdin_error"),
                 });
                 return;
             }
@@ -240,7 +241,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             None => {
                 let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                     status: "error".to_string(),
-                    message: "无法获取进程输出流".to_string(),
+                    message: ui::get_daemon_message("stdout_error"),
                 });
                 return;
             }
@@ -250,7 +251,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             None => {
                 let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                     status: "error".to_string(),
-                    message: "无法获取进程错误流".to_string(),
+                    message: ui::get_daemon_message("stderr_error"),
                 });
                 return;
             }
@@ -273,7 +274,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                     // EOF - daemon exited
                     let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                         status: "error".to_string(),
-                        message: "语音服务意外退出".to_string(),
+                        message: ui::get_daemon_message("daemon_exited"),
                     });
                     return;
                 }
@@ -283,29 +284,29 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                         if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
                             // Map daemon events to user-friendly messages
                             let status_message = match event_type {
-                                "daemon_initializing" => "正在初始化语音服务...".to_string(),
-                                "loading_voice_assistant" => "正在加载语音助手...".to_string(),
-                                "loading_asr" | "asr_loaded" => "正在加载语音识别模型...".to_string(),
-                                "loading_llm" | "llm_loaded" => "正在加载语言模型...".to_string(),
-                                "loading_tts" | "tts_loaded" => "正在加载语音合成模型...".to_string(),
-                                "resource_limits_failed" => "资源限制设置失败，继续启动...".to_string(),
+                                "daemon_initializing" => ui::get_daemon_message("initializing"),
+                                "loading_voice_assistant" => ui::get_daemon_message("loading_assistant"),
+                                "loading_asr" | "asr_loaded" => ui::get_daemon_message("loading_asr"),
+                                "loading_llm" | "llm_loaded" => ui::get_daemon_message("loading_llm"),
+                                "loading_tts" | "tts_loaded" => ui::get_daemon_message("loading_tts"),
+                                "resource_limits_failed" => ui::get_daemon_message("resource_limits_failed"),
                                 "daemon_success" => {
                                     if let Some(message) = event.get("message").and_then(|v| v.as_str()) {
                                         if message.contains("就绪") || message.contains("ready") {
                                             initialized = true;
-                                            "语音服务已就绪".to_string()
+                                            ui::get_daemon_message("service_ready")
                                         } else {
                                             message.to_string()
                                         }
                                     } else {
-                                        "初始化成功".to_string()
+                                        ui::get_daemon_message("init_success")
                                     }
                                 }
                                 _ => {
                                     // For other events, use message if available
                                     event.get("message")
                                         .and_then(|v| v.as_str())
-                                        .unwrap_or("正在加载...")
+                                        .unwrap_or(&ui::get_daemon_message("loading"))
                                         .to_string()
                                 }
                             };
@@ -325,7 +326,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                 Err(e) => {
                     let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                         status: "error".to_string(),
-                        message: format!("读取输出失败: {}", e),
+                        message: format!("{}: {}", ui::get_daemon_message("read_error"), e),
                     });
                     return;
                 }
@@ -377,7 +378,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
         // Send ready status to frontend
         let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
             status: "ready".to_string(),
-            message: "就绪".to_string(),
+            message: ui::get_daemon_message("ready"),
         });
 
         // Call on_ready callback if provided (e.g., to register PTT shortcuts)

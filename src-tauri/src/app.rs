@@ -52,8 +52,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     app.manage(AppState { db });
 
-    // Create tray icon (default to English for cross-platform compatibility)
-    ui::create_tray(app.handle(), cleanup_daemon, "en")?;
+    // Create tray icon (reads language from config file)
+    ui::create_tray(app.handle(), cleanup_daemon)?;
 
     // Store app handle globally BEFORE starting dispatcher
     let _ = APP_HANDLE.set(app.handle().clone());
@@ -111,7 +111,7 @@ fn set_activation_policy_accessory() {
     const NS_APPLICATION_ACTIVATION_POLICY_ACCESSORY: NSUInteger = 1;
 
     unsafe {
-        let app = class!(NSObject);
+        let _app = class!(NSObject);
         let nsapp: cocoa::base::id = msg_send![class!(NSApplication), sharedApplication];
         let _: () = msg_send![nsapp, setActivationPolicy: NS_APPLICATION_ACTIVATION_POLICY_ACCESSORY];
     }
@@ -173,6 +173,8 @@ pub fn run() {
             crate::commands::update_hotkey,
             crate::commands::get_daemon_state,
             crate::commands::daemon_health,
+            crate::commands::get_app_language,
+            crate::commands::set_app_language,
             // API commands
             crate::api::test_ollama_connection,
             crate::api::list_ollama_models,

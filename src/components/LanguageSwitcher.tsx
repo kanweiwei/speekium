@@ -1,14 +1,21 @@
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Languages } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 
 export function LanguageSwitcher() {
   const { t, i18n } = useTranslation();
 
-  const toggleLanguage = () => {
+  const toggleLanguage = async () => {
     const currentLang = i18n.language;
     const newLang = currentLang === 'en' ? 'zh' : 'en';
     i18n.changeLanguage(newLang);
+    // Sync language change to config file for tray menu
+    try {
+      await invoke('set_app_language', { language: newLang });
+    } catch (error) {
+      console.error('Failed to save language preference:', error);
+    }
   };
 
   const currentLanguage = t(`languages.${i18n.language}` as any);

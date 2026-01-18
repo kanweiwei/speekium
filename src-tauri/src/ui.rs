@@ -8,6 +8,7 @@ use tauri::{
     Emitter, Manager, Runtime,
 };
 use std::sync::atomic::Ordering;
+use std::path::PathBuf;
 
 // macOS: Set activation policy to Regular (shows app in Dock)
 #[cfg(target_os = "macos")]
@@ -177,6 +178,127 @@ pub fn emit_ptt_state_static(app_handle: &tauri::AppHandle, state: &str) {
 }
 
 // ============================================================================
+// Config & Language
+// ============================================================================
+
+/// Get the config directory path
+fn get_config_dir() -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        return Ok(PathBuf::from(home).join("Library/Application Support/com.speekium.app"));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+        return Ok(PathBuf::from(appdata).join("com.speekium.app"));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let xdg = std::env::var("XDG_CONFIG_HOME")
+            .unwrap_or_else(|_| format!("{}/.config", std::env::var("HOME").unwrap_or_else(|_| ".".to_string())));
+        return Ok(PathBuf::from(xdg).join("com.speekium.app"));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err("Unsupported platform".to_string())
+    }
+}
+
+/// Get system language code
+/// Returns "en" for English locales, "zh" for Chinese locales, default to "en"
+fn get_system_language() -> &'static str {
+    // Try to get system language from environment variables
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(lang) = std::env::var("LANG") {
+            if lang.starts_with("en") {
+                return "en";
+            } else if lang.starts_with("zh") {
+                return "zh";
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(lang) = std::env::var("LANG") {
+            if lang.contains("en") {
+                return "en";
+            } else if lang.contains("zh") {
+                return "zh";
+            }
+        }
+    }
+    // Default to English
+    "en"
+}
+
+/// Read language from config file
+/// Returns the language from config, or system language if config doesn't exist
+pub fn get_language_from_config() -> String {
+    let config_dir = match get_config_dir() {
+        Ok(dir) => dir,
+        Err(_) => return get_system_language().to_string(),
+    };
+
+    let config_path = config_dir.join("config.json");
+
+    if !config_path.exists() {
+        // Config doesn't exist, create it with system language
+        let _ = std::fs::create_dir_all(&config_dir);
+
+        let default_config = serde_json::json!({
+            "language": get_system_language()
+        });
+
+        if let Ok(json) = serde_json::to_string_pretty(&default_config) {
+            let _ = std::fs::write(&config_path, json);
+        }
+        return get_system_language().to_string();
+    }
+
+    // Read existing config
+    match std::fs::read_to_string(&config_path) {
+        Ok(content) => {
+            if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(lang) = config.get("language").and_then(|v| v.as_str()) {
+                    return lang.to_string();
+                }
+            }
+            // If language field doesn't exist, add it
+            get_system_language().to_string()
+        }
+        Err(_) => get_system_language().to_string(),
+    }
+}
+
+/// Write language to config file
+pub fn write_language_to_config(language: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let config_dir = get_config_dir()?;
+
+    let config_path = config_dir.join("config.json");
+
+    // Ensure config directory exists
+    std::fs::create_dir_all(&config_dir)?;
+
+    // Read existing config or create default
+    let mut config = if config_path.exists() {
+        let config_content = std::fs::read_to_string(&config_path)?;
+        serde_json::from_str(&config_content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    // Update language
+    config["language"] = serde_json::json!(language);
+
+    // Write back
+    let json = serde_json::to_string_pretty(&config)?;
+    std::fs::write(&config_path, json)?;
+    Ok(())
+}
+
+// ============================================================================
 // Tray Icon
 // ============================================================================
 
@@ -184,6 +306,75 @@ use std::sync::Mutex;
 
 /// Global cleanup function for tray quit action
 static TRAY_CLEANUP: Mutex<Option<Box<dyn Fn() + Send + Sync>>> = Mutex::new(None);
+
+/// Get localized daemon startup messages
+pub fn get_daemon_message(message_key: &str) -> String {
+    let language = get_language_from_config();
+    match (message_key, language.as_str()) {
+        // Ready messages
+        ("ready", "en") => "Ready".to_string(),
+        ("ready", _) => "就绪".to_string(),
+
+        // Loading messages
+        ("starting", "en") => "Starting voice service...".to_string(),
+        ("starting", _) => "正在启动语音服务...".to_string(),
+
+        ("initializing", "en") => "Initializing voice service...".to_string(),
+        ("initializing", _) => "正在初始化语音服务...".to_string(),
+
+        ("loading_assistant", "en") => "Loading voice assistant...".to_string(),
+        ("loading_assistant", _) => "正在加载语音助手...".to_string(),
+
+        ("loading_asr", "en") => "Loading speech recognition model...".to_string(),
+        ("loading_asr", _) => "正在加载语音识别模型...".to_string(),
+
+        ("loading_llm", "en") => "Loading language model...".to_string(),
+        ("loading_llm", _) => "正在加载语言模型...".to_string(),
+
+        ("loading_tts", "en") => "Loading text-to-speech model...".to_string(),
+        ("loading_tts", _) => "正在加载语音合成模型...".to_string(),
+
+        ("service_ready", "en") => "Voice service ready".to_string(),
+        ("service_ready", _) => "语音服务已就绪".to_string(),
+
+        ("init_success", "en") => "Initialization successful".to_string(),
+        ("init_success", _) => "初始化成功".to_string(),
+
+        ("loading", "en") => "Loading...".to_string(),
+        ("loading", _) => "正在加载...".to_string(),
+
+        // Error messages
+        ("startup_failed", "en") => "Startup failed".to_string(),
+        ("startup_failed", _) => "启动失败".to_string(),
+
+        ("config_dir_error", "en") => "Cannot get config directory".to_string(),
+        ("config_dir_error", _) => "无法获取配置目录".to_string(),
+
+        ("stdin_error", "en") => "Cannot get process input stream".to_string(),
+        ("stdin_error", _) => "无法获取进程输入流".to_string(),
+
+        ("stdout_error", "en") => "Cannot get process output stream".to_string(),
+        ("stdout_error", _) => "无法获取进程输出流".to_string(),
+
+        ("stderr_error", "en") => "Cannot get process error stream".to_string(),
+        ("stderr_error", _) => "无法获取进程错误流".to_string(),
+
+        ("daemon_exited", "en") => "Voice service exited unexpectedly".to_string(),
+        ("daemon_exited", _) => "语音服务意外退出".to_string(),
+
+        ("read_error", "en") => "Failed to read output".to_string(),
+        ("read_error", _) => "读取输出失败".to_string(),
+
+        ("timeout", "en") => "Voice service startup timeout, please restart the app".to_string(),
+        ("timeout", _) => "语音服务启动超时，请重启应用".to_string(),
+
+        ("resource_limits_failed", "en") => "Failed to set resource limits, continuing...".to_string(),
+        ("resource_limits_failed", _) => "资源限制设置失败，继续启动...".to_string(),
+
+        // Default fallback
+        _ => message_key.to_string(),
+    }
+}
 
 /// Get localized tray menu texts
 fn get_tray_menu_texts(language: &str) -> (&'static str, &'static str, &'static str, &'static str) {
@@ -213,13 +404,13 @@ fn get_tray_menu_texts(language: &str) -> (&'static str, &'static str, &'static 
 /// # Arguments
 /// * `app` - The Tauri app handle
 /// * `cleanup_fn` - A callback function to clean up resources before quitting
-/// * `language` - Language code ("en" or "zh")
 pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
     app: &tauri::AppHandle<R>,
     cleanup_fn: F,
-    language: &str,
 ) -> tauri::Result<()> {
-    let (show_text, hide_text, quit_text, tooltip_text) = get_tray_menu_texts(language);
+    // Read language from config (creates config with system language if not exists)
+    let language = get_language_from_config();
+    let (show_text, hide_text, quit_text, tooltip_text) = get_tray_menu_texts(&language);
 
     // Store cleanup function globally
     *TRAY_CLEANUP.lock().unwrap() = Some(Box::new(move || {
@@ -242,8 +433,8 @@ pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
     let (width, height) = rgba.dimensions();
     let tray_icon = Image::new_owned(rgba.into_raw(), width, height);
 
-    // Create tray icon
-    let _tray = TrayIconBuilder::new()
+    // Create tray icon with explicit ID for later updates
+    let _tray = TrayIconBuilder::with_id("main")
         .menu(&menu)
         .icon(tray_icon)
         .icon_as_template(true)
@@ -305,6 +496,36 @@ pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
             }
         })
         .build(app)?;
+
+    Ok(())
+}
+
+/// Update the tray menu with new language
+/// This can be called when the user changes the language setting
+pub fn update_tray_menu(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    // Read current language from config
+    let language = get_language_from_config();
+    let (show_text, hide_text, quit_text, tooltip_text) = get_tray_menu_texts(&language);
+
+    eprintln!("Updating tray menu with language: {}", language);
+
+    // Build new menu with localized texts
+    let menu = MenuBuilder::new(app)
+        .item(&MenuItemBuilder::new(show_text).id("show").build(app)?)
+        .item(&MenuItemBuilder::new(hide_text).id("hide").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::new(quit_text).id("quit").build(app)?)
+        .build()?;
+
+    // Get the tray by its ID and update menu
+    if let Some(tray) = app.tray_by_id("main") {
+        eprintln!("Found tray, updating menu");
+        tray.set_menu(Some(menu))?;
+        tray.set_tooltip(Some(tooltip_text))?;
+        eprintln!("Tray menu updated successfully");
+    } else {
+        eprintln!("WARNING: Tray with ID 'main' not found!");
+    }
 
     Ok(())
 }
