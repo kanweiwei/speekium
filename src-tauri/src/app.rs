@@ -52,8 +52,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     app.manage(AppState { db });
 
-    // Create tray icon
-    ui::create_tray(app.handle(), cleanup_daemon)?;
+    // Create tray icon (default to English for cross-platform compatibility)
+    ui::create_tray(app.handle(), cleanup_daemon, "en")?;
 
     // Store app handle globally BEFORE starting dispatcher
     let _ = APP_HANDLE.set(app.handle().clone());

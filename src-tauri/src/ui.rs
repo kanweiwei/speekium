@@ -180,6 +180,29 @@ pub fn emit_ptt_state_static(app_handle: &tauri::AppHandle, state: &str) {
 // Tray Icon
 // ============================================================================
 
+use std::sync::Mutex;
+
+/// Global cleanup function for tray quit action
+static TRAY_CLEANUP: Mutex<Option<Box<dyn Fn() + Send + Sync>>> = Mutex::new(None);
+
+/// Get localized tray menu texts
+fn get_tray_menu_texts(language: &str) -> (&'static str, &'static str, &'static str, &'static str) {
+    match language {
+        "en" => (
+            "Show Window",
+            "Hide Window",
+            "Quit",
+            "Speekium"
+        ),
+        _ => (
+            "显示窗口",
+            "隐藏窗口",
+            "退出",
+            "Speekium"
+        ),
+    }
+}
+
 /// Create the system tray icon with menu
 ///
 /// This creates a tray icon in the system menu bar/dock with options to:
@@ -190,21 +213,25 @@ pub fn emit_ptt_state_static(app_handle: &tauri::AppHandle, state: &str) {
 /// # Arguments
 /// * `app` - The Tauri app handle
 /// * `cleanup_fn` - A callback function to clean up resources before quitting
+/// * `language` - Language code ("en" or "zh")
 pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
     app: &tauri::AppHandle<R>,
     cleanup_fn: F,
+    language: &str,
 ) -> tauri::Result<()> {
-    // Create menu items
-    let show_item = MenuItemBuilder::new("显示窗口").id("show").build(app)?;
-    let hide_item = MenuItemBuilder::new("隐藏窗口").id("hide").build(app)?;
-    let quit_item = MenuItemBuilder::new("退出").id("quit").build(app)?;
+    let (show_text, hide_text, quit_text, tooltip_text) = get_tray_menu_texts(language);
 
-    // Build menu
+    // Store cleanup function globally
+    *TRAY_CLEANUP.lock().unwrap() = Some(Box::new(move || {
+        cleanup_fn();
+    }));
+
+    // Build menu with localized texts
     let menu = MenuBuilder::new(app)
-        .item(&show_item)
-        .item(&hide_item)
+        .item(&MenuItemBuilder::new(show_text).id("show").build(app)?)
+        .item(&MenuItemBuilder::new(hide_text).id("hide").build(app)?)
         .separator()
-        .item(&quit_item)
+        .item(&MenuItemBuilder::new(quit_text).id("quit").build(app)?)
         .build()?;
 
     // Load tray icon (template icon for macOS menu bar)
@@ -220,7 +247,7 @@ pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
         .menu(&menu)
         .icon(tray_icon)
         .icon_as_template(true)
-        .tooltip("Speekium")
+        .tooltip(tooltip_text)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "show" => {
                 #[cfg(target_os = "macos")]
@@ -243,8 +270,10 @@ pub fn create_tray<R: Runtime, F: Fn() + Send + Sync + 'static>(
                 }
             }
             "quit" => {
-                // Clean up daemon using provided callback
-                cleanup_fn();
+                // Use global cleanup function
+                if let Some(cleanup) = TRAY_CLEANUP.lock().unwrap().as_ref() {
+                    cleanup();
+                }
                 app.exit(0);
             }
             _ => {}

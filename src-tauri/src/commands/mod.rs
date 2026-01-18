@@ -536,3 +536,4 @@ pub async fn daemon_health(app: tauri::AppHandle) -> Result<HealthResult, String
 
     Ok(health_result)
 }
+
