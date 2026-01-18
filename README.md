@@ -70,6 +70,7 @@
 - i18n support (English, Chinese)
 - Customizable hotkeys
 - Conversation history
+- Mode status indicator in header
 
 ## Screenshots
 
@@ -161,7 +162,9 @@ Enter your API key in settings.
 
 | Action | Hotkey |
 |--------|--------|
-| Push-to-Talk | `Alt+3` |
+| Push-to-Talk | `Alt+3` (customizable) |
+| Switch Work Mode | `Alt+1` |
+| Switch Recording Mode | `Alt+2` |
 | Show/Hide Window | `⌘⇧Space` / `Ctrl+Shift+Space` |
 
 > PTT hotkey can be customized in Settings → Shortcuts
@@ -227,10 +230,25 @@ Enter your API key in settings.
 - [x] Conversation history
 - [x] i18n (EN/CN)
 - [x] Custom hotkeys
+- [x] Mode status indicator
 - [ ] Wake word detection
 - [ ] More TTS engines
 - [ ] Plugin system
 - [ ] Linux support
+
+## Changelog
+
+### v0.2.0 (2026-01-18)
+
+**Features**
+- Add persistent mode status badges in header for at-a-glance visibility
+- Support clicking badges to quickly switch work/recording modes
+- Add visibility toggle in Appearance settings
+- Remove toast notifications for mode switching (no longer needed)
+
+**Improvements**
+- Improved macOS tray experience with unified config storage
+- Modular daemon.rs architecture for better maintainability
 
 ## Troubleshooting
 
