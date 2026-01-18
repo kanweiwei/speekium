@@ -1,3 +1,18 @@
+// ============================================================================
+// Commands Module
+// ============================================================================
+// All Tauri commands must be defined in this single file due to Tauri's
+// macro limitation. The #[tauri::command] macro generates helper macros
+// that are module-private and cannot be accessed across module boundaries,
+// even with pub use re-exports.
+//
+// Commands are organized into logical sections below for maintainability:
+// - Recording Commands (9 commands)
+// - Chat Commands (4 commands)
+// - Config Commands (3 commands)
+// - Daemon Commands (2 commands)
+// ============================================================================
+
 use tauri::Emitter;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
@@ -12,7 +27,7 @@ use std::sync::atomic::Ordering;
 use std::io::{BufRead, Write};
 
 // ============================================================================
-// Recording Commands
+// Recording Commands (9 commands)
 // ============================================================================
 
 #[tauri::command]
@@ -244,7 +259,7 @@ pub fn update_recording_mode(mode: String) -> Result<(), String> {
 }
 
 // ============================================================================
-// Chat Commands
+// Chat Commands (4 commands)
 // ============================================================================
 
 #[tauri::command]
@@ -451,7 +466,7 @@ pub async fn generate_tts(text: String) -> Result<TTSResult, String> {
 }
 
 // ============================================================================
-// Config Commands
+// Config Commands (3 commands)
 // ============================================================================
 
 #[tauri::command]
@@ -484,7 +499,7 @@ pub async fn update_hotkey(hotkey_config: serde_json::Value) -> Result<serde_jso
 }
 
 // ============================================================================
-// Daemon Commands
+// Daemon Commands (2 commands)
 // ============================================================================
 
 #[tauri::command]

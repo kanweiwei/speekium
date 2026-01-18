@@ -5,6 +5,7 @@ mod types;
 mod state;
 mod platform;
 mod ui;
+mod ptt;
 mod daemon;
 mod api;
 mod shortcuts;
