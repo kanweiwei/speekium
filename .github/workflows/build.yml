@@ -266,21 +266,45 @@ jobs:
           # Sign from inside out: frameworks first, then dylibs, then executables
           echo "🔏 Signing sidecar contents (inside-out with entitlements)..."
 
-          # 1. Sign all .framework bundles (must sign the framework itself, not individual files)
-          find "$SIDECAR_DIR" -name "*.framework" -type d | while read -r framework; do
+          # 1. Sign PyInstaller's Python framework and interpreter first
+          if [ -d "$SIDECAR_DIR/_internal" ]; then
+            echo "  Signing PyInstaller _internal directory..."
+
+            # Sign Python.framework if it exists (PyInstaller on macOS)
+            if [ -d "$SIDECAR_DIR/_internal/Python.framework" ]; then
+              echo "    Signing Python.framework..."
+              codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+                "$SIDECAR_DIR/_internal/Python.framework"
+              # Also sign the Python binary inside framework
+              if [ -f "$SIDECAR_DIR/_internal/Python.framework/Versions/3.11/Python" ]; then
+                codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+                  "$SIDECAR_DIR/_internal/Python.framework/Versions/3.11/Python"
+              fi
+            fi
+
+            # Sign standalone Python binary if it exists
+            if [ -f "$SIDECAR_DIR/_internal/Python" ]; then
+              echo "    Signing Python interpreter..."
+              codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+                "$SIDECAR_DIR/_internal/Python"
+            fi
+          fi
+
+          # 2. Sign all .framework bundles (must sign the framework itself, not individual files)
+          find "$SIDECAR_DIR" -name "*.framework" -type d ! -path "*_internal/*" | while read -r framework; do
             echo "  Signing framework: $framework"
             codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
               --entitlements "$SIDECAR_ENTITLEMENTS" "$framework" || true
           done
 
-          # 2. Sign all .so and .dylib files (excluding those inside frameworks)
-          find "$SIDECAR_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*.framework/*" | while read -r lib; do
+          # 3. Sign all .so and .dylib files (excluding those inside Python.framework)
+          find "$SIDECAR_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*Python.framework/*" | while read -r lib; do
             echo "  Signing lib: $lib"
             codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
               --entitlements "$SIDECAR_ENTITLEMENTS" "$lib" 2>/dev/null || true
           done
 
-          # 3. Sign all executable binaries in bin directories (torch/bin, etc.)
+          # 4. Sign all executable binaries in bin directories (torch/bin, etc.)
           find "$SIDECAR_DIR" -type d -name "bin" | while read -r bindir; do
             echo "  Signing executables in: $bindir"
             find "$bindir" -type f -perm +111 | while read -r exe; do
@@ -290,18 +314,18 @@ jobs:
             done
           done
 
-          # 4. Sign the main sidecar executable with microphone entitlements
+          # 5. Sign the main sidecar executable with microphone entitlements
           echo "  Signing main sidecar with microphone entitlements: $SIDECAR_DIR/worker_daemon"
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
             --entitlements "$SIDECAR_ENTITLEMENTS" "$SIDECAR_DIR/worker_daemon"
           echo "✅ Sidecar signed with microphone entitlements"
 
-          # 5. Re-sign the main app executable with microphone entitlements
+          # 6. Re-sign the main app executable with microphone entitlements
           echo "🔏 Signing main app executable with microphone entitlements..."
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
             --entitlements "$APP_ENTITLEMENTS" "$APP_PATH/Contents/MacOS/speekium"
 
-          # 6. Sign the entire app bundle (without --deep to preserve inner signatures)
+          # 7. Sign the entire app bundle (without --deep to preserve inner signatures)
           echo "🔏 Signing app bundle with microphone entitlements..."
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
             --entitlements "$APP_ENTITLEMENTS" "$APP_PATH"
