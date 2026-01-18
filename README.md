@@ -238,6 +238,17 @@ Enter your API key in settings.
 
 ## Changelog
 
+### v0.2.1 (2026-01-18)
+
+**Features**
+- Comprehensive i18n for system tray menu (English/Chinese)
+- Internationalized daemon startup and loading messages
+- Language preference saved to config file, auto-detected on first run
+- Tray menu updates immediately when language changes (no restart needed)
+
+**Fixes**
+- English tray menu now properly supported on all platforms
+
 ### v0.2.0 (2026-01-18)
 
 **Features**
