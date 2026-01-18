@@ -91,6 +91,8 @@ interface SettingsProps {
   workMode?: 'conversation' | 'text-input';
   onWorkModeChange?: (value: 'conversation' | 'text-input') => void;
   onClearHistory?: () => void;
+  showModeBadges?: boolean;
+  onToggleModeBadges?: (value: boolean) => void;
 }
 
 type SettingsCategory = 'assistant' | 'voice-recognition' | 'ai-model' | 'tts' | 'shortcuts' | 'appearance' | 'advanced';
@@ -105,6 +107,8 @@ export function Settings({
   workMode,
   onWorkModeChange,
   onClearHistory,
+  showModeBadges,
+  onToggleModeBadges,
 }: SettingsProps) {
   const { t } = useTranslation();
   const { config, updateConfig, updateHotkey, saveStatus, saveError } = useSettings();
@@ -981,6 +985,21 @@ export function Settings({
                     <p className="text-xs text-muted-foreground mt-2">
                       {t('settings.hints.language')}
                     </p>
+                  </div>
+
+                  <div className="p-4 rounded-lg border border-border bg-muted">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="space-y-0.5">
+                        <Label className="text-foreground">{t('settings.fields.showModeBadges')}</Label>
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.hints.showModeBadges')}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={showModeBadges ?? true}
+                        onCheckedChange={onToggleModeBadges}
+                      />
+                    </div>
                   </div>
                 </div>
               )}

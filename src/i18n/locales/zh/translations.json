@@ -129,6 +129,7 @@
       "ttsRate": "语速调整",
       "autoTTS": "自动播放",
       "language": "语言",
+      "showModeBadges": "显示模式状态",
       "theme": "主题",
       "toggleWindow": "显示/隐藏窗口",
       "serviceStatus": "服务状态",
@@ -163,6 +164,7 @@
       "ollamaUrl": "API 服务地址，默认为本地 Ollama 服务",
       "ttsRate": "语速调整，如 +0%、+20%、-10%",
       "autoTTS": "AI 回复后自动朗读",
+      "showModeBadges": "在顶栏显示当前的工作模式和录音模式",
       "theme": "点击图标切换：浅色 → 深色 → 跟随系统",
       "language": "点击图标切换语言：中文 ↔ English",
       "ptt": "按住开始录音，松开停止并发送",
@@ -246,5 +248,17 @@
     "textMode": "当前模式: 语音 → 直接输入文字",
     "switchFailed": "切换模式失败，请重试",
     "error": "错误"
+  },
+  "modeStatus": {
+    "workMode": {
+      "conversation": "对话",
+      "text": "打字"
+    },
+    "recordMode": {
+      "pushToTalk": "按键",
+      "continuous": "自动"
+    },
+    "switchWorkMode": "切换工作模式",
+    "switchRecordMode": "切换录音模式"
   }
 }

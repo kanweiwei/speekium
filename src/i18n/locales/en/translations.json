@@ -129,6 +129,7 @@
       "ttsRate": "Speech Rate",
       "autoTTS": "Auto Play",
       "language": "Language",
+      "showModeBadges": "Show Mode Status",
       "theme": "Theme",
       "toggleWindow": "Show/Hide Window",
       "serviceStatus": "Service Status",
@@ -163,6 +164,7 @@
       "ollamaUrl": "API service address, defaults to local Ollama service",
       "ttsRate": "Speech rate adjustment, e.g. +0%, +20%, -10%",
       "autoTTS": "Automatically read aloud after AI response",
+      "showModeBadges": "Show current work and recording mode in header",
       "theme": "Click icon to switch: Light → Dark → System",
       "language": "Click icon to switch language: 中文 ↔ English",
       "ptt": "Press and hold to record, release to stop and send",
@@ -246,5 +248,17 @@
     "textMode": "Current: Voice → Direct text input",
     "switchFailed": "Failed to switch mode. Please try again.",
     "error": "Error"
+  },
+  "modeStatus": {
+    "workMode": {
+      "conversation": "Chat",
+      "text": "Type"
+    },
+    "recordMode": {
+      "pushToTalk": "PTT",
+      "continuous": "Auto"
+    },
+    "switchWorkMode": "Switch work mode",
+    "switchRecordMode": "Switch recording mode"
   }
 }

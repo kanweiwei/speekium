@@ -6,6 +6,7 @@ import { Settings } from './Settings';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { NewSessionDialog } from './components/NewSessionDialog';
 import { ThemeToggle } from './components/ThemeToggle';
+import { ModeStatusBadge } from './components/ModeStatusBadge';
 import { SystemToast } from './components/SystemToast';
 import type { ToastType } from './components/SystemToast';
 import { CollapsibleInput } from './components/CollapsibleInput';
@@ -329,6 +330,10 @@ function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [isNewSessionDialogOpen, setIsNewSessionDialogOpen] = React.useState(false);
+  const [showModeBadges, setShowModeBadges] = React.useState(() => {
+    const saved = localStorage.getItem('showModeBadges');
+    return saved !== 'false'; // Default to true
+  });
   const [currentSessionId, setCurrentSessionId] = React.useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = React.useState<string | null>(null);
   const currentSessionIdRef = React.useRef<string | null>(null);
@@ -613,22 +618,6 @@ function App() {
     }
   }, [recordMode]);
 
-  // Show toast when workMode changes (e.g., from hotkey or settings)
-  const previousWorkModeRef = React.useRef<WorkMode | null>(null);
-  React.useEffect(() => {
-    // Only show toast if mode actually changed (skip initial render)
-    if (previousWorkModeRef.current !== null && previousWorkModeRef.current !== workMode) {
-      console.log('[App] Work mode changed from', previousWorkModeRef.current, 'to', workMode);
-      setToast({
-        show: true,
-        type: workMode === 'conversation' ? 'work-mode-conversation' : 'work-mode-text-input',
-        workMode,
-        duration: 2000,
-      });
-    }
-    previousWorkModeRef.current = workMode;
-  }, [workMode]);
-
   // Continuous listening mode
   React.useEffect(() => {
     // Only start continuous listening after daemon is ready
@@ -761,22 +750,13 @@ function App() {
       })()
     );
 
-    // 监听工作模式变化（通过轮询检测），显示 Toast
+    // 监听工作模式变化（通过轮询检测）
     // 注意：快捷键不再使用事件，而是通过配置轮询来检测变化
     unlisteners.push(
       (async () => {
         const unlisten = await listen<WorkModeChangeEvent>('work-mode-change', (event) => {
           console.log('[Toast] Received work-mode-change event:', event.payload);
-          const { mode, source } = event.payload;
-          // 只对非快捷键触发的变化显示 Toast（快捷键的 Toast 由 WorkModeContext 处理）
-          if (source !== 'hotkey') {
-            setToast({
-              show: true,
-              type: mode === 'conversation' ? 'work-mode-conversation' : 'work-mode-text-input',
-              workMode: mode,
-              duration: 2000,
-            });
-          }
+          // Mode status is now shown in header, no toast needed
         });
         return unlisten;
       })()
@@ -798,14 +778,6 @@ function App() {
           } catch (error) {
             console.error('[App] Failed to update recording mode:', error);
           }
-
-          // 显示 Toast
-          setToast({
-            show: true,
-            type: newMode === 'continuous' ? 'recording-mode-continuous' : 'recording-mode-push-to-talk',
-            workMode,
-            duration: 2000,
-          });
 
           // Save to localStorage
           localStorage.setItem('recordMode', newMode);
@@ -953,12 +925,36 @@ function App() {
           </Button>
         </div>
 
-        <h1 className={cn(
-          "text-lg font-semibold max-w-[300px] truncate",
-          currentSessionTitle ? "text-foreground" : "text-foreground"
-        )}>
-          {currentSessionTitle || 'Speekium'}
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className={cn(
+            "text-lg font-semibold max-w-[300px] truncate",
+            currentSessionTitle ? "text-foreground" : "text-foreground"
+          )}>
+            {currentSessionTitle || 'Speekium'}
+          </h1>
+
+          {/* 模式状态标签 */}
+          {showModeBadges && (
+            <ModeStatusBadge
+              workMode={workMode}
+              recordMode={recordMode}
+              onWorkModeClick={() => {
+                const newMode = workMode === 'conversation' ? 'text-input' : 'conversation';
+                setWorkMode(newMode, 'hotkey');
+              }}
+              onRecordModeClick={async () => {
+                const newMode = recordMode === 'push-to-talk' ? 'continuous' : 'push-to-talk';
+                setRecordMode(newMode);
+                try {
+                  await invoke('update_recording_mode', { mode: newMode });
+                } catch (error) {
+                  console.error('[App] Failed to update recording mode:', error);
+                }
+                localStorage.setItem('recordMode', newMode);
+              }}
+            />
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
@@ -1102,15 +1098,13 @@ function App() {
         workMode={workMode}
         onWorkModeChange={(mode) => {
           setWorkMode(mode, 'settings');
-          // Show toast notification
-          setToast({
-            show: true,
-            type: mode === 'conversation' ? 'work-mode-conversation' : 'work-mode-text-input',
-            workMode: mode,
-            duration: 2000,
-          });
         }}
         onClearHistory={handleClearHistory}
+        showModeBadges={showModeBadges}
+        onToggleModeBadges={(value) => {
+          setShowModeBadges(value);
+          localStorage.setItem('showModeBadges', value.toString());
+        }}
       />
 
       {/* 历史抽屉 */}
