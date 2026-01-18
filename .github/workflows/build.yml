@@ -273,12 +273,20 @@ jobs:
             # Sign Python.framework if it exists (PyInstaller on macOS)
             if [ -d "$SIDECAR_DIR/_internal/Python.framework" ]; then
               echo "    Signing Python.framework..."
+              # Sign the framework bundle
               codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
                 "$SIDECAR_DIR/_internal/Python.framework"
-              # Also sign the Python binary inside framework
+
+              # Sign the Python binary at Versions/3.11/Python (actual binary)
               if [ -f "$SIDECAR_DIR/_internal/Python.framework/Versions/3.11/Python" ]; then
                 codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
                   "$SIDECAR_DIR/_internal/Python.framework/Versions/3.11/Python"
+              fi
+
+              # Sign the symlink at Python.framework/Python (if it exists)
+              if [ -f "$SIDECAR_DIR/_internal/Python.framework/Python" ]; then
+                codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" \
+                  "$SIDECAR_DIR/_internal/Python.framework/Python"
               fi
             fi
 
