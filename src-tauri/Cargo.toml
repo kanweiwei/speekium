@@ -1,6 +1,6 @@
 [package]
 name = "speekium"
-version = "0.2.0"
+version = "0.2.4"
 description = "Talk to AI with your voice. Locally. Privately. Open Source."
 authors = ["kanweiwei"]
 edition = "2021"
