@@ -365,8 +365,8 @@ pub fn get_daemon_message(message_key: &str) -> String {
         ("read_error", "en") => "Failed to read output".to_string(),
         ("read_error", _) => "读取输出失败".to_string(),
 
-        ("timeout", "en") => "Voice service startup timeout, please restart the app".to_string(),
-        ("timeout", _) => "语音服务启动超时，请重启应用".to_string(),
+        ("timeout", "en") => "Voice service startup timeout. If downloading models, please wait 3 minutes and restart".to_string(),
+        ("timeout", _) => "语音服务启动超时。如果是首次启动需要下载模型，请等待3分钟后重启应用".to_string(),
 
         ("resource_limits_failed", "en") => "Failed to set resource limits, continuing...".to_string(),
         ("resource_limits_failed", _) => "资源限制设置失败，继续启动...".to_string(),

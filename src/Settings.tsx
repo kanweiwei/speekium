@@ -40,6 +40,10 @@ import {
   MessageCircle,
   Type,
   RefreshCw,
+  HardDrive,
+  Download,
+  Info,
+  FolderOpen,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from '@/i18n';
@@ -130,6 +134,56 @@ export function Settings({
   const [ollamaModels, setOllamaModels] = React.useState<string[]>(OLLAMA_MODELS);
   const [isLoadingOllamaModels, setIsLoadingOllamaModels] = React.useState(false);
 
+  // Model management states
+  const [modelStatus, setModelStatus] = React.useState<{
+    asr: { loaded: boolean; exists: boolean; name: string; path: string; size: string } | null;
+    vad: { loaded: boolean; exists: boolean; name: string; path: string; size: string } | null;
+  } | null>(null);
+  const [isLoadingModelStatus, setIsLoadingModelStatus] = React.useState(false);
+
+  // Load model status when dialog opens or advanced category is selected
+  React.useEffect(() => {
+    if (isOpen && activeCategory === 'advanced') {
+      loadModelStatus();
+    }
+  }, [isOpen, activeCategory]);
+
+  const loadModelStatus = async () => {
+    setIsLoadingModelStatus(true);
+    try {
+      const result = await invoke<{
+        success: boolean;
+        models: any;
+        error?: string;
+      }>('get_model_status');
+      console.log('Model status result:', result);
+      console.log('Models data:', result.models);
+
+      if (result.success && result.models) {
+        // models is a JSON Value from Rust, need to extract asr and vad
+        setModelStatus({
+          asr: result.models.asr || null,
+          vad: result.models.vad || null,
+        });
+      } else {
+        console.error('Model status failed:', {
+          error: result.error,
+          success: result.success,
+          models: result.models
+        });
+        // Temporary fallback: show models as not loaded
+        setModelStatus({
+          asr: { loaded: false, exists: false, name: 'iic/SenseVoiceSmall', path: '', size: '0 B' },
+          vad: { loaded: false, exists: false, name: 'Silero VAD', path: '', size: '0 B' },
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load model status:', error);
+    } finally {
+      setIsLoadingModelStatus(false);
+    }
+  };
+
   React.useEffect(() => {
     if (config) {
       // Config is loaded from backend, contains all llm_providers
@@ -201,6 +255,14 @@ export function Settings({
 
       return { ...prev, llm_providers: providers };
     });
+  };
+
+  const handleOpenFolder = async (path: string) => {
+    try {
+      await invoke('open_folder', { path });
+    } catch (error) {
+      console.error('Failed to open folder:', error);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -1018,6 +1080,141 @@ export function Settings({
                     <p className="text-xs text-muted-foreground">
                       {t('settings.service.allServicesNormal')}
                     </p>
+                  </div>
+
+                  {/* Model Management */}
+                  <div className="p-4 rounded-lg border border-border bg-muted">
+                    <div className="flex items-center justify-between mb-4">
+                      <Label className="text-foreground font-medium flex items-center gap-2">
+                        <HardDrive className="h-4 w-4" />
+                        {t('settings.models.title')}
+                      </Label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={loadModelStatus}
+                        disabled={isLoadingModelStatus}
+                        className="h-8 px-2 text-xs"
+                      >
+                        <RefreshCw className={`h-3 w-3 mr-1 ${isLoadingModelStatus ? 'animate-spin' : ''}`} />
+                        {t('buttons.refresh')}
+                      </Button>
+                    </div>
+
+                    {isLoadingModelStatus ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : modelStatus && modelStatus.asr && modelStatus.vad ? (
+                      <div className="space-y-3">
+                        {/* ASR Model */}
+                        <div className="p-3 rounded-md bg-background border border-border">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {modelStatus.asr.loaded ? (
+                                <CheckCircle2 className="h-4 w-4 text-green-400" />
+                              ) : modelStatus.asr.exists ? (
+                                <Download className="h-4 w-4 text-blue-400" />
+                              ) : (
+                                <XCircle className="h-4 w-4 text-red-400" />
+                              )}
+                              <div>
+                                <div className="text-sm font-medium">{t('settings.models.asr')}</div>
+                                <div className="text-xs text-muted-foreground">{modelStatus.asr.name}</div>
+                              </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {modelStatus.asr.size}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs hover:bg-muted"
+                              onClick={() => {
+                                if (modelStatus.asr?.path) {
+                                  handleOpenFolder(modelStatus.asr.path);
+                                }
+                              }}
+                            >
+                              <FolderOpen className="h-3 w-3 mr-1" />
+                              {t('settings.models.openFolder')}
+                            </Button>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-1">
+                              <Info className="h-3 w-3 text-muted-foreground" />
+                              <span className="truncate font-mono" title={modelStatus.asr.path}>
+                                {modelStatus.asr.path.length > 60
+                                  ? modelStatus.asr.path.substring(0, 30) + '...' + modelStatus.asr.path.substring(modelStatus.asr.path.length - 25)
+                                  : modelStatus.asr.path}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* VAD Model */}
+                        <div className="p-3 rounded-md bg-background border border-border">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {modelStatus.vad.loaded ? (
+                                <CheckCircle2 className="h-4 w-4 text-green-400" />
+                              ) : modelStatus.vad.exists ? (
+                                <Download className="h-4 w-4 text-blue-400" />
+                              ) : (
+                                <XCircle className="h-4 w-4 text-red-400" />
+                              )}
+                              <div>
+                                <div className="text-sm font-medium">{t('settings.models.vad')}</div>
+                                <div className="text-xs text-muted-foreground">{modelStatus.vad.name}</div>
+                              </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {modelStatus.vad.size}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs hover:bg-muted"
+                              onClick={() => {
+                                if (modelStatus.vad?.path) {
+                                  handleOpenFolder(modelStatus.vad.path);
+                                }
+                              }}
+                            >
+                              <FolderOpen className="h-3 w-3 mr-1" />
+                              {t('settings.models.openFolder')}
+                            </Button>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-1">
+                              <Info className="h-3 w-3 text-muted-foreground" />
+                              <span className="truncate font-mono" title={modelStatus.vad.path}>
+                                {modelStatus.vad.path.length > 60
+                                  ? modelStatus.vad.path.substring(0, 30) + '...' + modelStatus.vad.path.substring(modelStatus.vad.path.length - 25)
+                                  : modelStatus.vad.path}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
+                          <div className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-green-400" /> {t('settings.models.loaded')}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Download className="h-3 w-3 text-blue-400" /> {t('settings.models.downloaded')}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <XCircle className="h-3 w-3 text-red-400" /> {t('settings.models.notFound')}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-sm text-muted-foreground">
+                        Failed to load model status
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-4 border-t border-border">

@@ -175,6 +175,8 @@ pub fn run() {
             crate::commands::daemon_health,
             crate::commands::get_app_language,
             crate::commands::set_app_language,
+            crate::commands::get_model_status,
+            crate::commands::open_folder,
             // API commands
             crate::api::test_ollama_connection,
             crate::api::list_ollama_models,

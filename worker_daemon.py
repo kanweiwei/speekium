@@ -914,6 +914,43 @@ class SpeekiumDaemon:
             },
         }
 
+    async def handle_model_status(self) -> dict:
+        """Get model status information including name, path, and size"""
+        try:
+            # Check if assistant is initialized
+            if self.assistant is None:
+                # Assistant not initialized yet, return default status
+                return {
+                    "success": True,
+                    "models": {
+                        "asr": {
+                            "loaded": False,
+                            "exists": False,
+                            "name": "iic/SenseVoiceSmall",
+                            "path": "",
+                            "size": "0 B",
+                        },
+                        "vad": {
+                            "loaded": False,
+                            "exists": False,
+                            "name": "Silero VAD",
+                            "path": "",
+                            "size": "0 B",
+                        },
+                    },
+                }
+
+            model_status = self.assistant.get_model_status()
+            return {
+                "success": True,
+                "models": model_status,
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+            }
+
     async def handle_interrupt(self, priority: int = 1) -> dict:
         """P0-4: Handle interrupt request from Rust backend
 
@@ -1050,6 +1087,8 @@ class SpeekiumDaemon:
             return await self.handle_update_hotkey(args)
         elif command == "health":
             return await self.handle_health()
+        elif command == "model_status":
+            return await self.handle_model_status()
         elif command == "interrupt":
             # Handle interrupt request
             priority = args.get("priority", 1)

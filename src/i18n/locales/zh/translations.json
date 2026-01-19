@@ -4,7 +4,13 @@
     "loading": {
       "startingService": "正在启动语音服务...",
       "firstLaunchHint": "首次启动约需 30-60 秒",
-      "retry": "重试"
+      "retry": "重试",
+      "loadingModels": "加载模型",
+      "vad": "VAD",
+      "vadDesc": "语音活动检测",
+      "asr": "ASR",
+      "asrDesc": "语音识别",
+      "downloadComplete": "下载完成"
     },
     "header": {
       "history": "历史",
@@ -67,7 +73,8 @@
     "close": "关闭",
     "back": "返回",
     "load": "加载",
-    "send": "发送"
+    "send": "发送",
+    "refresh": "刷新"
   },
   "status": {
     "loading": "加载中...",
@@ -195,6 +202,17 @@
       "status": "服务状态",
       "running": "运行中",
       "allServicesNormal": "所有服务正常运行"
+    },
+    "models": {
+      "title": "AI 模型",
+      "asr": "ASR 模型",
+      "vad": "VAD 模型",
+      "loaded": "已加载",
+      "downloaded": "已下载",
+      "notFound": "未找到",
+      "openFolder": "打开目录",
+      "openVadFolder": "打开 VAD 目录",
+      "openAsrFolder": "打开 ASR 目录"
     },
     "danger": {
       "title": "危险操作",

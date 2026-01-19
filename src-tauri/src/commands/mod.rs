@@ -16,7 +16,7 @@
 use tauri::Emitter;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-use crate::types::{RecordingMode, WorkMode, AppStatus, RecordResult, ChatResult, TTSResult, ConfigResult, HealthResult, DaemonStatusPayload};
+use crate::types::{RecordingMode, WorkMode, AppStatus, RecordResult, ChatResult, TTSResult, ConfigResult, HealthResult, ModelStatusResult, DaemonStatusPayload};
 use crate::daemon::{
     STREAMING_IN_PROGRESS, RECORDING_ABORTED, RECORDING_MODE, WORK_MODE,
     APP_STATUS, DAEMON, CURRENT_PTT_SHORTCUT, APP_HANDLE, call_daemon,
@@ -25,6 +25,7 @@ use crate::ui;
 use crate::shortcuts;
 use std::sync::atomic::Ordering;
 use std::io::{BufRead, Write};
+use std::path::Path;
 
 // ============================================================================
 // Recording Commands (9 commands)
@@ -535,6 +536,59 @@ pub async fn daemon_health(app: tauri::AppHandle) -> Result<HealthResult, String
     }
 
     Ok(health_result)
+}
+
+#[tauri::command]
+pub async fn get_model_status() -> Result<ModelStatusResult, String> {
+    let result = call_daemon("model_status", serde_json::json!({}))?;
+
+    // Debug: log the raw JSON result
+    eprintln!("Raw model_status result from daemon: {}", result);
+
+    serde_json::from_value(result)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// Open a folder in the system file manager
+// Opens the parent directory and selects the item (file or directory)
+#[tauri::command]
+pub async fn open_folder(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+
+    #[cfg(target_os = "macos")]
+    {
+        // Use open -R to reveal the item in Finder
+        // Opens the parent directory and selects the item
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open: {}", e))?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if p.is_dir() {
+            std::process::Command::new("explorer")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| format!("Failed to open folder: {}", e))?;
+        } else {
+            std::process::Command::new("explorer")
+                .arg("/select,")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| format!("Failed to open file: {}", e))?;
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open: {}", e))?;
+    }
+    Ok(())
 }
 
 // ============================================================================

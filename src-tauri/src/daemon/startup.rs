@@ -11,7 +11,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use tauri::{Emitter, Manager};
-use crate::types::{DaemonMode, DaemonStatusPayload};
+use crate::types::{DaemonMode, DaemonStatusPayload, DownloadProgressPayload, ModelLoadingPayload};
 use crate::ui;
 
 use super::state::{
@@ -66,14 +66,8 @@ pub fn is_daemon_ready() -> bool {
 
 /// Call daemon command and wait for response
 pub fn call_daemon(command: &str, args: serde_json::Value) -> Result<serde_json::Value, String> {
-    // Wait for daemon to be ready (up to 30 seconds)
-    let start = Instant::now();
-    let timeout = Duration::from_secs(30);
-
+    // Wait for daemon to be ready (no timeout - user can see download progress)
     while !is_daemon_ready() {
-        if start.elapsed() > timeout {
-            return Err(ui::get_daemon_message("timeout"));
-        }
         std::thread::sleep(Duration::from_millis(100));
     }
 
@@ -282,40 +276,137 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                     // Parse JSON log events and forward status to frontend
                     if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
                         if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
-                            // Map daemon events to user-friendly messages
-                            let status_message = match event_type {
-                                "daemon_initializing" => ui::get_daemon_message("initializing"),
-                                "loading_voice_assistant" => ui::get_daemon_message("loading_assistant"),
-                                "loading_asr" | "asr_loaded" => ui::get_daemon_message("loading_asr"),
-                                "loading_llm" | "llm_loaded" => ui::get_daemon_message("loading_llm"),
-                                "loading_tts" | "tts_loaded" => ui::get_daemon_message("loading_tts"),
-                                "resource_limits_failed" => ui::get_daemon_message("resource_limits_failed"),
+                            // Handle download progress events
+                            if event_type == "download_started" {
+                                let model = event.get("model")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Unknown")
+                                    .to_string();
+                                let _ = app_handle.emit("download-progress", DownloadProgressPayload {
+                                    event_type: "started".to_string(),
+                                    model,
+                                    percent: None,
+                                    speed: None,
+                                    total_size: event.get("size").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                    downloaded: None,
+                                    total: None,
+                                });
+                                continue;
+                            }
+
+                            if event_type == "download_progress" {
+                                let model = event.get("model")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Unknown")
+                                    .to_string();
+                                let percent = event.get("percent").and_then(|v| v.as_u64()).map(|p| p as u32);
+                                let speed = event.get("speed").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                let total_size = event.get("total_size").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                let downloaded = event.get("downloaded").and_then(|v| v.as_u64());
+                                let total = event.get("total").and_then(|v| v.as_u64());
+                                let _ = app_handle.emit("download-progress", DownloadProgressPayload {
+                                    event_type: "progress".to_string(),
+                                    model,
+                                    percent,
+                                    speed,
+                                    total_size,
+                                    downloaded,
+                                    total,
+                                });
+                                continue;
+                            }
+
+                            if event_type == "download_completed" {
+                                let model = event.get("model")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Unknown")
+                                    .to_string();
+                                let _ = app_handle.emit("download-progress", DownloadProgressPayload {
+                                    event_type: "completed".to_string(),
+                                    model,
+                                    percent: Some(100),
+                                    speed: None,
+                                    total_size: None,
+                                    downloaded: None,
+                                    total: None,
+                                });
+                                continue;
+                            }
+
+                            // Map daemon events to user-friendly messages and model loading stages
+                            // Determine if this is a "loaded" event (status should be "loaded" instead of "loading")
+                            let is_loaded_event = matches!(event_type,
+                                "model_loaded" | "vad_loaded" | "asr_loaded" | "llm_loaded" | "tts_loaded"
+                            );
+
+                            let (status_message, model_stage) = match event_type {
+                                "daemon_initializing" => (ui::get_daemon_message("initializing"), None),
+                                "loading_voice_assistant" => (ui::get_daemon_message("loading_assistant"), None),
+                                "model_loading" => {
+                                    // Extract model name from event
+                                    let model = event.get("model")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("Unknown");
+                                    let stage = match model {
+                                        "VAD" => "vad",
+                                        "SenseVoice" => "asr",
+                                        _ => "unknown"
+                                    };
+                                    (format!("Loading {} model...", model), Some(stage.to_string()))
+                                }
+                                "model_loaded" => {
+                                    let model = event.get("model")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("Unknown");
+                                    let stage = match model {
+                                        "VAD" => "vad",
+                                        "SenseVoice" => "asr",
+                                        _ => "unknown"
+                                    };
+                                    (format!("{} loaded", model), Some(stage.to_string()))
+                                }
+                                "loading_asr" | "asr_loaded" => (ui::get_daemon_message("loading_asr"), Some("asr".to_string())),
+                                "loading_vad" | "vad_loaded" => ("Loading VAD model...".to_string(), Some("vad".to_string())),
+                                // Note: LLM and TTS don't download model files, only VAD and ASR do
+                                "loading_llm" | "llm_loaded" => (ui::get_daemon_message("loading_llm"), None),
+                                "loading_tts" | "tts_loaded" => (ui::get_daemon_message("loading_tts"), None),
+                                "resource_limits_failed" => (ui::get_daemon_message("resource_limits_failed"), None),
                                 "daemon_success" => {
                                     if let Some(message) = event.get("message").and_then(|v| v.as_str()) {
                                         if message.contains("就绪") || message.contains("ready") {
                                             initialized = true;
-                                            ui::get_daemon_message("service_ready")
+                                            (ui::get_daemon_message("service_ready"), Some("complete".to_string()))
                                         } else {
-                                            message.to_string()
+                                            (message.to_string(), None)
                                         }
                                     } else {
-                                        ui::get_daemon_message("init_success")
+                                        (ui::get_daemon_message("init_success"), None)
                                     }
                                 }
                                 _ => {
                                     // For other events, use message if available
-                                    event.get("message")
+                                    let msg = event.get("message")
                                         .and_then(|v| v.as_str())
                                         .unwrap_or(&ui::get_daemon_message("loading"))
-                                        .to_string()
+                                        .to_string();
+                                    (msg, None)
                                 }
                             };
 
                             // Send progress update to frontend
                             let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                                 status: "loading".to_string(),
-                                message: status_message,
+                                message: status_message.clone(),
                             });
+
+                            // Send model loading stage event
+                            if let Some(stage) = model_stage {
+                                let _ = app_handle.emit("model-loading", ModelLoadingPayload {
+                                    stage: stage.clone(),
+                                    status: if stage == "complete" || is_loaded_event { "loaded".to_string() } else { "loading".to_string() },
+                                    message: status_message,
+                                });
+                            }
 
                             if initialized {
                                 break;

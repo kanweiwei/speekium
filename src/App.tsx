@@ -108,7 +108,27 @@ function EmptyState({
 }
 
 // Loading screen component shown during daemon initialization
-function LoadingScreen({ message, status }: { message: string; status: 'loading' | 'error' }) {
+function LoadingScreen({
+  message,
+  status,
+  downloadProgress,
+  modelLoadingStages
+}: {
+  message: string;
+  status: 'loading' | 'error';
+  downloadProgress?: {
+    show: boolean;
+    model: string;
+    percent: number;
+    speed: string;
+    totalSize: string;
+    eventType: 'started' | 'progress' | 'completed';
+  };
+  modelLoadingStages?: {
+    vad: 'pending' | 'loading' | 'loaded';
+    asr: 'pending' | 'loading' | 'loaded';
+  };
+}) {
   const { t } = useTranslation();
 
   // Determine visual display state based on message content
@@ -255,8 +275,98 @@ function LoadingScreen({ message, status }: { message: string; status: 'loading'
           <span className="text-sm font-medium">{message || t('app.loading.startingService')}</span>
         </div>
 
+        {/* Model loading stages */}
+        {modelLoadingStages && displayStatus === 'loading' && (
+          <div className="mt-4 w-72 animate-fade-in">
+            <div className="bg-muted/80 border border-border/50 rounded-xl p-4 backdrop-blur-sm">
+              <div className="text-xs text-muted-foreground mb-3">{t('app.loading.loadingModels')}</div>
+              <div className="space-y-2">
+                {[
+                  { key: 'vad', label: t('app.loading.vad'), desc: t('app.loading.vadDesc') },
+                  { key: 'asr', label: t('app.loading.asr'), desc: t('app.loading.asrDesc') },
+                ].map((model) => {
+                  const stage = modelLoadingStages[model.key as keyof typeof modelLoadingStages];
+                  const isLoading = stage === 'loading';
+                  const isLoaded = stage === 'loaded';
+                  const isPending = stage === 'pending';
+
+                  return (
+                    <div key={model.key} className="flex items-center gap-2 text-sm">
+                      {isLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                      ) : isLoaded ? (
+                        <div className="w-3.5 h-3.5 rounded-full bg-green-500 flex items-center justify-center">
+                          <span className="text-white text-[8px]">✓</span>
+                        </div>
+                      ) : (
+                        <div className="w-3.5 h-3.5 rounded-full border border-muted-foreground/30" />
+                      )}
+                      <span className={cn(
+                        "flex-1",
+                        isPending && "text-muted-foreground/50",
+                        isLoaded && "text-foreground"
+                      )}>
+                        {model.label}
+                      </span>
+                      <span className={cn(
+                        "text-xs text-muted-foreground",
+                        isPending && "opacity-50"
+                      )}>
+                        {model.desc}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Download progress card */}
+        {downloadProgress?.show && (
+          <div className="mt-4 w-72 animate-fade-in">
+            <div className="bg-muted/80 border border-border/50 rounded-xl p-4 backdrop-blur-sm">
+              {/* Model name */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-sm font-medium">{downloadProgress.model}</span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="h-2 bg-muted rounded-full overflow-hidden mb-2">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${downloadProgress.percent}%` }}
+                />
+              </div>
+
+              {/* Progress info */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{downloadProgress.percent}%</span>
+                {downloadProgress.speed && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500/60" />
+                    {downloadProgress.speed}
+                  </span>
+                )}
+                {downloadProgress.totalSize && (
+                  <span>{downloadProgress.totalSize}</span>
+                )}
+              </div>
+
+              {/* Completed state */}
+              {downloadProgress.eventType === 'completed' && (
+                <div className="mt-2 text-xs text-green-500 flex items-center gap-1">
+                  <span>✓</span>
+                  <span>{t('app.loading.downloadComplete')}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* First launch hint */}
-        {displayStatus === 'loading' && (
+        {displayStatus === 'loading' && !downloadProgress?.show && (
           <p className="text-sm text-muted-foreground/60 mt-6 animate-fade-in-delayed flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500/60 animate-pulse" />
             {t('app.loading.firstLaunchHint')}
@@ -294,6 +404,32 @@ function App() {
   // Daemon initialization status
   const [daemonStatus, setDaemonStatus] = React.useState<'loading' | 'ready' | 'error'>('loading');
   const [loadingMessage, setLoadingMessage] = React.useState<string>('');
+
+  // Download progress state
+  const [downloadProgress, setDownloadProgress] = React.useState<{
+    show: boolean;
+    model: string;
+    percent: number;
+    speed: string;
+    totalSize: string;
+    eventType: 'started' | 'progress' | 'completed';
+  }>({
+    show: false,
+    model: '',
+    percent: 0,
+    speed: '',
+    totalSize: '',
+    eventType: 'started',
+  });
+
+  // Model loading stage state (VAD and ASR only - LLM is API-based, doesn't download)
+  const [modelLoadingStages, setModelLoadingStages] = React.useState<{
+    vad: 'pending' | 'loading' | 'loaded';
+    asr: 'pending' | 'loading' | 'loaded';
+  }>({
+    vad: 'pending',
+    asr: 'pending',
+  });
 
   // Toast state - 支持多种 Toast 类型
   const [toast, setToast] = React.useState<{
@@ -443,6 +579,97 @@ function App() {
         setLoadingMessage(String(error));
       });
     });
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten());
+    };
+  }, []);
+
+  // Listen for download progress events
+  React.useEffect(() => {
+    const setupDownloadListener = async () => {
+      const unlisten = await listen<{
+        event_type: string;
+        model: string;
+        percent?: number;
+        speed?: string;
+        total_size?: string;
+      }>('download-progress', (event) => {
+        const { event_type, model, percent, speed, total_size } = event.payload;
+
+        if (event_type === 'started') {
+          setDownloadProgress({
+            show: true,
+            model,
+            percent: 0,
+            speed: '',
+            totalSize: total_size || '',
+            eventType: 'started',
+          });
+        } else if (event_type === 'progress') {
+          setDownloadProgress(prev => ({
+            show: true,
+            model,
+            percent: percent || 0,
+            speed: speed || '',
+            totalSize: total_size || prev.totalSize,
+            eventType: 'progress',
+          }));
+        } else if (event_type === 'completed') {
+          setDownloadProgress(prev => ({
+            show: true,
+            model,
+            percent: 100,
+            speed: prev.speed,
+            totalSize: prev.totalSize,
+            eventType: 'completed',
+          }));
+          // Hide the completed notification after 2 seconds
+          setTimeout(() => {
+            setDownloadProgress(prev => ({ ...prev, show: false }));
+          }, 2000);
+        }
+      });
+
+      return unlisten;
+    };
+
+    const unlistenPromise = setupDownloadListener();
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten());
+    };
+  }, []);
+
+  // Listen for model loading stage events
+  React.useEffect(() => {
+    const setupModelLoadingListener = async () => {
+      const unlisten = await listen<{
+        stage: string;
+        status: string;
+        message: string;
+      }>('model-loading', (event) => {
+        const { stage, status } = event.payload;
+
+        setModelLoadingStages(prev => {
+          const updated = { ...prev };
+          if (stage === 'vad') {
+            updated.vad = status === 'loading' ? 'loading' : 'loaded';
+          } else if (stage === 'asr') {
+            updated.asr = status === 'loading' ? 'loading' : 'loaded';
+          } else if (stage === 'complete') {
+            // All models loaded
+            updated.vad = 'loaded';
+            updated.asr = 'loaded';
+          }
+          return updated;
+        });
+      });
+
+      return unlisten;
+    };
+
+    const unlistenPromise = setupModelLoadingListener();
 
     return () => {
       unlistenPromise.then(unlisten => unlisten());
@@ -890,7 +1117,12 @@ function App() {
   if (daemonStatus !== 'ready') {
     return (
       <SettingsProvider>
-        <LoadingScreen message={loadingMessage} status={daemonStatus} />
+        <LoadingScreen
+          message={loadingMessage}
+          status={daemonStatus}
+          downloadProgress={downloadProgress}
+          modelLoadingStages={modelLoadingStages}
+        />
       </SettingsProvider>
     );
   }

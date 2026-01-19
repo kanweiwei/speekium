@@ -161,8 +161,44 @@ pub struct HealthResult {
     pub error: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ModelInfo {
+    pub loaded: bool,
+    pub exists: bool,
+    pub name: String,
+    pub path: String,
+    pub size: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ModelStatusResult {
+    pub success: bool,
+    pub models: Option<serde_json::Value>,
+    pub error: Option<String>,
+}
+
 #[derive(Clone, Serialize, Debug)]
 pub struct DaemonStatusPayload {
     pub status: String,   // "loading" | "ready" | "error"
     pub message: String,  // User-readable status message
+}
+
+/// Download progress event payload
+#[derive(Clone, Serialize, Debug)]
+pub struct DownloadProgressPayload {
+    pub event_type: String,  // "started" | "progress" | "completed"
+    pub model: String,       // Model name (e.g., "SenseVoice ASR", "Silero VAD")
+    pub percent: Option<u32>, // Download progress percentage (0-100)
+    pub speed: Option<String>, // Download speed (e.g., "1.5 MB/s")
+    pub total_size: Option<String>, // Total size (e.g., "200 MB")
+    pub downloaded: Option<u64>, // Bytes downloaded
+    pub total: Option<u64>,   // Total bytes
+}
+
+/// Model loading progress event payload
+#[derive(Clone, Serialize, Debug)]
+pub struct ModelLoadingPayload {
+    pub stage: String,       // "vad" | "asr" | "llm" | "tts" | "complete"
+    pub status: String,      // "loading" | "loaded" | "skipped"
+    pub message: String,     // User-readable message
 }

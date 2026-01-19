@@ -106,26 +106,14 @@ impl PythonDaemon {
         }
 
         // Wait for daemon initialization - read stdout until "ready" event
-        // Daemon takes ~18s to load all models, set 25s timeout
-        use std::time::{Duration, Instant};
-        let start = Instant::now();
-        let timeout = Duration::from_secs(25);
+        // No timeout - let it load as long as needed (user can see download progress)
         let mut initialized = false;
 
-        while start.elapsed() < timeout {
+        loop {
             let mut line = String::new();
             match stdout.read_line(&mut line) {
                 Ok(0) => {
                     // EOF - daemon exited unexpectedly
-                    // Try to read stderr to get the error message
-                    if let Some(mut stderr_reader) = PTT_STDERR.lock().unwrap().take() {
-                        let mut stderr_content = String::new();
-                        if let Ok(_) = stderr_reader.read_to_string(&mut stderr_content) {
-                            if !stderr_content.is_empty() {
-                            }
-                        }
-                    }
-
                     return Err("Daemon exited during initialization".to_string());
                 }
                 Ok(_) => {
@@ -148,10 +136,6 @@ impl PythonDaemon {
                     return Err(format!("Failed to read daemon output: {}", e));
                 }
             }
-        }
-
-        if !initialized {
-            return Err("Daemon initialization timeout (25 seconds)".to_string());
         }
 
         Ok(PythonDaemon {
@@ -205,8 +189,31 @@ impl PythonDaemon {
                 continue;  // Skip log, continue reading next line
             }
 
-            // This is a command response (has "success" field or other response fields)
-            return Ok(result);
+            // Skip health/status responses - wait for our actual command response
+            // Health responses have "status" field, model_status has "models" field
+            match command {
+                "model_status" => {
+                    // model_status should have "models" field
+                    if result.get("models").is_some() {
+                        return Ok(result);
+                    }
+                }
+                "health" => {
+                    // health should have "status" field
+                    if result.get("status").is_some() {
+                        return Ok(result);
+                    }
+                }
+                _ => {
+                    // For other commands, just return the first valid response
+                    if result.get("success").is_some() {
+                        return Ok(result);
+                    }
+                }
+            }
+
+            // Not our expected response, keep reading
+            continue;
         }
     }
 

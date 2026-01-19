@@ -4,7 +4,13 @@
     "loading": {
       "startingService": "Starting voice service...",
       "firstLaunchHint": "First launch may take 30-60 seconds",
-      "retry": "Retry"
+      "retry": "Retry",
+      "loadingModels": "Loading Models",
+      "vad": "VAD",
+      "vadDesc": "Voice Detection",
+      "asr": "ASR",
+      "asrDesc": "Speech Recognition",
+      "downloadComplete": "Download complete"
     },
     "header": {
       "history": "History",
@@ -67,7 +73,8 @@
     "close": "Close",
     "back": "Back",
     "load": "Load",
-    "send": "Send"
+    "send": "Send",
+    "refresh": "Refresh"
   },
   "status": {
     "loading": "Loading...",
@@ -134,6 +141,17 @@
       "toggleWindow": "Show/Hide Window",
       "serviceStatus": "Service Status",
       "running": "Running"
+    },
+    "models": {
+      "title": "AI Models",
+      "asr": "ASR Model",
+      "vad": "VAD Model",
+      "loaded": "Loaded",
+      "downloaded": "Downloaded",
+      "notFound": "Not Found",
+      "openFolder": "Open Folder",
+      "openVadFolder": "Open VAD Folder",
+      "openAsrFolder": "Open ASR Folder"
     },
     "workModes": {
       "conversation": "Conversation Mode",

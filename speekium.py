@@ -17,6 +17,7 @@ import sys
 import tempfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
 
 import edge_tts
 import numpy as np
@@ -27,6 +28,9 @@ from scipy.io.wavfile import write as write_wav
 from backends import create_backend
 from logger import get_logger, set_component
 from mode_manager import ModeManager, RecordingMode
+
+if TYPE_CHECKING:
+    import huggingface_hub.utils
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -141,6 +145,163 @@ SYSTEM_PROMPT = """You are Speekium, an intelligent voice assistant. Follow thes
 6. Avoid special symbols like *, #, `, - etc.
 7. Express numbers naturally (e.g., "three point five" instead of "3.5")
 8. Be friendly, like chatting with a friend"""
+
+
+# ===== Download Progress Tracker =====
+class DownloadProgressTracker:
+    """Track and emit HuggingFace model download progress"""
+
+    def __init__(self, model_name: str):
+        self.model_name = model_name
+        self.downloaded_bytes = 0
+        self.total_bytes = 0
+        self.last_emit_time = 0
+        self.start_time = 0
+        self.file_count = 0
+        self.total_files = 0
+
+    def start(self):
+        """Initialize download tracking"""
+        import time
+
+        self.start_time = time.time()
+        self.last_emit_time = 0
+        logger.info("download_started", model=self.model_name, status="downloading")
+
+    def on_progress(self, progress: "huggingface_hub.utils.Progress"):
+        """Called by huggingface_hub during download"""
+        import time
+
+        current_time = time.time()
+        # Emit update every 0.5 seconds (not every byte)
+        if current_time - self.last_emit_time < 0.5:
+            return
+
+        self.last_emit_time = current_time
+        downloaded = progress.downloaded if hasattr(progress, "downloaded") else 0
+        total = progress.total if hasattr(progress, "total") else 0
+
+        if total > 0:
+            percent = int(downloaded / total * 100)
+            # Calculate speed (bytes/second)
+            elapsed = current_time - self.start_time
+            speed = downloaded / elapsed if elapsed > 0 else 0
+
+            # Format speed
+            if speed > 1024 * 1024:
+                speed_str = f"{speed / (1024 * 1024):.1f} MB/s"
+            elif speed > 1024:
+                speed_str = f"{speed / 1024:.1f} KB/s"
+            else:
+                speed_str = f"{speed:.0f} B/s"
+
+            # Format size
+            if total > 1024 * 1024:
+                total_str = f"{total / (1024 * 1024):.1f} MB"
+            elif total > 1024:
+                total_str = f"{total / 1024:.1f} KB"
+            else:
+                total_str = f"{total} B"
+
+            logger.info(
+                "download_progress",
+                model=self.model_name,
+                percent=percent,
+                downloaded=downloaded,
+                total=total,
+                speed=speed_str,
+                total_size=total_str,
+            )
+
+    def complete(self):
+        """Mark download as complete"""
+        elapsed = 0
+        if self.start_time:
+            import time
+
+            elapsed = time.time() - self.start_time
+
+        logger.info(
+            "download_completed",
+            model=self.model_name,
+            elapsed_seconds=int(elapsed),
+            status="completed",
+        )
+
+
+class ModelScopeProgressCallback:
+    """Custom ModelScope progress callback that emits JSON logs for frontend"""
+
+    def __init__(self, filename: str, file_size: int, model_name: str = "SenseVoice ASR"):
+        self.filename = filename
+        self.file_size = file_size
+        self.model_name = model_name
+        self.downloaded = 0
+        self.start_time = 0
+        self.last_emit_time = 0
+        import time
+
+        self.start_time = time.time()
+
+    def update(self, size: int):
+        """Called by ModelScope during download"""
+        import time
+
+        self.downloaded += size
+        current_time = time.time()
+
+        # Emit update every 0.5 seconds
+        if current_time - self.last_emit_time < 0.5:
+            return
+
+        self.last_emit_time = current_time
+
+        if self.file_size > 0:
+            percent = int(self.downloaded / self.file_size * 100)
+            # Calculate speed
+            elapsed = current_time - self.start_time
+            speed = self.downloaded / elapsed if elapsed > 0 else 0
+
+            # Format speed
+            if speed > 1024 * 1024:
+                speed_str = f"{speed / (1024 * 1024):.1f} MB/s"
+            elif speed > 1024:
+                speed_str = f"{speed / 1024:.1f} KB/s"
+            else:
+                speed_str = f"{speed:.0f} B/s"
+
+            # Format size
+            if self.file_size > 1024 * 1024:
+                total_str = f"{self.file_size / (1024 * 1024):.1f} MB"
+            elif self.file_size > 1024:
+                total_str = f"{self.file_size / 1024:.1f} KB"
+            else:
+                total_str = f"{self.file_size} B"
+
+            logger.info(
+                "download_progress",
+                model=self.model_name,
+                percent=percent,
+                downloaded=self.downloaded,
+                total=self.file_size,
+                speed=speed_str,
+                total_size=total_str,
+            )
+
+    def end(self):
+        """Called when download completes"""
+        elapsed = 0
+        if self.start_time:
+            import time
+
+            elapsed = time.time() - self.start_time
+
+        logger.info(
+            "download_completed",
+            model=self.model_name,
+            elapsed_seconds=int(elapsed),
+            status="completed",
+        )
 
 
 class VoiceAssistant:
@@ -258,28 +419,208 @@ class VoiceAssistant:
         self._load_tts_config()  # Refresh to get latest config
         return self._tts_backend
 
+    def _get_size_str(self, path: str) -> str:
+        """Get human-readable size string for a file or directory."""
+        from pathlib import Path
+
+        path_obj = Path(path)
+        if not path_obj.exists():
+            return "0 B"
+
+        if path_obj.is_file():
+            size = path_obj.stat().st_size
+        elif path_obj.is_dir():
+            size = sum(f.stat().st_size for f in path_obj.rglob("*") if f.is_file())
+        else:
+            return "0 B"
+
+        # Convert to human-readable format
+        for unit in ["B", "KB", "MB", "GB"]:
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
+
+    def get_model_status(self) -> dict:
+        """Get status information for all models."""
+        from pathlib import Path
+
+        status = {
+            "asr": {
+                "loaded": self.asr_model is not None,
+                "name": ASR_MODEL,
+            },
+            "vad": {
+                "loaded": self.vad_model is not None,
+                "name": "Silero VAD",
+            },
+        }
+
+        # Check ASR model
+        asr_exists, asr_snapshot_path = self._check_asr_model_exists()
+        status["asr"]["exists"] = asr_exists
+        if asr_exists:
+            status["asr"]["path"] = asr_snapshot_path
+            status["asr"]["size"] = self._get_size_str(asr_snapshot_path)
+        else:
+            cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+            model_dir = cache_dir / f"models--{ASR_MODEL.replace('/', '--')}"
+            status["asr"]["path"] = str(model_dir)
+            status["asr"]["size"] = "0 B"
+
+        # Check VAD model
+        vad_exists, vad_path = self._check_vad_model_exists()
+        status["vad"]["exists"] = vad_exists
+        status["vad"]["path"] = vad_path
+        if vad_exists:
+            status["vad"]["size"] = self._get_size_str(vad_path)
+        else:
+            status["vad"]["size"] = "0 B"
+
+        return status
+
+    def _check_asr_model_exists(self):
+        """Check if ASR model files exist in cache."""
+        from pathlib import Path
+
+        # FunASR uses ModelScope cache (not HuggingFace)
+        # ModelScope cache structure: ~/.cache/modelscope/hub/models/iic/SenseVoiceSmall
+        cache_dir = Path.home() / ".cache" / "modelscope" / "hub" / "models"
+        model_dir = cache_dir / ASR_MODEL.replace("/", "/")
+
+        if model_dir.exists() and list(model_dir.glob("*")):
+            # Model files exist
+            return True, str(model_dir)
+
+        # Also check HuggingFace format (for compatibility)
+        hf_cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+        hf_model_dir = hf_cache_dir / f"models--{ASR_MODEL.replace('/', '--')}"
+        if hf_model_dir.exists():
+            snapshots = list(hf_model_dir.glob("snapshots/*"))
+            if snapshots:
+                for snapshot in snapshots:
+                    if snapshot.is_dir() and list(snapshot.glob("*")):
+                        return True, str(snapshot)
+
+        return False, str(model_dir)
+
     def load_asr(self):
         if self.asr_model is None:
             set_component("ASR")
-            logger.info("model_loading", model="SenseVoice")
             from funasr import AutoModel
 
+            # Check if model is already downloaded
+            model_exists, model_path = self._check_asr_model_exists()
+
+            if not model_exists:
+                # Emit download started event
+                logger.info("download_started", model="SenseVoice ASR", status="downloading")
+
+                # Pre-download model using ModelScope with custom progress callback
+                # This ensures progress events are emitted in JSON format for the frontend
+                try:
+                    from modelscope.hub.snapshot_download import snapshot_download
+                    from modelscope.utils.constant import Invoke, ThirdParty
+
+                    # Create a factory for progress callbacks
+                    def create_progress_callback(filename: str, file_size: int):
+                        return ModelScopeProgressCallback(filename, file_size, "SenseVoice ASR")
+
+                    # Download with progress tracking
+                    logger.info("model_loading", model="SenseVoice")
+                    model_cache_dir = snapshot_download(
+                        ASR_MODEL,
+                        revision="master",
+                        user_agent={Invoke.KEY: Invoke.PIPELINE, ThirdParty.KEY: "funasr"},
+                        progress_callbacks=[create_progress_callback],
+                    )
+                    logger.info("asr_model_download_completed", path=model_cache_dir)
+                except Exception as e:
+                    logger.warning("asr_preload_failed", error=str(e))
+                    # Fallback: let FunASR handle download (without progress tracking)
+                    logger.info("model_loading", model="SenseVoice")
+
+            else:
+                logger.info("asr_model_found_in_cache", path=model_path)
+
+            logger.info("model_loading", model="SenseVoice")
             self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
             logger.info("model_loaded", model="SenseVoice")
         return self.asr_model
 
+    def _check_vad_model_exists(self):
+        """Check if VAD model file exists in cache."""
+        from pathlib import Path
+
+        # torch.hub stores models differently depending on version
+        # Return the model root directory, not the file path
+
+        # Option 1: Newer torch.hub uses checkpoints/ directory
+        cache_dir = Path.home() / ".cache" / "torch" / "hub"
+        checkpoints_dir = cache_dir / "checkpoints"
+        if checkpoints_dir.exists():
+            # Return the checkpoints directory as the model "root"
+            return True, str(checkpoints_dir)
+
+        # Option 2: Older torch.hub uses repo_model directory
+        repo_dir = cache_dir / "snakers4_silero-vad_master"
+        if repo_dir.exists():
+            return True, str(repo_dir)
+
+        return False, str(cache_dir / "checkpoints" / "silero_vad.onnx")
+
     def load_vad(self):
         if self.vad_model is None:
             set_component("VAD")
+            from pathlib import Path
+            import time
+
+            # Check if model is already downloaded
+            model_exists, model_path = self._check_vad_model_exists()
+
+            if not model_exists:
+                logger.info(
+                    "download_started", model="Silero VAD", status="downloading", size="~60MB"
+                )
+
             logger.info("model_loading", model="VAD")
-            # Security note: trust_repo=True is required for official Silero VAD model
-            # This is a verified, official PyTorch Hub repository
-            self.vad_model, _ = torch.hub.load(  # nosec B614
-                repo_or_dir="snakers4/silero-vad",
-                model="silero_vad",
-                force_reload=False,
-                trust_repo=True,
-            )
+
+            # Load VAD model with retry logic for PyTorch Hub rate limit
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    self.vad_model, _ = torch.hub.load(  # nosec B614
+                        repo_or_dir="snakers4/silero-vad",
+                        model="silero_vad",
+                        force_reload=False,
+                        trust_repo=True,
+                    )
+                    logger.info("model_loaded", model="VAD", attempt=attempt + 1)
+                    break
+                except Exception as e:
+                    error_str = str(e)
+                    logger.warning(
+                        "vad_load_attempt_failed", attempt=attempt + 1, error=error_str[:100]
+                    )
+
+                    # Check if it's a rate limit or authorization error
+                    is_rate_limit = (
+                        "rate limit" in error_str.lower()
+                        or "403" in error_str
+                        or "authorization" in error_str.lower()
+                    )
+                    if is_rate_limit and attempt < max_retries - 1:
+                        wait_time = 15 * (attempt + 1)  # 15s, 30s, 45s, 60s, 75s
+                        logger.warning(
+                            "vad_rate_limited",
+                            retry_in=f"{wait_time}s",
+                            message="PyTorch Hub is rate limited, waiting...",
+                        )
+                        time.sleep(wait_time)
+                        continue
+
+                    raise Exception(f"VAD model loading failed: {error_str}") from e
+
             logger.info("model_loaded", model="VAD")
         return self.vad_model
 
@@ -1046,7 +1387,29 @@ class VoiceAssistant:
         logger.info("clear_history_hint")
         logger.info("exit_hint")
 
-        # Preload models
+        # Show model status summary before loading
+        print(f"\n{'=' * 60}", file=sys.stderr)
+        print("🔍 Checking model status...", file=sys.stderr)
+        print(f"{'=' * 60}", file=sys.stderr)
+
+        asr_exists, asr_path = self._check_asr_model_exists()
+        vad_exists, vad_path = self._check_vad_model_exists()
+
+        print(
+            f"ASR model: {'✅ Downloaded' if asr_exists else '❌ Not downloaded'}", file=sys.stderr
+        )
+        if asr_exists:
+            print(f"  Path: {asr_path}", file=sys.stderr)
+
+        print(
+            f"VAD model: {'✅ Downloaded' if vad_exists else '❌ Not downloaded'}", file=sys.stderr
+        )
+        if vad_exists:
+            print(f"  Path: {vad_path}", file=sys.stderr)
+
+        print(f"{'=' * 60}\n", file=sys.stderr)
+
+        # Preload models (will download if needed)
         self.load_vad()
         self.load_asr()
         self.load_llm()
