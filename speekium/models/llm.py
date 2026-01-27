@@ -130,10 +130,9 @@ def create_llm_backend(
 
     if llm_backend is not None:
         # Check if provider type changed
-        current_backend_type = (
-            getattr(llm_backend, "__class__", None).__name__
-            if hasattr(llm_backend, "__class__")
-            else None
+        backend_class = getattr(llm_backend, "__class__", None)
+        current_backend_type: str | None = (
+            backend_class.__name__ if backend_class is not None else None
         )
         backend_type_map = {
             "OllamaBackend": "ollama",
@@ -142,7 +141,7 @@ def create_llm_backend(
             "CustomBackend": "custom",
             "ZhipuBackend": "zhipu",
         }
-        current_backend = backend_type_map.get(current_backend_type, "")
+        current_backend = backend_type_map.get(current_backend_type or "", "")
 
         # Check if any config changed
         if current_backend != current_config["provider"]:

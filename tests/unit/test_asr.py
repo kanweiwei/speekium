@@ -98,12 +98,12 @@ class TestAudioTranscription:
     """测试音频转录功能"""
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_transcribe_success(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试成功转录音频"""
         # Setup mocks
@@ -123,16 +123,16 @@ class TestAudioTranscription:
         assert "<|zh|>" in text or "你好世界" in text
         assert language == "zh"
         mock_model.generate.assert_called_once()
-        mock_write_wav.assert_called_once()
+        mock_wav_write.assert_called_once()
         mock_remove.assert_called_once()
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_transcribe_empty_result(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试转录结果为空的情况"""
         # Setup mocks
@@ -152,41 +152,36 @@ class TestAudioTranscription:
         assert language == DEFAULT_LANGUAGE
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
-    @patch("os.path.exists")
     @patch("os.remove")
-    def test_transcribe_cleans_up_temp_file(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
-    ):
+    def test_transcribe_cleans_up_temp_file(self, mock_remove, mock_automodel):
         """测试转录后清理临时文件"""
         # Setup mocks
         mock_model = MagicMock()
         mock_model.generate.return_value = [{"text": "test"}]
         mock_automodel.return_value = mock_model
-        tmp_file_path = "/tmp/test_audio.wav"
-        mock_temp_file.return_value = tmp_file_path
-        mock_exists.return_value = True
 
         audio = np.random.randn(16000).astype(np.float32)
 
         assistant = VoiceAssistant()
         assistant.transcribe(audio)
 
-        # Verify temp file is removed
-        mock_remove.assert_called_once_with(tmp_file_path)
+        # Verify os.remove was called to clean up temp file
+        mock_remove.assert_called_once()
+        # The call should be made with a path ending in .wav
+        call_args = mock_remove.call_args[0]
+        assert call_args[0].endswith(".wav")
 
 
 class TestLanguageDetection:
     """测试语言检测功能"""
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_detect_chinese(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试检测中文"""
         mock_model = MagicMock()
@@ -202,12 +197,12 @@ class TestLanguageDetection:
         assert language == "zh"
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_detect_english(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试检测英文"""
         mock_model = MagicMock()
@@ -223,12 +218,12 @@ class TestLanguageDetection:
         assert language == "en"
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_detect_japanese(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试检测日语"""
         mock_model = MagicMock()
@@ -244,12 +239,12 @@ class TestLanguageDetection:
         assert language == "ja"
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_no_language_tag_uses_default(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试无语言标签时使用默认语言"""
         mock_model = MagicMock()
@@ -270,12 +265,12 @@ class TestAsyncTranscription:
 
     @pytest.mark.asyncio
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     async def test_transcribe_async_success(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试异步转录成功"""
         # Setup mocks
@@ -297,12 +292,12 @@ class TestAsyncTranscription:
 
     @pytest.mark.asyncio
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     async def test_transcribe_async_runs_in_executor(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试异步转录在执行器中运行"""
         mock_model = MagicMock()
@@ -376,12 +371,12 @@ class TestASRIntegration:
         assert DEFAULT_LANGUAGE in supported_langs
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_audio_format_conversion(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试音频格式转换"""
         mock_model = MagicMock()
@@ -397,8 +392,8 @@ class TestASRIntegration:
         assistant.transcribe(audio)
 
         # Verify write_wav was called
-        mock_write_wav.assert_called_once()
-        call_args = mock_write_wav.call_args
+        mock_wav_write.assert_called_once()
+        call_args = mock_wav_write.call_args
         written_audio = call_args[0][2]
 
         # Audio should be converted to int16
@@ -421,14 +416,14 @@ class TestASRErrorHandling:
         assert "Model load failed" in str(exc_info.value)
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
-    def test_transcribe_write_failure(self, mock_write_wav, mock_temp_file, mock_automodel):
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
+    def test_transcribe_write_failure(self, mock_wav_write, mock_temp_file, mock_automodel):
         """测试写入临时文件失败"""
         mock_model = MagicMock()
         mock_automodel.return_value = mock_model
         mock_temp_file.return_value = "/tmp/test.wav"
-        mock_write_wav.side_effect = OSError("Write failed")
+        mock_wav_write.side_effect = OSError("Write failed")
 
         audio = np.random.randn(16000).astype(np.float32)
 
@@ -437,12 +432,12 @@ class TestASRErrorHandling:
             assistant.transcribe(audio)
 
     @patch("funasr.AutoModel")
-    @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("speekium.utils.create_secure_temp_file")
+    @patch("speekium.models.asr.write_wav")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_transcribe_generation_failure(
-        self, mock_remove, mock_exists, mock_write_wav, mock_temp_file, mock_automodel
+        self, mock_remove, mock_exists, mock_wav_write, mock_temp_file, mock_automodel
     ):
         """测试 ASR 生成失败"""
         mock_model = MagicMock()

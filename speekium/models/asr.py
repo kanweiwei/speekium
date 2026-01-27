@@ -108,7 +108,7 @@ def load_asr(
                 model_name,
                 revision="master",
                 user_agent={Invoke.KEY: Invoke.PIPELINE, ThirdParty.KEY: "funasr"},
-                progress_callbacks=[create_progress_callback],
+                progress_callbacks=[create_progress_callback],  # type: ignore
             )
             logger.info("asr_model_download_completed", path=model_cache_dir)
         except Exception as e:

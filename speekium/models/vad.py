@@ -7,10 +7,14 @@ Provides VAD model loading and configuration management.
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import torch
 
 from logger import get_logger
+
+if TYPE_CHECKING:
+    import torch.nn
 
 logger = get_logger(__name__)
 
@@ -83,21 +87,21 @@ def check_vad_model_exists() -> tuple[bool, str]:
 
 
 def load_vad(
-    vad_model=None,
+    existing_vad_model=None,
     on_progress: Callable[[str, int, int], None] | None = None,
 ) -> torch.nn.Module:
     """
     Load the Silero VAD model.
 
     Args:
-        vad_model: Existing VAD model instance (will be returned if not None)
+        existing_vad_model: Existing VAD model instance (will be returned if not None)
         on_progress: Optional callback for progress updates (model, current, total)
 
     Returns:
         Loaded VAD model
     """
-    if vad_model is not None:
-        return vad_model
+    if existing_vad_model is not None:
+        return existing_vad_model
 
     from logger import set_component
 
@@ -113,14 +117,20 @@ def load_vad(
 
     # Load VAD model with retry logic for PyTorch Hub rate limit
     max_retries = 5
+    vad_model: Any = None
     for attempt in range(max_retries):
         try:
-            vad_model, _ = torch.hub.load(  # nosec B614
+            hub_result = torch.hub.load(  # nosec B614
                 repo_or_dir="snakers4/silero-vad",
                 model="silero_vad",
                 force_reload=False,
                 trust_repo=True,
             )
+            # torch.hub.load may return tuple or single value
+            if isinstance(hub_result, tuple):
+                vad_model = hub_result[0]
+            else:
+                vad_model = hub_result
             logger.info("model_loaded", model="VAD", attempt=attempt + 1)
             break
         except Exception as e:
@@ -146,7 +156,7 @@ def load_vad(
             raise Exception(f"VAD model loading failed: {error_str}") from e
 
     logger.info("model_loaded", model="VAD")
-    return vad_model
+    return vad_model  # type: ignore
 
 
 def get_model_status(vad_model=None) -> dict:

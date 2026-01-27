@@ -19,15 +19,14 @@ import torch
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from speekium import (
+from speekium import SAMPLE_RATE, VoiceAssistant
+from speekium.models.vad import (
     MAX_RECORDING_DURATION,
     MIN_SPEECH_DURATION,
-    SAMPLE_RATE,
     SILENCE_AFTER_SPEECH,
     VAD_CONSECUTIVE_THRESHOLD,
     VAD_PRE_BUFFER,
     VAD_THRESHOLD,
-    VoiceAssistant,
 )
 
 
@@ -116,25 +115,45 @@ class TestDetectSpeechStart:
     """测试语音开始检测功能"""
 
     @patch("sounddevice.InputStream")
+    @patch("sounddevice.sleep")
     @patch.object(VoiceAssistant, "load_vad")
-    def test_detect_speech_start_success(self, mock_load_vad, mock_input_stream):
+    def test_detect_speech_start_success(self, mock_load_vad, mock_sleep, mock_input_stream):
         """测试成功检测到语音开始"""
-        # Setup VAD model
+        # Setup VAD model - the model is called with (audio_tensor, sample_rate)
+        # and returns a value that has .item() method
+        mock_vad_result = MagicMock()
+        mock_vad_result.item.return_value = 0.95  # Above threshold (threshold is 0.9 from config)
+
         mock_vad = MagicMock()
-        mock_vad.return_value.item.return_value = 0.8  # Above threshold
+        mock_vad.return_value = mock_vad_result
         mock_vad.reset_states = MagicMock()
         mock_load_vad.return_value = mock_vad
 
-        # Setup audio stream to simulate callback calls
-        def create_mock_stream(callback, **kwargs):
-            # Simulate multiple callback calls with audio data
-            for _ in range(VAD_CONSECUTIVE_THRESHOLD + 1):
-                # Create mock audio data (512 samples, 1 channel)
-                audio_data = np.random.randn(512, 1).astype(np.float32)
-                callback(audio_data, 512, None, None)
-            return MagicMock()
+        # Create a mock stream
+        mock_stream = MagicMock()
+        captured_callback = [None]
 
-        mock_input_stream.side_effect = create_mock_stream
+        # Store the callback when InputStream is created
+        original_init = mock_input_stream
+
+        def capture_callback(*args, **kwargs):
+            original_callback = kwargs.get("callback")
+            captured_callback[0] = original_callback
+            return original_init.return_value
+
+        mock_input_stream.side_effect = capture_callback
+
+        # In __enter__, trigger the callback multiple times
+        def mock_enter(self):
+            if captured_callback[0]:
+                # Need 6 calls to exceed consecutive threshold of 5 (from config)
+                for _ in range(6):
+                    audio_data = np.random.randn(512, 1).astype(np.float32)
+                    captured_callback[0](audio_data, 512, None, None)
+            return mock_stream
+
+        mock_input_stream.return_value.__enter__ = mock_enter
+        mock_input_stream.return_value.__exit__ = MagicMock(return_value=False)
 
         assistant = VoiceAssistant()
         result = assistant.detect_speech_start(timeout=0.5)

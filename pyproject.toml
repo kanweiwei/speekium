@@ -77,19 +77,18 @@ build-backend = "hatchling.build"
 [tool.uv]
 dev-dependencies = [
     # Linting and code quality
-    "ruff>=0.1.0,<1.0.0",  # Linter and formatter
-
+    "ruff>=0.1.0,<1.0.0", # Linter and formatter
+    "pyright>=1.1.400,<2.0.0", # Static type checker
     # Testing framework
-    "pytest>=7.0.0,<8.0.0",  # Testing framework - locked to v7.x
-    "pytest-asyncio>=0.23.0,<1.0.0",  # Async testing support
-    "pytest-cov>=4.1.0,<5.0.0",  # Coverage plugin
-    "pytest-mock>=3.12.0,<4.0.0",  # Mocking support
-    "pytest-timeout>=2.2.0,<3.0.0",  # Timeout control
-
+    "pytest>=7.0.0,<8.0.0", # Testing framework - locked to v7.x
+    "pytest-asyncio>=0.23.0,<1.0.0", # Async testing support
+    "pytest-cov>=4.1.0,<5.0.0", # Coverage plugin
+    "pytest-mock>=3.12.0,<4.0.0", # Mocking support
+    "pytest-timeout>=2.2.0,<3.0.0", # Timeout control
     # Security scanning
-    "bandit>=1.7.5,<2.0.0",  # Python security linter
-    "safety>=3.0.0,<4.0.0",  # Dependency vulnerability scanner
-    "pip-audit>=2.10.0,<3.0.0",  # Alternative security scanner
+    "bandit>=1.7.5,<2.0.0", # Python security linter
+    "safety>=3.0.0,<4.0.0", # Dependency vulnerability scanner
+    "pip-audit>=2.10.0,<3.0.0", # Alternative security scanner
 ]
 
 [tool.ruff]
@@ -151,3 +150,36 @@ indent-style = "space"
 
 # Unix line endings
 line-ending = "lf"
+
+[tool.pyright]
+# Type checking mode
+typeCheckingMode = "basic"  # Start with basic, can upgrade to standard/strict later
+
+# Python version
+pythonVersion = "3.10"
+pythonPlatform = "All"
+
+# Include/exclude files
+include = ["speekium", "tests"]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    ".pytest_cache",
+    "tauri-prototype",
+    "node_modules",
+]
+
+# Reporting options
+reportMissingImports = "warning"
+reportMissingTypeStubs = "warning"
+reportUndefinedVariable = "error"
+reportOptionalCall = "warning"
+reportOptionalIterable = "warning"
+reportPrivateImportUsage = "warning"
+reportConstantRedefinition = "warning"
+
+# Stub settings
+stubPath = ""

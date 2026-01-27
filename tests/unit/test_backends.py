@@ -108,12 +108,12 @@ class TestInputValidation:
     def test_reject_non_string_input(self):
         """测试拒绝非字符串输入"""
         with pytest.raises(ValueError, match="must be a string"):
-            validate_input(123)
+            validate_input(123)  # type: ignore
 
     def test_reject_none_input(self):
         """测试拒绝 None 输入"""
         with pytest.raises(ValueError, match="must be a string"):
-            validate_input(None)
+            validate_input(None)  # type: ignore
 
     def test_custom_max_length(self):
         """测试自定义最大长度"""
@@ -142,14 +142,16 @@ class TestBackendCreation:
         """测试创建指定模型的 Ollama 后端"""
         backend = create_backend("ollama", "You are a helpful assistant", model="llama2")
         assert isinstance(backend, OllamaBackend)
-        assert backend.model == "llama2"
+        model_attr = getattr(backend, "model", None)
+        assert model_attr == "llama2"
 
     def test_create_ollama_default_model(self):
         """测试 Ollama 默认模型"""
         backend = create_backend("ollama", "You are a helpful assistant")
         # 应该有默认模型
-        assert backend.model is not None
-        assert len(backend.model) > 0
+        model_attr = getattr(backend, "model", None)
+        assert model_attr is not None
+        assert len(model_attr) > 0
 
     def test_invalid_backend_type(self):
         """测试无效的后端类型"""

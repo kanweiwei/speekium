@@ -27,10 +27,10 @@ try:
     )
 except ImportError:
     # Fallback values if models not available
-    ASR_MODEL = "iic/SenseVoiceSmall"
-    DEFAULT_LANGUAGE = "zh"
-    INITIAL_SPEECH_TIMEOUT = 60
-    SAMPLE_RATE = 16000
+    ASR_MODEL: str = "iic/SenseVoiceSmall"  # type: ignore
+    DEFAULT_LANGUAGE: str = "zh"  # type: ignore
+    INITIAL_SPEECH_TIMEOUT: int = 60  # type: ignore
+    SAMPLE_RATE: int = 16000  # type: ignore
 
 __all__ = [
     # Main class

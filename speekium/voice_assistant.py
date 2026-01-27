@@ -10,7 +10,7 @@ import os
 import platform
 import sys
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import edge_tts
 
@@ -108,7 +108,7 @@ class VoiceAssistant:
             config = ConfigManager.load()
             self.tts_backend = config.get("tts_backend", "edge")
             global TTS_RATE
-            TTS_RATE = config.get("tts_rate", "+0%")
+            TTS_RATE = config.get("tts_rate", "+0%")  # type: ignore
             logger.info("tts_config_loaded", backend=self.tts_backend, rate=TTS_RATE)
         except Exception as e:
             logger.warning("tts_config_load_failed", error=str(e), fallback="edge")
@@ -170,7 +170,7 @@ class VoiceAssistant:
         # Show history count
         history_count = 0
         if self.llm_backend and hasattr(self.llm_backend, "history"):
-            history_count = len(self.llm_backend.history) // 2
+            history_count = len(getattr(self.llm_backend, "history", [])) // 2
 
         if speech_already_started:
             logger.info("recording_started", mode="interrupted")
@@ -336,8 +336,9 @@ class VoiceAssistant:
 
     async def speak(self, text: str, language: str | None = None):
         """TTS speak a single sentence."""
-        tmp_file = await self.generate_audio(text, language)
-        await self.play_audio(tmp_file)
+        tmp_file: str | None = await self.generate_audio(text, language)
+        if tmp_file:
+            await self.play_audio(tmp_file)
 
     # ===== Main Conversation Loop =====
 
@@ -366,7 +367,9 @@ class VoiceAssistant:
         # Check for clear history keywords
         for keyword in CLEAR_HISTORY_KEYWORDS:
             if keyword in text:
-                backend.clear_history()
+                clear_history_method = getattr(backend, "clear_history", None)
+                if clear_history_method:
+                    clear_history_method()
                 msg = get_clear_history_message(language)
                 await self.speak(msg, language)
                 return True
