@@ -75,8 +75,15 @@ git checkout -b feature/your-feature-name
 ### 4. Test Your Changes
 
 ```bash
-# Type check
+# TypeScript type check
 npx tsc --noEmit
+
+# Python type check (pyright)
+uv run pyright
+
+# Python linting and formatting (ruff)
+uv run ruff check --fix
+uv run ruff format
 
 # Python tests
 uv run pytest
