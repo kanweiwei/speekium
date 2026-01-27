@@ -25,7 +25,6 @@ use crate::ui;
 use crate::shortcuts;
 use std::sync::atomic::Ordering;
 use std::io::{BufRead, Write};
-use std::path::Path;
 
 // ============================================================================
 // Recording Commands (9 commands)
@@ -296,21 +295,41 @@ pub async fn chat_llm_stream(
             "args": {"text": text}
         });
 
-        if let Err(e) = writeln!(daemon.stdin, "{}", request.to_string()) {
+        // Use stdin if available (legacy mode), otherwise return error
+        let stdin = match &mut daemon.stdin {
+            Some(ref mut stdin) => stdin,
+            None => {
+                let _ = window.emit("chat-error", "Daemon communication not available");
+                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
+
+        if let Err(e) = writeln!(stdin, "{}", request.to_string()) {
             let _ = window.emit("chat-error", format!("Write error: {}", e));
             STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
-        if let Err(e) = daemon.stdin.flush() {
+        if let Err(e) = stdin.flush() {
             let _ = window.emit("chat-error", format!("Flush error: {}", e));
             STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
+        // Use stdout if available (legacy mode), otherwise return error
+        let stdout = match &mut daemon.stdout {
+            Some(ref mut stdout) => stdout,
+            None => {
+                let _ = window.emit("chat-error", "Daemon communication not available");
+                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
+
         loop {
             let mut line = String::new();
-            match daemon.stdout.read_line(&mut line) {
+            match stdout.read_line(&mut line) {
                 Ok(0) => {
                     let _ = window.emit("chat-error", "Daemon connection lost");
                     STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
@@ -385,21 +404,41 @@ pub async fn chat_tts_stream(
             }
         });
 
-        if let Err(e) = writeln!(daemon.stdin, "{}", request.to_string()) {
+        // Use stdin if available (legacy mode), otherwise return error
+        let stdin = match &mut daemon.stdin {
+            Some(ref mut stdin) => stdin,
+            None => {
+                let _ = window.emit("tts-error", "Daemon communication not available");
+                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
+
+        if let Err(e) = writeln!(stdin, "{}", request.to_string()) {
             let _ = window.emit("tts-error", format!("Write error: {}", e));
             STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
-        if let Err(e) = daemon.stdin.flush() {
+        if let Err(e) = stdin.flush() {
             let _ = window.emit("tts-error", format!("Flush error: {}", e));
             STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
+        // Use stdout if available (legacy mode), otherwise return error
+        let stdout = match &mut daemon.stdout {
+            Some(ref mut stdout) => stdout,
+            None => {
+                let _ = window.emit("tts-error", "Daemon communication not available");
+                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
+
         loop {
             let mut line = String::new();
-            match daemon.stdout.read_line(&mut line) {
+            match stdout.read_line(&mut line) {
                 Ok(0) => {
                     let _ = window.emit("tts-error", "Daemon connection lost");
                     STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
@@ -553,8 +592,6 @@ pub async fn get_model_status() -> Result<ModelStatusResult, String> {
 // Opens the parent directory and selects the item (file or directory)
 #[tauri::command]
 pub async fn open_folder(path: String) -> Result<(), String> {
-    let p = Path::new(&path);
-
     #[cfg(target_os = "macos")]
     {
         // Use open -R to reveal the item in Finder
@@ -564,7 +601,6 @@ pub async fn open_folder(path: String) -> Result<(), String> {
             .arg(&path)
             .spawn()
             .map_err(|e| format!("Failed to open: {}", e))?;
-        return Ok(());
     }
     #[cfg(target_os = "windows")]
     {

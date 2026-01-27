@@ -314,7 +314,7 @@ class VoiceAssistant:
             RecordingMode.CONTINUOUS
         )  # Default: continuous conversation mode
         self.interrupt_audio_buffer = []  # Buffer for interrupt audio
-        self._tts_backend = None  # Cache TTS backend setting
+        self.tts_backend = None  # Cache TTS backend setting
         self._load_tts_config()  # Load TTS config on initialization
 
         # TTS generation/playback state - to pause VAD during TTS
@@ -367,14 +367,14 @@ class VoiceAssistant:
             from config_manager import ConfigManager
 
             config = ConfigManager.load()
-            self._tts_backend = config.get("tts_backend", "edge")
+            self.tts_backend = config.get("tts_backend", "edge")
             # Update global TTS_RATE as well (used in _generate_audio_edge)
             global TTS_RATE
             TTS_RATE = config.get("tts_rate", "+0%")
-            logger.info("tts_config_loaded", backend=self._tts_backend, rate=TTS_RATE)
+            logger.info("tts_config_loaded", backend=self.tts_backend, rate=TTS_RATE)
         except Exception as e:
             logger.warning("tts_config_load_failed", error=str(e), fallback="edge")
-            self._tts_backend = "edge"
+            self.tts_backend = "edge"
 
     def _load_llm_config(self):
         """Load LLM backend configuration from config file and update global variables."""
@@ -417,7 +417,7 @@ class VoiceAssistant:
     def get_tts_backend(self):
         """Get current TTS backend from config (refreshes on each call)."""
         self._load_tts_config()  # Refresh to get latest config
-        return self._tts_backend
+        return self.tts_backend
 
     def _get_size_str(self, path: str) -> str:
         """Get human-readable size string for a file or directory."""

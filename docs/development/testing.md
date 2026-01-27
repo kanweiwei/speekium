@@ -189,10 +189,9 @@ pip install edge-tts
 
 | 命令 | 状态 | 结果 |
 |------|------|------|
-| `worker.py config` | ✅ | LLM: ollama, TTS: edge |
-| `worker.py chat '{"text":"你好"}'` | ✅ | "你好！有什么可以帮助你的吗？" |
-| `worker.py tts '{"text":"测试"}'` | ✅ | 音频文件已生成 |
-| `worker.py record` | ⏳ | 需要麦克风输入 |
+| `worker_daemon.py socket` | ✅ | Socket 服务器启动在 /tmp/speekium-daemon.sock |
+| (Socket IPC) health | ✅ | 所有模型加载完成 |
+| (Socket IPC) config | ✅ | 返回当前配置 |
 
 ## ✨ 预期体验
 

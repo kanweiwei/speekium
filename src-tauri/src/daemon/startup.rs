@@ -8,7 +8,7 @@
 use std::process::{Command, Stdio};
 use std::io::{BufReader, BufWriter, BufRead};
 use std::sync::atomic::Ordering;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use tauri::{Emitter, Manager};
 use crate::types::{DaemonMode, DaemonStatusPayload, DownloadProgressPayload, ModelLoadingPayload};
@@ -20,6 +20,7 @@ use super::state::{
 };
 use super::process::PythonDaemon;
 use super::detector::detect_daemon_mode;
+use super::socket_client::SocketDaemonClient;
 
 // ============================================================================
 // Daemon Management Functions
@@ -257,6 +258,36 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             *ptt_stderr = Some(stderr);
         }
 
+        // Try to initialize socket client (will connect when socket is ready)
+        let socket_path = SocketDaemonClient::default_socket_path();
+
+        // Try to connect to socket (will wait up to 30 seconds)
+        let socket_ready = std::thread::spawn({
+            let socket_path = socket_path.clone();
+            move || {
+                let mut client = SocketDaemonClient::new(socket_path);
+                client.connect()
+            }
+        }).join();
+
+        let use_socket = match socket_ready {
+            Ok(Ok(_)) => {
+                // Socket connected successfully
+                true
+            }
+            _ => {
+                // Socket not available, fall back to stdin/stdout
+                false
+            }
+        };
+
+        // Create socket client if using socket mode
+        let socket_client = if use_socket {
+            Some(SocketDaemonClient::new(socket_path))
+        } else {
+            None
+        };
+
         // Wait for daemon initialization with progress updates
         // No timeout - let it load as long as needed
         let mut initialized = false;
@@ -429,8 +460,9 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             let mut daemon = DAEMON.lock().unwrap();
             *daemon = Some(PythonDaemon {
                 process: child,
-                stdin,
-                stdout,
+                stdin: if socket_client.is_some() { None } else { Some(stdin) },
+                stdout: if socket_client.is_some() { None } else { Some(stdout) },
+                socket_client: socket_client,
             });
         }
 

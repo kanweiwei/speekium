@@ -25,6 +25,7 @@ mod state;
 mod detector;
 mod process;
 mod startup;
+mod socket_client;
 
 // Re-export ptt module for PTT functionality
 pub use crate::ptt::start_ptt_reader;

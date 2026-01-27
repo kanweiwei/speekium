@@ -1122,7 +1122,7 @@ class SpeekiumDaemon:
             return {"success": False, "error": f"Unknown command: {command}"}
 
     async def run_daemon(self):
-        """Daemon main loop"""
+        """Daemon main loop (stdin/stdout mode - DEPRECATED)"""
         # Initialize
         if not await self.initialize():
             self._log("❌ 初始化失败，退出")
@@ -1178,15 +1178,108 @@ class SpeekiumDaemon:
         self._cleanup()
         self._log("👋 守护进程正常退出")
 
+    async def run_daemon_socket(self, socket_path: str = None):
+        """Daemon main loop using Socket server (NEW METHOD)
+
+        Args:
+            socket_path: Optional socket path. If not provided, uses platform default.
+
+        Socket server is started FIRST (before initialization) so Rust client can connect.
+        Then models are loaded asynchronously while socket accepts connections.
+        """
+        # Import SocketServer
+        try:
+            from socket_server import SocketServer
+            import platform
+
+            # Use default socket path if not provided
+            if socket_path is None:
+                if platform.system() == "Windows":
+                    socket_path = r"\\.\pipe\speekium-daemon"
+                else:
+                    socket_path = "/tmp/speekium-daemon.sock"
+
+            self._log(f"🔌 启动 Socket 服务器: {socket_path}")
+
+            # Create socket server
+            server = SocketServer(socket_path, self)
+
+            # Setup socket (synchronous - creates and binds socket)
+            server._setup_socket()
+            self._log("✅ Socket 已就绪，等待连接")
+
+            # Emit event to indicate socket is ready
+            logger.info(json.dumps({"event": "socket_ready", "socket_path": socket_path}))
+
+            # Get event loop and set it in server
+            server.loop = asyncio.get_running_loop()
+
+            # Set server running flag BEFORE starting accept loop
+            server.running = True
+
+            # Start accepting connections in background
+            accept_task = asyncio.create_task(server._accept_loop())
+
+            # Initialize models in parallel with accept loop
+            self._log("🔄 正在初始化模型...")
+            init_task = asyncio.create_task(self.initialize())
+
+            # Wait for initialization to complete
+            init_success = await init_task
+            if not init_success:
+                self._log("❌ 初始化失败，退出")
+                server.running = False
+                server.stop()
+                accept_task.cancel()
+                return
+
+            self._log("✅ 守护进程就绪，等待命令...")
+
+            # Wait for server to finish (when shutdown command is received)
+            try:
+                await accept_task
+            except asyncio.CancelledError:
+                pass
+
+            # Clean up on server stop
+            self._cleanup()
+            self._log("👋 守护进程正常退出")
+
+        except ImportError:
+            self._log("❌ SocketServer 导入失败，请确保 socket_server.py 存在")
+            traceback.print_exc(file=sys.stderr)
+        except Exception as e:
+            self._log(f"❌ Socket 服务器启动失败: {e}")
+            traceback.print_exc(file=sys.stderr)
+
 
 def main():
-    """Main entry point"""
-    # Check if running in daemon mode
-    if len(sys.argv) > 1 and sys.argv[1] == "daemon":
-        daemon = SpeekiumDaemon()
-        asyncio.run(daemon.run_daemon())
+    """Main entry point
+
+    Usage:
+        python3 worker_daemon.py daemon        # stdin/stdout mode (old)
+        python3 worker_daemon.py socket        # Socket mode (new, default)
+        python3 worker_daemon.py socket <path> # Socket mode with custom path
+    """
+    if len(sys.argv) < 2:
+        # Default to socket mode
+        mode = "socket"
     else:
-        logger.error("invalid_usage", usage="python3 worker_daemon.py daemon")
+        mode = sys.argv[1]
+
+    daemon = SpeekiumDaemon()
+
+    if mode == "daemon":
+        # Legacy stdin/stdout mode
+        asyncio.run(daemon.run_daemon())
+    elif mode == "socket":
+        # New Socket mode
+        socket_path = sys.argv[2] if len(sys.argv) > 2 else None
+        asyncio.run(daemon.run_daemon_socket(socket_path))
+    else:
+        logger.error(
+            "invalid_usage", usage="python3 worker_daemon.py [daemon|socket] [socket_path]"
+        )
         sys.exit(1)
 
 

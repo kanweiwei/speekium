@@ -47,3 +47,7 @@ core-foundation = "0.9"
 cocoa = "0.25"
 objc = "0.2"
 
+# Windows Named Pipe support (for socket IPC)
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winnt"] }
+

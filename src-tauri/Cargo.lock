@@ -4485,7 +4485,7 @@ dependencies = [
 
 [[package]]
 name = "speekium"
-version = "0.2.0"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4505,6 +4505,7 @@ dependencies = [
  "tauri-plugin-macos-permissions",
  "tauri-plugin-opener",
  "uuid",
+ "winapi",
 ]
 
 [[package]]
