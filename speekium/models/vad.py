@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # ===== VAD Config =====
-VAD_THRESHOLD = 0.5  # Voice detection threshold (0.0-1.0, lower = more sensitive)
+VAD_THRESHOLD = 0.5  # Voice detection threshold (0.0-1.0, lower = more sensitive)  # noqa: E501
 VAD_CONSECUTIVE_THRESHOLD = (
     3  # Consecutive detections to confirm speech start (lower = faster response)
 )
