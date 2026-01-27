@@ -18,19 +18,14 @@ except ImportError:
 from .utils import cleanup_temp_files, create_secure_temp_file
 
 # Import commonly used constants from models
-try:
-    from .models import (
-        ASR_MODEL,
-        DEFAULT_LANGUAGE,
-        INITIAL_SPEECH_TIMEOUT,
-        SAMPLE_RATE,
-    )
-except ImportError:
-    # Fallback values if models not available
-    ASR_MODEL: str = "iic/SenseVoiceSmall"  # type: ignore
-    DEFAULT_LANGUAGE: str = "zh"  # type: ignore
-    INITIAL_SPEECH_TIMEOUT: int = 60  # type: ignore
-    SAMPLE_RATE: int = 16000  # type: ignore
+# These are defined in their respective model modules and re-exported here
+# for backward compatibility with external code and tests.
+from .models import (
+    ASR_MODEL,
+    DEFAULT_LANGUAGE,
+    INITIAL_SPEECH_TIMEOUT,
+    SAMPLE_RATE,
+)
 
 __all__ = [
     # Main class
@@ -38,7 +33,7 @@ __all__ = [
     # Utilities
     "create_secure_temp_file",
     "cleanup_temp_files",
-    # Constants (for backward compatibility with tests)
+    # Constants (for backward compatibility)
     "ASR_MODEL",
     "DEFAULT_LANGUAGE",
     "INITIAL_SPEECH_TIMEOUT",
