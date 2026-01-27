@@ -1,4 +1,4 @@
-"""Models subpackage - VAD, ASR, LLM model management"""
+"""Models subpackage - VAD, ASR, LLM, TTS model management"""
 
 # Re-export all public APIs from model modules
 from speekium.models.asr import (
@@ -23,6 +23,14 @@ from speekium.models.llm import (
     create_llm_backend,
     get_clear_history_message,
     load_llm_config,
+)
+from speekium.models.tts import (
+    PIPER_AVAILABLE_MODELS,
+    PiperModel,
+    TTSModelManager,
+    get_mirror_source,
+    get_model_url,
+    synthesize_with_edge,
 )
 from speekium.models.vad import (
     INTERRUPT_CHECK_DURATION,
@@ -61,6 +69,13 @@ __all__ = [
     "create_llm_backend",
     "get_clear_history_message",
     "load_llm_config",
+    # TTS
+    "PIPER_AVAILABLE_MODELS",
+    "PiperModel",
+    "TTSModelManager",
+    "get_mirror_source",
+    "get_model_url",
+    "synthesize_with_edge",
     # VAD
     "INTERRUPT_CHECK_DURATION",
     "MAX_RECORDING_DURATION",

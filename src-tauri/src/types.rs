@@ -202,3 +202,47 @@ pub struct ModelLoadingPayload {
     pub status: String,      // "loading" | "loaded" | "skipped"
     pub message: String,     // User-readable message
 }
+
+// ============================================================================
+// TTS Model Types
+// ============================================================================
+
+/// TTS model information
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TTSModelInfo {
+    pub model_id: String,
+    pub backend: String,           // "piper" | "edge"
+    pub display_name: String,
+    pub language: String,          // "zh" | "en" | "ja" | "ko" | "yue"
+    pub size_mb: u32,
+    pub description: String,
+    pub downloaded: bool,
+    pub available: bool,
+}
+
+/// TTS models list result
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TTSModelsResult {
+    pub success: bool,
+    pub models: Vec<TTSModelInfo>,
+    pub error: Option<String>,
+}
+
+/// TTS model download progress event payload
+#[derive(Clone, Serialize, Debug)]
+pub struct TTSModelProgressPayload {
+    pub backend: String,           // "piper"
+    pub model_id: String,
+    pub progress: f64,             // 0.0 - 1.0
+    pub downloaded: u64,
+    pub total: u64,
+}
+
+/// TTS model download event payload
+#[derive(Clone, Serialize, Debug)]
+pub struct TTSModelEventPayload {
+    pub event_type: String,        // "done" | "error"
+    pub backend: String,
+    pub model_id: String,
+    pub error: Option<String>,
+}
