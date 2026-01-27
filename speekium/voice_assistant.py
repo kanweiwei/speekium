@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 
 # ===== TTS Config =====
 TTS_BACKEND = "edge"  # Default fallback
-TTS_RATE = "+0%"  # Speed for Edge TTS
+TTS_RATE_DEFAULT = "+0%"  # Default speed for Edge TTS
 
 # ===== Edge TTS Voices =====
 EDGE_TTS_VOICES = {
@@ -76,6 +76,7 @@ class VoiceAssistant:
 
         # Configuration
         self.tts_backend = None
+        self._tts_rate = TTS_RATE_DEFAULT
         self._last_llm_config: dict = {}
         self._vad_config: dict = {}
 
@@ -107,12 +108,12 @@ class VoiceAssistant:
 
             config = ConfigManager.load()
             self.tts_backend = config.get("tts_backend", "edge")
-            global TTS_RATE
-            TTS_RATE = config.get("tts_rate", "+0%")  # type: ignore
-            logger.info("tts_config_loaded", backend=self.tts_backend, rate=TTS_RATE)
+            self._tts_rate = config.get("tts_rate", TTS_RATE_DEFAULT)
+            logger.info("tts_config_loaded", backend=self.tts_backend, rate=self._tts_rate)
         except Exception as e:
             logger.warning("tts_config_load_failed", error=str(e), fallback="edge")
             self.tts_backend = "edge"
+            self._tts_rate = TTS_RATE_DEFAULT
 
     def get_tts_backend(self):
         """Get current TTS backend from config (refreshes on each call)."""
@@ -297,7 +298,7 @@ class VoiceAssistant:
         try:
             voice = EDGE_TTS_VOICES.get(language, EDGE_TTS_VOICES["zh"])
             tmp_file = create_secure_temp_file(suffix=".mp3")
-            communicate = edge_tts.Communicate(text, voice, rate=TTS_RATE)
+            communicate = edge_tts.Communicate(text, voice, rate=self._tts_rate)
             await communicate.save(tmp_file)
             return tmp_file
         except Exception as e:

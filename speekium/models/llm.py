@@ -141,7 +141,9 @@ def create_llm_backend(
             "CustomBackend": "custom",
             "ZhipuBackend": "zhipu",
         }
-        current_backend = backend_type_map.get(current_backend_type or "", "")
+        # Use empty string as default for None type
+        backend_type_key = current_backend_type if current_backend_type is not None else ""
+        current_backend = backend_type_map.get(backend_type_key, "")
 
         # Check if any config changed
         if current_backend != current_config["provider"]:
