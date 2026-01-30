@@ -4,23 +4,29 @@
 //! - Async daemon startup with progress reporting
 //! - Daemon health checks
 //! - Daemon cleanup
+//!
+//! All communication uses socket-based JSON-RPC protocol.
 
 use std::process::{Command, Stdio};
-use std::io::{BufReader, BufWriter, BufRead};
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::{Emitter, Manager};
-use crate::types::{DaemonMode, DaemonStatusPayload, DownloadProgressPayload, ModelLoadingPayload};
+use crate::types::{DaemonMode, DaemonStatusPayload, DownloadProgressPayload};
 use crate::ui;
 
 use super::state::{
-    DAEMON, DAEMON_READY, PTT_STDERR, STREAMING_IN_PROGRESS,
-    APP_HANDLE, WORK_MODE, RECORDING_MODE, AUDIO_RECORDER,
+    DAEMON, DAEMON_READY, STREAMING_IN_PROGRESS,
+    APP_HANDLE, WORK_MODE, RECORDING_MODE,
 };
 use super::process::PythonDaemon;
 use super::detector::detect_daemon_mode;
-use super::socket_client::SocketDaemonClient;
+use super::socket_client::{SocketDaemonClient, NotificationListener};
+use crate::ptt::handle_ptt_event;
+
+// Include tests module
+#[cfg(test)]
+include!("startup_tests.rs");
 
 // ============================================================================
 // Daemon Management Functions
@@ -79,28 +85,52 @@ pub fn call_daemon(command: &str, args: serde_json::Value) -> Result<serde_json:
 }
 
 /// Cleanup daemon and release resources
+///
+/// This function attempts graceful shutdown first, then forces kill if needed.
 pub fn cleanup_daemon() {
-    // First, clean up AUDIO_RECORDER to release the microphone
-    {
-        #[cfg(target_os = "macos")]
-        {
-            let mut recorder = AUDIO_RECORDER.lock().unwrap();
-            if let Some(mut audio_rec) = recorder.take() {
-                if audio_rec.is_recording() {
-                    let _ = audio_rec.stop_recording();
+    let mut daemon = DAEMON.lock().unwrap();
+    if let Some(mut d) = daemon.take() {
+        // Try graceful shutdown via socket command (with timeout)
+        let _ = d.send_command("exit", serde_json::json!({}));
+
+        // Wait for process to exit with timeout (5 seconds max)
+        let timeout = Duration::from_secs(5);
+        let start = Instant::now();
+
+        loop {
+            match d.process.try_wait() {
+                Ok(Some(_)) => {
+                    // Process exited normally
+                    break;
+                }
+                Ok(None) => {
+                    // Still running
+                    if start.elapsed() > timeout {
+                        // Timeout: force kill the process
+                        #[cfg(unix)]
+                        {
+                            let _ = d.process.kill();
+                            // Give it a moment to terminate
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                        #[cfg(windows)]
+                        {
+                            let _ = d.process.kill();
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                        // Force wait after kill
+                        let _ = d.process.wait();
+                        break;
+                    }
+                    // Wait a bit and check again
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                Err(_) => {
+                    // Error checking process status, assume it's gone
+                    break;
                 }
             }
         }
-    }
-
-    // Then clean up the daemon
-    let mut daemon = DAEMON.lock().unwrap();
-    if let Some(mut d) = daemon.take() {
-        // Send exit command
-        let _ = d.send_command("exit", serde_json::json!({}));
-
-        // Wait for process to exit
-        let _ = d.process.wait();
     }
 }
 
@@ -115,9 +145,11 @@ pub fn cleanup_daemon() {
 ///
 /// # Progress Events
 /// - `loading` with "正在启动语音服务..." message
-/// - `loading` with various progress messages during model loading
 /// - `ready` with "就绪" message when daemon is ready
 /// - `error` if startup fails
+///
+/// # Communication
+/// All events from daemon (download progress, PTT events) come through socket notifications.
 pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn() + Send + Sync + 'static>) {
     std::thread::spawn(move || {
         // Send initial loading status
@@ -158,8 +190,24 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
         // Convert config_dir to string for environment variable
         let config_dir_str = config_dir.to_string_lossy().to_string();
 
+        // CRITICAL: Start notification listener BEFORE spawning Python process
+        // This ensures the notification socket is ready when Python daemon tries to connect
+        let notification_rx = {
+            let mut listener = NotificationListener::with_default_path();
+            match listener.start() {
+                Ok(rx) => rx,
+                Err(e) => {
+                    let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                        status: "error".to_string(),
+                        message: format!("Failed to start notification listener: {}", e),
+                    });
+                    return;
+                }
+            }
+        };
+
         // Build command based on mode
-        let mut child = match daemon_mode {
+        let child = match daemon_mode {
             DaemonMode::Production { ref executable_path } => {
                 let internal_dir = executable_path.parent()
                     .map(|p| p.join("_internal"))
@@ -171,7 +219,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                 );
 
                 match Command::new(&executable_path)
-                    .arg("daemon")
+                    .arg("socket")
                     .env("PATH", production_path)
                     .env("SPEEKIUM_CONFIG_DIR", &config_dir_str)
                     .stdin(Stdio::piped())
@@ -200,7 +248,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
 
                 match Command::new(&python_cmd)
                     .arg(&script_path)
-                    .arg("daemon")
+                    .arg("socket")
                     .env("PATH", enhanced_path)
                     .env("SPEEKIUM_CONFIG_DIR", &config_dir_str)
                     .stdin(Stdio::piped())
@@ -220,249 +268,144 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             }
         };
 
-        // Get stdin/stdout/stderr
-        let stdin = match child.stdin.take() {
-            Some(s) => BufWriter::new(s),
-            None => {
-                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
-                    status: "error".to_string(),
-                    message: ui::get_daemon_message("stdin_error"),
-                });
-                return;
-            }
-        };
-        let mut stdout = match child.stdout.take() {
-            Some(s) => BufReader::new(s),
-            None => {
-                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
-                    status: "error".to_string(),
-                    message: ui::get_daemon_message("stdout_error"),
-                });
-                return;
-            }
-        };
-        let stderr = match child.stderr.take() {
-            Some(s) => BufReader::new(s),
-            None => {
-                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
-                    status: "error".to_string(),
-                    message: ui::get_daemon_message("stderr_error"),
-                });
-                return;
-            }
-        };
-
-        // Store stderr for PTT event reader
-        {
-            let mut ptt_stderr = PTT_STDERR.lock().unwrap();
-            *ptt_stderr = Some(stderr);
-        }
-
-        // Try to initialize socket client (will connect when socket is ready)
+        // Get socket path for daemon communication
         let socket_path = SocketDaemonClient::default_socket_path();
 
-        // Try to connect to socket (will wait up to 30 seconds)
-        let socket_ready = std::thread::spawn({
-            let socket_path = socket_path.clone();
-            move || {
-                let mut client = SocketDaemonClient::new(socket_path);
-                client.connect()
-            }
-        }).join();
-
-        let use_socket = match socket_ready {
-            Ok(Ok(_)) => {
-                // Socket connected successfully
-                true
-            }
-            _ => {
-                // Socket not available, fall back to stdin/stdout
-                false
-            }
-        };
-
-        // Create socket client if using socket mode
-        let socket_client = if use_socket {
-            Some(SocketDaemonClient::new(socket_path))
-        } else {
-            None
-        };
-
-        // Wait for daemon initialization with progress updates
-        // No timeout - let it load as long as needed
+        // Wait for daemon initialization with socket health check
+        let mut socket_client = SocketDaemonClient::new(socket_path.clone());
+        let mut health_check_count = 0;
+        let max_checks = 1500; // 150 seconds (1500 * 100ms) - enough for model loading and downloads
         let mut initialized = false;
 
-        loop {
-            let mut line = String::new();
-            match stdout.read_line(&mut line) {
-                Ok(0) => {
-                    // EOF - daemon exited
-                    let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
-                        status: "error".to_string(),
-                        message: ui::get_daemon_message("daemon_exited"),
-                    });
-                    return;
-                }
+        while health_check_count < max_checks {
+            match socket_client.connect() {
                 Ok(_) => {
-                    // Parse JSON log events and forward status to frontend
-                    if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
-                        if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
-                            // Handle download progress events
-                            if event_type == "download_started" {
-                                let model = event.get("model")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("Unknown")
-                                    .to_string();
-                                let _ = app_handle.emit("download-progress", DownloadProgressPayload {
-                                    event_type: "started".to_string(),
-                                    model,
-                                    percent: None,
-                                    speed: None,
-                                    total_size: event.get("size").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                                    downloaded: None,
-                                    total: None,
-                                });
-                                continue;
-                            }
-
-                            if event_type == "download_progress" {
-                                let model = event.get("model")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("Unknown")
-                                    .to_string();
-                                let percent = event.get("percent").and_then(|v| v.as_u64()).map(|p| p as u32);
-                                let speed = event.get("speed").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                let total_size = event.get("total_size").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                let downloaded = event.get("downloaded").and_then(|v| v.as_u64());
-                                let total = event.get("total").and_then(|v| v.as_u64());
-                                let _ = app_handle.emit("download-progress", DownloadProgressPayload {
-                                    event_type: "progress".to_string(),
-                                    model,
-                                    percent,
-                                    speed,
-                                    total_size,
-                                    downloaded,
-                                    total,
-                                });
-                                continue;
-                            }
-
-                            if event_type == "download_completed" {
-                                let model = event.get("model")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("Unknown")
-                                    .to_string();
-                                let _ = app_handle.emit("download-progress", DownloadProgressPayload {
-                                    event_type: "completed".to_string(),
-                                    model,
-                                    percent: Some(100),
-                                    speed: None,
-                                    total_size: None,
-                                    downloaded: None,
-                                    total: None,
-                                });
-                                continue;
-                            }
-
-                            // Map daemon events to user-friendly messages and model loading stages
-                            // Determine if this is a "loaded" event (status should be "loaded" instead of "loading")
-                            let is_loaded_event = matches!(event_type,
-                                "model_loaded" | "vad_loaded" | "asr_loaded" | "llm_loaded" | "tts_loaded"
-                            );
-
-                            let (status_message, model_stage) = match event_type {
-                                "daemon_initializing" => (ui::get_daemon_message("initializing"), None),
-                                "loading_voice_assistant" => (ui::get_daemon_message("loading_assistant"), None),
-                                "model_loading" => {
-                                    // Extract model name from event
-                                    let model = event.get("model")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("Unknown");
-                                    let stage = match model {
-                                        "VAD" => "vad",
-                                        "SenseVoice" => "asr",
-                                        _ => "unknown"
-                                    };
-                                    (format!("Loading {} model...", model), Some(stage.to_string()))
-                                }
-                                "model_loaded" => {
-                                    let model = event.get("model")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("Unknown");
-                                    let stage = match model {
-                                        "VAD" => "vad",
-                                        "SenseVoice" => "asr",
-                                        _ => "unknown"
-                                    };
-                                    (format!("{} loaded", model), Some(stage.to_string()))
-                                }
-                                "loading_asr" | "asr_loaded" => (ui::get_daemon_message("loading_asr"), Some("asr".to_string())),
-                                "loading_vad" | "vad_loaded" => ("Loading VAD model...".to_string(), Some("vad".to_string())),
-                                // Note: LLM and TTS don't download model files, only VAD and ASR do
-                                "loading_llm" | "llm_loaded" => (ui::get_daemon_message("loading_llm"), None),
-                                "loading_tts" | "tts_loaded" => (ui::get_daemon_message("loading_tts"), None),
-                                "resource_limits_failed" => (ui::get_daemon_message("resource_limits_failed"), None),
-                                "daemon_success" => {
-                                    if let Some(message) = event.get("message").and_then(|v| v.as_str()) {
-                                        if message.contains("就绪") || message.contains("ready") {
-                                            initialized = true;
-                                            (ui::get_daemon_message("service_ready"), Some("complete".to_string()))
-                                        } else {
-                                            (message.to_string(), None)
-                                        }
-                                    } else {
-                                        (ui::get_daemon_message("init_success"), None)
-                                    }
-                                }
-                                _ => {
-                                    // For other events, use message if available
-                                    let msg = event.get("message")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or(&ui::get_daemon_message("loading"))
-                                        .to_string();
-                                    (msg, None)
-                                }
-                            };
-
-                            // Send progress update to frontend
-                            let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
-                                status: "loading".to_string(),
-                                message: status_message.clone(),
-                            });
-
-                            // Send model loading stage event
-                            if let Some(stage) = model_stage {
-                                let _ = app_handle.emit("model-loading", ModelLoadingPayload {
-                                    stage: stage.clone(),
-                                    status: if stage == "complete" || is_loaded_event { "loaded".to_string() } else { "loading".to_string() },
-                                    message: status_message,
-                                });
-                            }
-
-                            if initialized {
-                                break;
-                            }
-                        }
+                    // Connected, try health check
+                    if socket_client.health_check() {
+                        initialized = true;
+                        break;
                     }
                 }
-                Err(e) => {
-                    let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
-                        status: "error".to_string(),
-                        message: format!("{}: {}", ui::get_daemon_message("read_error"), e),
-                    });
-                    return;
+                Err(_) => {
+                    // Not ready yet, wait and retry
                 }
+            }
+            std::thread::sleep(Duration::from_millis(100));
+            health_check_count += 1;
+
+            // Send loading status every 5 seconds
+            if health_check_count % 50 == 0 {
+                let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                    status: "loading".to_string(),
+                    message: ui::get_daemon_message("loading_assistant"),
+                });
             }
         }
 
-        // Store daemon instance
+        if !initialized {
+            let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
+                status: "error".to_string(),
+                message: format!(
+                    "{}. {}",
+                    ui::get_daemon_message("startup_failed"),
+                    "可能原因: 1) 模型正在下载(首次启动) 2) 系统资源不足 3) 配置错误. 请查看日志了解详情"
+                ),
+            });
+            return;
+        }
+
+        // Store daemon instance with socket client
         {
             let mut daemon = DAEMON.lock().unwrap();
             *daemon = Some(PythonDaemon {
                 process: child,
-                stdin: if socket_client.is_some() { None } else { Some(stdin) },
-                stdout: if socket_client.is_some() { None } else { Some(stdout) },
-                socket_client: socket_client,
+                socket_client,
+            });
+        }
+
+        // Spawn thread to handle notifications from the dedicated notification socket
+        // (NotificationListener was already started before spawning Python process)
+        {
+            let app_handle_for_thread = app_handle.clone();
+            std::thread::spawn(move || {
+                loop {
+                    match notification_rx.recv() {
+                        Ok(notification) => {
+                            if let Some(method) = notification.get("method").and_then(|v| v.as_str()) {
+                                match method {
+                                    "download_progress" => {
+                                        if let Some(params) = notification.get("params") {
+                                            let event_type = params.get("event_type")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("unknown")
+                                                .to_string();
+                                            let model = params.get("model")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("Unknown")
+                                                .to_string();
+                                            let percent = params.get("percent")
+                                                .and_then(|v| v.as_i64())
+                                                .map(|v| v as u32);
+                                            let speed = params.get("speed")
+                                                .and_then(|v| v.as_str())
+                                                .map(|s| s.to_string());
+                                            let total_size = params.get("total_size")
+                                                .and_then(|v| v.as_str())
+                                                .map(|s| s.to_string());
+
+                                            let _ = app_handle_for_thread.emit("download-progress", DownloadProgressPayload {
+                                                event_type,
+                                                model,
+                                                percent,
+                                                speed,
+                                                total_size,
+                                                downloaded: None,
+                                                total: None,
+                                            });
+                                        }
+                                    }
+                                    "init_progress" => {
+                                        // Handle initialization progress from Python daemon
+                                        if let Some(params) = notification.get("params") {
+                                            let stage = params.get("stage")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("unknown")
+                                                .to_string();
+                                            let message = if let Some(msg_zh) = params.get("message_zh").and_then(|v| v.as_str()) {
+                                                msg_zh.to_string()
+                                            } else if let Some(msg_en) = params.get("message_en").and_then(|v| v.as_str()) {
+                                                msg_en.to_string()
+                                            } else {
+                                                ui::get_daemon_message("loading")
+                                            };
+
+                                            // Forward init progress as daemon-status event
+                                            let _ = app_handle_for_thread.emit("daemon-status", DaemonStatusPayload {
+                                                status: stage,
+                                                message,
+                                            });
+                                        }
+                                    }
+                                    "ptt_event" => {
+                                        // Handle PTT events
+                                        if let Some(params) = notification.get("params") {
+                                            if let Some(event_type) = params.get("event_type").and_then(|v| v.as_str()) {
+                                                handle_ptt_event(&app_handle_for_thread, event_type, params);
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        // Other notification types can be handled here
+                                    }
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // Channel closed, exit thread
+                            break;
+                        }
+                    }
+                }
             });
         }
 
@@ -496,13 +439,10 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
         }
 
         // Mark daemon as ready - this allows commands to be executed
+        // NOTE: We DO NOT send "ready" event here anymore.
+        // The "ready" event will be forwarded from Python's init_progress notification
+        // when models are actually loaded (VAD, ASR completed).
         DAEMON_READY.store(true, Ordering::Release);
-
-        // Send ready status to frontend
-        let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
-            status: "ready".to_string(),
-            message: ui::get_daemon_message("ready"),
-        });
 
         // Call on_ready callback if provided (e.g., to register PTT shortcuts)
         if let Some(callback) = on_ready {

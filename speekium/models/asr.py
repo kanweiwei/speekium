@@ -64,7 +64,7 @@ def check_asr_model_exists(model_name: str = ASR_MODEL) -> tuple[bool, str]:
 def load_asr(
     asr_model=None,
     model_name: str = ASR_MODEL,
-    on_progress: Callable[[str, int, int], None] | None = None,
+    on_progress: Callable[[dict], None] | None = None,
 ) -> object:
     """
     Load the SenseVoice ASR model.
@@ -72,7 +72,7 @@ def load_asr(
     Args:
         asr_model: Existing ASR model instance (will be returned if not None)
         model_name: Name of the ASR model to load
-        on_progress: Optional callback for progress updates
+        on_progress: Optional callback for progress updates (receives dict with event_type, model, etc.)
 
     Returns:
         Loaded ASR model
@@ -92,15 +92,28 @@ def load_asr(
         # Emit download started event
         logger.info("download_started", model="SenseVoice ASR", status="downloading")
 
+        # Notify callback about download start
+        if on_progress:
+            on_progress({
+                "event_type": "started",
+                "model": "SenseVoice ASR",
+                "status": "downloading"
+            })
+
         # Pre-download model using ModelScope with custom progress callback
         # This ensures progress events are emitted in JSON format for the frontend
         try:
             from modelscope.hub.snapshot_download import snapshot_download
             from modelscope.utils.constant import Invoke, ThirdParty
 
-            # Create a factory for progress callbacks
+            # Create a factory for progress callbacks with socket server callback
             def create_progress_callback(filename: str, file_size: int):
-                return ModelScopeProgressCallback(filename, file_size, "SenseVoice ASR")
+                return ModelScopeProgressCallback(
+                    filename,
+                    file_size,
+                    "SenseVoice ASR",
+                    progress_callback=on_progress
+                )
 
             # Download with progress tracking
             logger.info("model_loading", model="SenseVoice")

@@ -24,7 +24,6 @@ use crate::daemon::{
 use crate::ui;
 use crate::shortcuts;
 use std::sync::atomic::Ordering;
-use std::io::{BufRead, Write};
 
 // ============================================================================
 // Recording Commands (9 commands)
@@ -290,52 +289,23 @@ pub async fn chat_llm_stream(
             }
         };
 
-        let request = serde_json::json!({
-            "command": "chat_stream",
-            "args": {"text": text}
-        });
-
-        // Use stdin if available (legacy mode), otherwise return error
-        let stdin = match &mut daemon.stdin {
-            Some(ref mut stdin) => stdin,
-            None => {
-                let _ = window.emit("chat-error", "Daemon communication not available");
-                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
-                return;
-            }
-        };
-
-        if let Err(e) = writeln!(stdin, "{}", request.to_string()) {
-            let _ = window.emit("chat-error", format!("Write error: {}", e));
+        // Send streaming request via socket
+        if let Err(e) = daemon.socket_client().send_streaming_request(
+            "chat_stream",
+            serde_json::json!({"text": text})
+        ) {
+            let _ = window.emit("chat-error", format!("Send error: {}", e));
             STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
-        if let Err(e) = stdin.flush() {
-            let _ = window.emit("chat-error", format!("Flush error: {}", e));
-            STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
-            return;
-        }
-
-        // Use stdout if available (legacy mode), otherwise return error
-        let stdout = match &mut daemon.stdout {
-            Some(ref mut stdout) => stdout,
-            None => {
-                let _ = window.emit("chat-error", "Daemon communication not available");
-                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
-                return;
-            }
-        };
-
+        // Read streaming response
         loop {
-            let mut line = String::new();
-            match stdout.read_line(&mut line) {
-                Ok(0) => {
-                    let _ = window.emit("chat-error", "Daemon connection lost");
-                    STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
-                    break;
-                }
-                Ok(_) => {
+            match daemon.socket_client().read_stream_line() {
+                Ok(line) => {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
                     if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(&line) {
                         if chunk.get("event").is_some() {
                             continue;
@@ -396,55 +366,26 @@ pub async fn chat_tts_stream(
             }
         };
 
-        let request = serde_json::json!({
-            "command": "chat_tts_stream",
-            "args": {
-                "text": text.clone(),
+        // Send streaming request via socket
+        if let Err(e) = daemon.socket_client().send_streaming_request(
+            "chat_tts_stream",
+            serde_json::json!({
+                "text": text,
                 "auto_play": auto_play.unwrap_or(true)
-            }
-        });
-
-        // Use stdin if available (legacy mode), otherwise return error
-        let stdin = match &mut daemon.stdin {
-            Some(ref mut stdin) => stdin,
-            None => {
-                let _ = window.emit("tts-error", "Daemon communication not available");
-                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
-                return;
-            }
-        };
-
-        if let Err(e) = writeln!(stdin, "{}", request.to_string()) {
-            let _ = window.emit("tts-error", format!("Write error: {}", e));
+            })
+        ) {
+            let _ = window.emit("tts-error", format!("Send error: {}", e));
             STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
             return;
         }
 
-        if let Err(e) = stdin.flush() {
-            let _ = window.emit("tts-error", format!("Flush error: {}", e));
-            STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
-            return;
-        }
-
-        // Use stdout if available (legacy mode), otherwise return error
-        let stdout = match &mut daemon.stdout {
-            Some(ref mut stdout) => stdout,
-            None => {
-                let _ = window.emit("tts-error", "Daemon communication not available");
-                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
-                return;
-            }
-        };
-
+        // Read streaming response
         loop {
-            let mut line = String::new();
-            match stdout.read_line(&mut line) {
-                Ok(0) => {
-                    let _ = window.emit("tts-error", "Daemon connection lost");
-                    STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
-                    break;
-                }
-                Ok(_n) => {
+            match daemon.socket_client().read_stream_line() {
+                Ok(line) => {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
                     if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(&line) {
                         if chunk.get("event").is_some() {
                             continue;

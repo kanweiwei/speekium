@@ -304,43 +304,41 @@ class OllamaBackend(LLMBackend):
             full_response = ""
             sentence_endings = re.compile(r"([。！？\n])")
 
-            async with (
-                httpx.AsyncClient() as client,
-                client.stream(
+            async with httpx.AsyncClient() as client:
+                async with client.stream(
                     "POST",
                     f"{self.base_url}/api/chat",
                     json={"model": self.model, "messages": messages, "stream": True},
                     timeout=120,
-                ) as response,
-            ):
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        content = data.get("message", {}).get("content", "")
-                        if content:
-                            buffer += content
-                            full_response += content
+                ) as response:
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                            content = data.get("message", {}).get("content", "")
+                            if content:
+                                buffer += content
+                                full_response += content
 
-                            while True:
-                                match = sentence_endings.search(buffer)
-                                if match:
-                                    end_pos = match.end()
-                                    sentence = buffer[:end_pos].strip()
-                                    buffer = buffer[end_pos:]
-                                    if sentence:
-                                        logger.debug("sentence_generated", sentence=sentence)
-                                        yield sentence
-                                else:
-                                    break
-                    except json.JSONDecodeError:
-                        continue
+                                while True:
+                                    match = sentence_endings.search(buffer)
+                                    if match:
+                                        end_pos = match.end()
+                                        sentence = buffer[:end_pos].strip()
+                                        buffer = buffer[end_pos:]
+                                        if sentence:
+                                            logger.debug("sentence_generated", sentence=sentence)
+                                            yield sentence
+                                    else:
+                                        break
+                        except json.JSONDecodeError:
+                            continue
 
-            if buffer.strip():
-                logger.debug("buffer_output", text=buffer.strip())
-                full_response += buffer.strip()
-                yield buffer.strip()
+                if buffer.strip():
+                    logger.debug("buffer_output", text=buffer.strip())
+                    full_response += buffer.strip()
+                    yield buffer.strip()
 
             # Save to history
             self.add_message("user", message)

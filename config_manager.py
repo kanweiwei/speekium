@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-from typing import Any
+from typing import Any, Dict
 
 APP_NAME = "speekium"
 
@@ -49,7 +49,7 @@ CONFIG_PATH = os.path.join(get_config_dir(), "config.json")
 print(f"📄 配置文件路径: {CONFIG_PATH}", file=sys.stderr)
 
 # NEW: Unified LLM provider configuration
-DEFAULT_CONFIG: dict[str, Any] = {
+DEFAULT_CONFIG: Dict[str, Any] = {
     # LLM Provider Configuration
     "llm_provider": "ollama",  # Currently selected provider
     "llm_providers": [

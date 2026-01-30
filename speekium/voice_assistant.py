@@ -59,7 +59,7 @@ USE_STREAMING = True
 class VoiceAssistant:
     """Main voice assistant class that orchestrates all components."""
 
-    def __init__(self):
+    def __init__(self, progress_callback=None):
         # Model instances
         self.asr_model = None
         self.vad_model = None
@@ -79,6 +79,9 @@ class VoiceAssistant:
         self._tts_rate = TTS_RATE_DEFAULT
         self._last_llm_config: dict = {}
         self._vad_config: dict = {}
+
+        # Progress callback for model downloads
+        self._progress_callback = progress_callback
 
         # Load configurations
         self._load_tts_config()
@@ -141,7 +144,7 @@ class VoiceAssistant:
     def load_asr(self):
         """Load or return cached ASR model."""
         if self.asr_model is None:
-            self.asr_model = load_asr(self.asr_model)
+            self.asr_model = load_asr(self.asr_model, on_progress=self._progress_callback)
         return self.asr_model
 
     def load_llm(self):

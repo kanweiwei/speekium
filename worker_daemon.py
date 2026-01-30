@@ -19,6 +19,7 @@ Speekium Daemon Worker - 守护进程模式
 
 import asyncio
 import json
+import os
 import resource  # NEW: For resource limits
 import signal  # NEW: For signal handling
 import sys
@@ -72,11 +73,38 @@ def handle_timeout(signum, frame):
     sys.exit(1)
 
 
-# Set up signal handler for CPU timeout
+def handle_sigterm(signum, frame):
+    """Handle SIGTERM signal for graceful shutdown"""
+    logger.info("sigterm_received", signal=signum, pid=os.getpid())
+    sys.exit(0)
+
+
+def handle_sigint(signum, frame):
+    """Handle SIGINT signal for graceful shutdown"""
+    logger.info("sigint_received", signal=signum, pid=os.getpid())
+    sys.exit(0)
+
+
+# Set up signal handlers
 signal.signal(signal.SIGXCPU, handle_timeout)
+signal.signal(signal.SIGTERM, handle_sigterm)
+signal.signal(signal.SIGINT, handle_sigint)
 
 # Apply resource limits
 set_resource_limits()
+
+
+# ===== Cleanup Handler =====
+def cleanup_on_exit():
+    """Cleanup function called on process exit"""
+    try:
+        logger.info("daemon_exiting", pid=os.getpid())
+    except Exception:
+        pass  # Ignore errors during cleanup
+
+
+import atexit
+atexit.register(cleanup_on_exit)
 
 
 class SpeekiumDaemon:
@@ -102,6 +130,9 @@ class SpeekiumDaemon:
         # Event loop reference (set during initialization)
         self.loop = None
 
+        # Socket server reference (set during socket mode initialization)
+        self.socket_server = None
+
         # Output startup log
         logger.info("daemon_initializing")
 
@@ -124,12 +155,25 @@ class SpeekiumDaemon:
             logger.info("daemon_log", message=message)
 
     def _emit_ptt_event(self, event_type: str, data: dict = None):
-        """Emit PTT event to stderr for Tauri to capture (stdout is for command responses)"""
-        event = {"ptt_event": event_type}
+        """Emit PTT event via socket notification to Tauri frontend"""
+        event = {"event_type": event_type}
         if data:
             event.update(data)
-        # Use stderr to avoid interfering with command responses on stdout
-        print(json.dumps(event), file=sys.stderr, flush=True)
+        # Use socket notification instead of stderr
+        if self.socket_server:
+            self.socket_server.broadcast_notification("ptt_event", event)
+
+    def _on_download_progress(self, progress_data: dict):
+        """Download progress callback - broadcasts to all socket clients
+
+        Args:
+            progress_data: Progress data dict with event_type, model, percent, etc.
+        """
+        if self.socket_server:
+            self.socket_server.broadcast_notification("download_progress", progress_data)
+        else:
+            # Fallback: log to stderr if no socket server (stdin/stdout mode)
+            logger.info("download_progress_no_socket", data=progress_data)
 
     def _cleanup(self):
         """Clean up resources before exit"""
@@ -155,35 +199,77 @@ class SpeekiumDaemon:
 
         self._log("✅ 资源清理完成")
 
+    def _emit_init_progress(self, stage: str, message_zh: str, message_en: str = ""):
+        """Emit initialization progress via socket notification to Rust frontend
+
+        Args:
+            stage: Current initialization stage identifier
+            message_zh: Chinese message for the progress
+            message_en: English message for the progress (fallback)
+        """
+        if self.socket_server:
+            self.socket_server.broadcast_notification("init_progress", {
+                "stage": stage,
+                "message_zh": message_zh,
+                "message_en": message_en or message_zh,
+            })
+
     async def initialize(self):
-        """Preload all models (only executed once at startup)"""
+        """Preload all models (only executed once at startup)
+
+        Progress is reported via socket notifications to the Rust frontend
+        and also printed to stderr for terminal visibility.
+        """
         try:
             # Store event loop reference for PTT callbacks (called from different thread)
             self.loop = asyncio.get_running_loop()
 
+            # Notify: Starting initialization
+            self._emit_init_progress("starting", "正在初始化语音服务...", "Initializing voice service...")
+            print("[Speekium] 正在初始化语音服务...", file=sys.stderr, flush=True)
+
             from speekium import VoiceAssistant
 
+            # Notify: Loading VoiceAssistant
+            self._emit_init_progress("loading_assistant", "正在加载语音助手...", "Loading voice assistant...")
             logger.info("loading_voice_assistant")
-            self.assistant = VoiceAssistant()
+            print("[Speekium] 正在加载语音助手...", file=sys.stderr, flush=True)
+            self.assistant = VoiceAssistant(progress_callback=self._on_download_progress)
 
+            # Notify: Loading VAD model
+            self._emit_init_progress("loading_vad", "正在加载语音活动检测模型...", "Loading VAD model...")
             logger.info("preloading_vad_model")
+            print("[Speekium] 正在加载 VAD 模型...", file=sys.stderr, flush=True)
             self.assistant.load_vad()
+            print("[Speekium] VAD 模型加载完成", file=sys.stderr, flush=True)
 
+            # Notify: Loading ASR model
+            self._emit_init_progress("loading_asr", "正在加载语音识别模型...", "Loading ASR model...")
             logger.info("preloading_asr_model")
+            print("[Speekium] 正在加载 ASR 模型...", file=sys.stderr, flush=True)
             self.assistant.load_asr()
+            print("[Speekium] ASR 模型加载完成", file=sys.stderr, flush=True)
 
-            self._log("🔄 预加载 LLM 后端...")
-            self.assistant.load_llm()
+            # Notify: LLM preloading skipped
+            self._emit_init_progress("llm_skipped", "LLM 后端将在需要时加载", "LLM backend will load on demand")
+            print("[Speekium] LLM 后端将在需要时加载", file=sys.stderr, flush=True)
+            # TODO: Load LLM backend when API key is configured
+            # For now, skip LLM preloading to allow daemon to start without API key
+            # self.assistant.load_llm()
 
             # Note: PTT hotkey is now handled by Tauri global shortcuts (Rust side)
             # The pynput hotkey manager is no longer needed
             # PTT commands (ptt_press, ptt_release) are sent from Rust via stdin
 
-            self._log("✅ 所有模型加载完成，进入待命状态")
+            # Notify: All models loaded
+            self._emit_init_progress("ready", "语音服务已就绪", "Voice service ready")
+            print("[Speekium] ✅ 语音服务已就绪", file=sys.stderr, flush=True)
             return True
 
         except Exception as e:
-            self._log(f"❌ 初始化失败: {e}")
+            # Notify: Initialization failed
+            self._emit_init_progress("error", f"初始化失败: {str(e)}", f"Initialization failed: {str(e)}")
+            print(f"[Speekium] ❌ 初始化失败: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
             return False
 
@@ -1188,6 +1274,7 @@ class SpeekiumDaemon:
         Then models are loaded asynchronously while socket accepts connections.
         """
         # Import SocketServer
+        server = None
         try:
             from socket_server import SocketServer
             import platform
@@ -1204,6 +1291,13 @@ class SpeekiumDaemon:
             # Create socket server
             server = SocketServer(socket_path, self)
 
+            # Store socket server reference for progress callbacks
+            self.socket_server = server
+
+            # CRITICAL: Clean up old socket file BEFORE binding
+            from socket_server import cleanup_old_socket
+            cleanup_old_socket(socket_path)
+
             # Setup socket (synchronous - creates and binds socket)
             server._setup_socket()
             self._log("✅ Socket 已就绪，等待连接")
@@ -1217,21 +1311,41 @@ class SpeekiumDaemon:
             # Set server running flag BEFORE starting accept loop
             server.running = True
 
+            # CRITICAL: Connect to notification socket BEFORE initialization
+            # This ensures init_progress events can be delivered to Rust frontend
+            self._log("🔗 连接通知 socket...")
+            notification_connected = await server._connect_notification_socket()
+            if notification_connected:
+                self._log("✅ 通知 socket 已连接")
+            else:
+                self._log("⚠️  通知 socket 连接失败，进度更新可能不可用")
+
+            # Start background reconnection task for notification socket
+            server._notification_reconnect_task = asyncio.create_task(server._notification_maintenance_loop())
+
             # Start accepting connections in background
             accept_task = asyncio.create_task(server._accept_loop())
 
             # Initialize models in parallel with accept loop
             self._log("🔄 正在初始化模型...")
-            init_task = asyncio.create_task(self.initialize())
+            try:
+                init_task = asyncio.create_task(self.initialize())
 
-            # Wait for initialization to complete
-            init_success = await init_task
-            if not init_success:
-                self._log("❌ 初始化失败，退出")
+                # Wait for initialization to complete
+                init_success = await init_task
+                if not init_success:
+                    self._log("❌ 初始化失败，退出")
+                    server.running = False
+                    server.stop()
+                    accept_task.cancel()
+                    return
+            except Exception as init_error:
+                self._log(f"❌ 初始化异常: {init_error}")
+                traceback.print_exc(file=sys.stderr)
                 server.running = False
                 server.stop()
                 accept_task.cancel()
-                return
+                raise
 
             self._log("✅ 守护进程就绪，等待命令...")
 
@@ -1251,6 +1365,12 @@ class SpeekiumDaemon:
         except Exception as e:
             self._log(f"❌ Socket 服务器启动失败: {e}")
             traceback.print_exc(file=sys.stderr)
+            # Ensure socket is cleaned up on exception
+            if server:
+                try:
+                    server.stop()
+                except Exception:
+                    pass
 
 
 def main():
@@ -1266,6 +1386,57 @@ def main():
         mode = "socket"
     else:
         mode = sys.argv[1]
+
+    # CRITICAL: In socket mode, redirect ALL logs to stderr
+    # This prevents stdout from being polluted with log messages
+    if mode == "socket":
+        # Reconfigure structlog to output to stderr
+        import structlog
+
+        class StderrPrintLogger:
+            """Print logger that writes to stderr"""
+
+            def __init__(self, file=None):
+                self._file = file or sys.stderr
+
+            def msg(self, message):
+                print(message, file=self._file)
+
+            def info(self, message):
+                print(message, file=self._file)
+
+            def warning(self, message):
+                print(message, file=self._file)
+
+            def error(self, message):
+                print(message, file=self._file)
+
+            def debug(self, message):
+                print(message, file=self._file)
+
+        class StderrPrintLoggerFactory(structlog.WriteLoggerFactory):
+            """Factory that creates StderrPrintLogger instances"""
+
+            def __init__(self, file=None):
+                self._file = file or sys.stderr
+
+            def __call__(self, *args):
+                return StderrPrintLogger(self._file)
+
+        # Reconfigure structlog to use stderr
+        structlog.configure(
+            processors=[
+                structlog.stdlib.add_log_level,
+                structlog.processors.TimeStamper(fmt="iso", utc=True),
+                structlog.processors.JSONRenderer()
+            ],
+            wrapper_class=structlog.make_filtering_bound_logger(
+                structlog.stdlib.logging.INFO
+            ),
+            context_class=dict,
+            logger_factory=StderrPrintLoggerFactory(),
+            cache_logger_on_first_use=False,  # Force reconfiguration
+        )
 
     daemon = SpeekiumDaemon()
 
