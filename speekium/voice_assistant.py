@@ -1,37 +1,25 @@
 """
 VoiceAssistant - Main voice conversation orchestrator.
 
-Integrates VAD, ASR, LLM, and TTS modules for natural voice interaction.
-Flow: [VAD voice detection] → Record → SenseVoice ASR → LLM streaming → TTS playback
+Refactored to use the service layer for clean separation of concerns.
+Flow: [VAD voice detection] → Record → ASR → LLM streaming → TTS playback
 """
 
 import asyncio
 import os
 import platform
 import sys
-import threading
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Optional
 
 import edge_tts
 
 from logger import get_logger
 from mode_manager import ModeManager, RecordingMode
-from speekium.models import (
-    INITIAL_SPEECH_TIMEOUT,
-    SAMPLE_RATE,
-    check_asr_model_exists,
-    check_vad_model_exists,
-    create_llm_backend,
-    get_asr_model_status,
-    get_clear_history_message,
-    get_vad_model_status,
-    load_asr,
-    load_llm_config,
-    load_vad,
-    load_vad_config,
-)
-from speekium.models.llm import CLEAR_HISTORY_KEYWORDS
+from speekium.models import INITIAL_SPEECH_TIMEOUT, SAMPLE_RATE
 from speekium.recording import detect_speech_start, record_push_to_talk, record_with_vad
+from speekium.services import ServiceContainer
+from speekium.services.base import ProgressEvent
 from speekium.utils import create_secure_temp_file
 
 if TYPE_CHECKING:
@@ -40,10 +28,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # ===== TTS Config =====
-TTS_BACKEND = "edge"  # Default fallback
-TTS_RATE_DEFAULT = "+0%"  # Default speed for Edge TTS
-
-# ===== Edge TTS Voices =====
 EDGE_TTS_VOICES = {
     "zh": "zh-CN-XiaoyiNeural",
     "en": "en-US-JennyNeural",
@@ -57,13 +41,29 @@ USE_STREAMING = True
 
 
 class VoiceAssistant:
-    """Main voice assistant class that orchestrates all components."""
+    """
+    Main voice assistant class that orchestrates all components.
 
-    def __init__(self, progress_callback=None):
-        # Model instances
-        self.asr_model = None
-        self.vad_model = None
-        self.llm_backend = None
+    Refactored to use the service layer for:
+    - Model management (ASR, LLM, VAD, TTS)
+    - Configuration management
+    - Progress reporting
+    """
+
+    def __init__(
+        self,
+        container: Optional[ServiceContainer] = None,
+        progress_callback: Optional[Callable[[ProgressEvent], None]] = None,
+    ):
+        """
+        Initialize the voice assistant.
+
+        Args:
+            container: Optional service container (creates new one if None)
+            progress_callback: Optional callback for progress events
+        """
+        self.container = container
+        self._own_container = container is None
 
         # State tracking
         self.was_interrupted = False
@@ -72,96 +72,84 @@ class VoiceAssistant:
 
         # Mode management
         self.mode_manager = ModeManager(RecordingMode.CONTINUOUS)
-        self.recording_interrupt_event = threading.Event()
+        self.recording_interrupt_event = asyncio.Event()
 
-        # Configuration
-        self.tts_backend = None
-        self._tts_rate = TTS_RATE_DEFAULT
-        self._last_llm_config: dict = {}
-        self._vad_config: dict = {}
+        # TTS configuration (cached for performance)
+        self._tts_rate = "+0%"
 
         # Progress callback for model downloads
         self._progress_callback = progress_callback
 
-        # Load configurations
-        self._load_tts_config()
-        self._load_vad_config()
-
-    def _load_vad_config(self):
-        """Load VAD configuration from config file."""
-        try:
-            from config_manager import ConfigManager
-
-            config = ConfigManager.load()
-            self._vad_config = load_vad_config(config)
-            logger.info(
-                "vad_config_loaded",
-                threshold=self._vad_config["threshold"],
-                consecutive=self._vad_config["consecutive_threshold"],
-                silence=self._vad_config["silence_duration"],
+    async def _ensure_container(self) -> ServiceContainer:
+        """Ensure service container is initialized."""
+        if self.container is None:
+            self.container = ServiceContainer(
+                progress_callback=self._progress_callback,
             )
-        except Exception as e:
-            logger.warning("vad_config_load_failed", error=str(e), fallback="default")
-            self._vad_config = load_vad_config()
+            self._own_container = True
 
-    def _load_tts_config(self):
-        """Load TTS backend and rate from config file."""
-        try:
-            from config_manager import ConfigManager
+        if not self.container.config.is_initialized:
+            await self.container.initialize()
 
-            config = ConfigManager.load()
-            self.tts_backend = config.get("tts_backend", "edge")
-            self._tts_rate = config.get("tts_rate", TTS_RATE_DEFAULT)
-            logger.info("tts_config_loaded", backend=self.tts_backend, rate=self._tts_rate)
-        except Exception as e:
-            logger.warning("tts_config_load_failed", error=str(e), fallback="edge")
-            self.tts_backend = "edge"
-            self._tts_rate = TTS_RATE_DEFAULT
+        return self.container
 
-    def get_tts_backend(self):
-        """Get current TTS backend from config (refreshes on each call)."""
-        self._load_tts_config()
-        return self.tts_backend
+    async def start(self) -> None:
+        """Start the voice assistant and all services."""
+        container = await self._ensure_container()
+        await container.start()
+
+        # Preload models
+        await container.vad.load_model()
+        await container.asr.load_model()
+        await container.llm._ensure_backend()
+
+        logger.info("voice_assistant_started")
+
+    async def stop(self) -> None:
+        """Stop the voice assistant and all services."""
+        if self.container:
+            await self.container.stop()
+
+        if self._own_container and self.container:
+            await self.container.shutdown()
+            self.container = None
+
+        logger.info("voice_assistant_stopped")
 
     def get_model_status(self) -> dict:
         """Get status information for all models."""
-        asr_status = get_asr_model_status(self.asr_model)
-        vad_status = get_vad_model_status(self.vad_model)
+        if not self.container:
+            return {"asr": {"loaded": False}, "vad": {"loaded": False}}
 
         return {
-            "asr": asr_status,
-            "vad": vad_status,
+            "asr": self._asr_status(),
+            "vad": self._vad_status(),
         }
 
-    # ===== Model Loading =====
+    async def _asr_status(self) -> dict:
+        """Get ASR model status."""
+        if self.container is None:
+            return {"loaded": False}
+        try:
+            return await self.container.asr.get_model_status()
+        except Exception:
+            return {"loaded": False}
 
-    def load_vad(self):
-        """Load or return cached VAD model."""
-        if self.vad_model is None:
-            self.vad_model = load_vad(self.vad_model)
-        return self.vad_model
-
-    def load_asr(self):
-        """Load or return cached ASR model."""
-        if self.asr_model is None:
-            self.asr_model = load_asr(self.asr_model, on_progress=self._progress_callback)
-        return self.asr_model
-
-    def load_llm(self):
-        """Load or create LLM backend."""
-        # Always reload configuration to get latest settings
-        config = load_llm_config()
-        self.llm_backend, self._last_llm_config = create_llm_backend(
-            self.llm_backend, self._last_llm_config, config
-        )
-        return self.llm_backend
+    async def _vad_status(self) -> dict:
+        """Get VAD model status."""
+        if self.container is None:
+            return {"loaded": False}
+        try:
+            return await self.container.vad.get_model_status()
+        except Exception:
+            return {"loaded": False}
 
     # ===== Recording =====
 
-    def record_with_vad(
+    async def record_with_vad(
         self,
         speech_already_started: bool = False,
-        on_speech_detected=None,
+        on_speech_detected: Optional[Callable[[], None]] = None,
     ):
         """Use VAD to detect speech, auto start and stop recording.
 
@@ -169,12 +157,16 @@ class VoiceAssistant:
             speech_already_started: If True, skip waiting for speech
             on_speech_detected: Optional callback when speech is detected
         """
-        vad_model = self.load_vad()
+        container = await self._ensure_container()
+
+        # Load VAD model
+        vad_model = await container.vad.load_model()
+        vad_config = await container.vad.get_config()
 
         # Show history count
         history_count = 0
-        if self.llm_backend and hasattr(self.llm_backend, "history"):
-            history_count = len(getattr(self.llm_backend, "history", [])) // 2
+        if container.llm.is_backend_loaded:
+            history_count = len(container.llm.get_history()) // 2
 
         if speech_already_started:
             logger.info("recording_started", mode="interrupted")
@@ -185,12 +177,12 @@ class VoiceAssistant:
 
         return record_with_vad(
             vad_model=vad_model,
-            vad_threshold=self._vad_config["threshold"],
-            vad_consecutive_threshold=self._vad_config["consecutive_threshold"],
-            vad_silence_duration=self._vad_config["silence_duration"],
-            vad_pre_buffer=self._vad_config["pre_buffer"],
-            vad_min_speech_duration=self._vad_config["min_speech_duration"],
-            vad_max_recording_duration=self._vad_config["max_recording_duration"],
+            vad_threshold=vad_config["threshold"],
+            vad_consecutive_threshold=vad_config["consecutive_threshold"],
+            vad_silence_duration=vad_config["silence_duration"],
+            vad_pre_buffer=vad_config["pre_buffer"],
+            vad_min_speech_duration=vad_config["min_speech_duration"],
+            vad_max_recording_duration=vad_config["max_recording_duration"],
             initial_speech_timeout=INITIAL_SPEECH_TIMEOUT,
             sample_rate=SAMPLE_RATE,
             recording_interrupt_event=self.recording_interrupt_event,
@@ -200,38 +192,41 @@ class VoiceAssistant:
             interrupt_audio_buffer=self.interrupt_audio_buffer,
         )
 
-    def record_push_to_talk(self):
+    async def record_push_to_talk(self) -> Optional["np.ndarray"]:
         """Push-to-talk mode: manually control recording start and stop."""
-        return record_push_to_talk(self.mode_manager, SAMPLE_RATE)
+        return await asyncio.to_thread(record_push_to_talk, self.mode_manager, SAMPLE_RATE)
 
-    def detect_speech_start(self, timeout: float = 1.5) -> bool:
+    async def detect_speech_start(self, timeout: float = 1.5) -> bool:
         """Check if speech starts within timeout."""
-        vad_model = self.load_vad()
-        return detect_speech_start(
+        container = await self._ensure_container()
+        vad_model = await container.vad.load_model()
+        vad_config = await container.vad.get_config()
+
+        return await asyncio.to_thread(
+            detect_speech_start,
             vad_model,
-            self._vad_config["threshold"],
-            self._vad_config["consecutive_threshold"],
+            vad_config["threshold"],
+            vad_config["consecutive_threshold"],
             SAMPLE_RATE,
             timeout,
         )
 
     # ===== Transcription =====
 
-    def transcribe(self, audio: "np.ndarray"):
+    async def transcribe_async(self, audio: "np.ndarray") -> tuple[str, str]:
         """Transcribe audio and detect language. Returns (text, language)."""
-        from speekium.models import transcribe
+        container = await self._ensure_container()
+        result = await container.asr.transcribe(audio)
 
-        asr_model = self.load_asr()
-        return transcribe(asr_model, audio, SAMPLE_RATE)
+        if result.success:
+            return result.text, result.language
+        else:
+            logger.error("transcription_failed", error=result.error)
+            return "", "zh"
 
-    async def transcribe_async(self, audio: "np.ndarray"):
-        """Async wrapper for transcribe."""
-        from speekium.models import transcribe_async
+    # ===== Conversation Loop =====
 
-        asr_model = self.load_asr()
-        return await transcribe_async(asr_model, audio, SAMPLE_RATE)
-
-    async def record_with_interruption(self):
+    async def record_with_interruption(self) -> tuple[Optional[str], Optional[str]]:
         """Record with support for continuation detection."""
         all_segments = []
 
@@ -241,7 +236,7 @@ class VoiceAssistant:
 
         while True:
             # Record a segment
-            segment = self.record_with_vad(speech_already_started=speech_already_started)
+            segment = await self.record_with_vad(speech_already_started=speech_already_started)
             speech_already_started = False
 
             if segment is None:
@@ -260,9 +255,7 @@ class VoiceAssistant:
             # Check if user wants to continue speaking
             logger.info("waiting_for_input")
 
-            has_more_speech = await asyncio.get_event_loop().run_in_executor(
-                None, self.detect_speech_start, 1.5
-            )
+            has_more_speech = await self.detect_speech_start(1.5)
 
             if has_more_speech:
                 asr_task.cancel()
@@ -283,20 +276,33 @@ class VoiceAssistant:
             import numpy as np
 
             combined_audio = np.concatenate(all_segments)
-            return self.transcribe(combined_audio)
+            return await self.transcribe_async(combined_audio)
 
         return None, None
 
     # ===== TTS =====
 
-    async def generate_audio(self, text: str, language: str | None = None):
+    async def generate_audio(self, text: str, language: Optional[str] = None) -> Optional[str]:
         """Generate TTS audio file, returns file path."""
-        from speekium.models import detect_text_language
+        container = await self._ensure_container()
 
-        detected_lang = detect_text_language(text)
-        return await self._generate_audio_edge(text, detected_lang)
+        # Detect language if not provided
+        if language is None:
+            result = await container.asr.detect_language(text)
+            language = result if isinstance(result, str) else "zh"
 
-    async def _generate_audio_edge(self, text: str, language: str):
+        # Check if we should use Piper or Edge TTS
+        backend_type, model_id = await container.tts.get_backend_for_language(language)
+
+        if backend_type == "piper" and model_id:
+            result = await container.tts.synthesize(text, language)
+            if result.success and result.audio_path:
+                return str(result.audio_path)
+
+        # Fallback to Edge TTS
+        return await self._generate_audio_edge(text, language)
+
+    async def _generate_audio_edge(self, text: str, language: str) -> Optional[str]:
         """Generate audio using Edge TTS (online)."""
         try:
             voice = EDGE_TTS_VOICES.get(language, EDGE_TTS_VOICES["zh"])
@@ -308,7 +314,7 @@ class VoiceAssistant:
             logger.error("edge_tts_error", error=str(e))
             return None
 
-    async def play_audio(self, tmp_file: str, delete: bool = True):
+    async def play_audio(self, tmp_file: str, delete: bool = True) -> None:
         """Play audio file (async, cross-platform), optionally delete after."""
         if tmp_file and os.path.exists(tmp_file):
             try:
@@ -338,9 +344,9 @@ class VoiceAssistant:
         await self.play_audio(tmp_file, delete)
         return False  # Never interrupted in current implementation
 
-    async def speak(self, text: str, language: str | None = None):
+    async def speak(self, text: str, language: Optional[str] = None) -> None:
         """TTS speak a single sentence."""
-        tmp_file: str | None = await self.generate_audio(text, language)
+        tmp_file = await self.generate_audio(text, language)
         if tmp_file:
             await self.play_audio(tmp_file)
 
@@ -349,6 +355,7 @@ class VoiceAssistant:
     async def chat_once(self) -> bool:
         """Single conversation turn."""
         from resource_limiter import with_timeout
+        from speekium.models.llm import CLEAR_HISTORY_KEYWORDS, get_clear_history_message
 
         # VAD recording with 30s timeout
         try:
@@ -366,24 +373,23 @@ class VoiceAssistant:
             logger.warning("no_speech_recognized")
             return True
 
-        backend = self.load_llm()
+        container = await self._ensure_container()
+        llm_service = container.llm
 
         # Check for clear history keywords
         for keyword in CLEAR_HISTORY_KEYWORDS:
             if keyword in text:
-                clear_history_method = getattr(backend, "clear_history", None)
-                if clear_history_method:
-                    clear_history_method()
+                llm_service.clear_history()
                 msg = get_clear_history_message(language)
                 await self.speak(msg, language)
                 return True
 
         if USE_STREAMING:
-            return await self._chat_streaming(backend, text, language)
+            return await self._chat_streaming(llm_service, text, language)
         else:
-            return await self._chat_non_streaming(backend, text, language)
+            return await self._chat_non_streaming(llm_service, text, language)
 
-    async def _chat_streaming(self, backend, text: str, language: str) -> bool:
+    async def _chat_streaming(self, llm_service, text: str, language: str) -> bool:
         """Streaming chat with barge-in support."""
         from resource_limiter import with_timeout
 
@@ -395,7 +401,7 @@ class VoiceAssistant:
         async def generate_worker():
             nonlocal generation_done
             try:
-                async for sentence in backend.chat_stream(text):
+                async for sentence in llm_service.chat_stream(text):
                     if interrupted:
                         break
                     if sentence:
@@ -444,13 +450,13 @@ class VoiceAssistant:
 
         return True
 
-    async def _chat_non_streaming(self, backend, text: str, language: str) -> bool:
+    async def _chat_non_streaming(self, llm_service, text: str, language: str) -> bool:
         """Non-streaming chat."""
         from resource_limiter import with_timeout
 
         try:
             response = await with_timeout(
-                asyncio.to_thread(backend.chat, text),
+                asyncio.to_thread(llm_service.chat, text),
                 seconds=120,
                 operation_name="LLM_chat",
             )
@@ -458,9 +464,13 @@ class VoiceAssistant:
             logger.error("llm_timeout", timeout_seconds=120)
             return False
 
+        if not response.success:
+            logger.error("llm_chat_failed", error=response.error)
+            return False
+
         try:
             tmp_file = await with_timeout(
-                self.generate_audio(response, language),
+                self.generate_audio(response.response, language),
                 seconds=30,
                 operation_name="TTS_generation",
             )
@@ -476,52 +486,33 @@ class VoiceAssistant:
 
         return True
 
-    async def run(self):
+    async def run(self) -> None:
         """Main run loop."""
-        from speekium.models import LLM_BACKEND
 
         logger.info("speekium_banner", mode="continuous")
         logger.info("vad_enabled")
-        logger.info("llm_backend_info", backend=LLM_BACKEND)
 
-        tts_backend = self.get_tts_backend()
+        container = await self._ensure_container()
+        llm_config = await container.llm.get_config()
+        logger.info("llm_backend_info", backend=llm_config["provider"])
+
+        tts_config = await container.tts.get_backend_config()
+        tts_backend = tts_config["default"]
         tts_info = tts_backend if tts_backend == "piper" else "edge (online)"
         logger.info("tts_backend_info", backend=tts_info)
 
         if USE_STREAMING:
             logger.info("streaming_mode_enabled")
-        logger.info("memory_config", max_history=10)
+
+        logger.info("memory_config", max_history=llm_config["max_history"])
         logger.info("clear_history_hint")
         logger.info("exit_hint")
 
         # Show model status
-        print(f"\n{'=' * 60}", file=sys.stderr)
-        print("🔍 Checking model status...", file=sys.stderr)
-        print(f"{'=' * 60}", file=sys.stderr)
+        await self._show_model_status()
 
-        asr_exists, asr_path = check_asr_model_exists()
-        vad_exists, vad_path = check_vad_model_exists()
-
-        print(
-            f"ASR model: {'✅ Downloaded' if asr_exists else '❌ Not downloaded'}",
-            file=sys.stderr,
-        )
-        if asr_exists:
-            print(f"  Path: {asr_path}", file=sys.stderr)
-
-        print(
-            f"VAD model: {'✅ Downloaded' if vad_exists else '❌ Not downloaded'}",
-            file=sys.stderr,
-        )
-        if vad_exists:
-            print(f"  Path: {vad_path}", file=sys.stderr)
-
-        print(f"{'=' * 60}\n", file=sys.stderr)
-
-        # Preload models
-        self.load_vad()
-        self.load_asr()
-        self.load_llm()
+        # Start services
+        await self.start()
 
         logger.info("ready_for_input")
 
@@ -532,9 +523,61 @@ class VoiceAssistant:
                     await asyncio.sleep(0.5)
         except KeyboardInterrupt:
             logger.info("shutdown")
+        finally:
+            await self.stop()
+
+    async def _show_model_status(self) -> None:
+        """Show model status information."""
+        container = await self._ensure_container()
+
+        print(f"\n{'=' * 60}", file=sys.stderr)
+        print("🔍 Checking model status...", file=sys.stderr)
+        print(f"{'=' * 60}", file=sys.stderr)
+
+        asr_status = await container.asr.check_model_exists()
+        vad_status = await container.vad.check_model_exists()
+
+        print(
+            f"ASR model: {'✅ Downloaded' if asr_status[0] else '❌ Not downloaded'}",
+            file=sys.stderr,
+        )
+        if asr_status[0]:
+            print(f"  Path: {asr_status[1]}", file=sys.stderr)
+
+        print(
+            f"VAD model: {'✅ Downloaded' if vad_status[0] else '❌ Not downloaded'}",
+            file=sys.stderr,
+        )
+        if vad_status[0]:
+            print(f"  Path: {vad_status[1]}", file=sys.stderr)
+
+        print(f"{'=' * 60}\n", file=sys.stderr)
 
 
+# Backward compatibility: default factory function
+async def create_assistant(
+    progress_callback: Optional[Callable[[ProgressEvent], None]] = None,
+) -> VoiceAssistant:
+    """
+    Create a new VoiceAssistant with service container.
+
+    Args:
+        progress_callback: Optional callback for progress events
+
+    Returns:
+        Initialized VoiceAssistant ready to use
+    """
+    assistant = VoiceAssistant(progress_callback=progress_callback)
+    await assistant._ensure_container()
+    return assistant
+
+
+# Legacy main entry point
 async def main():
-    """Entry point for voice assistant."""
+    """Entry point for voice assistant (backward compatible)."""
     assistant = VoiceAssistant()
     await assistant.run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
