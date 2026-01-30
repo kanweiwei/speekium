@@ -30,10 +30,10 @@ class TestPTTBlocking:
 
         # 测试场景: 模拟不同时长的 PTT 操作
         test_cases = [
-            ("快速操作", 15),   # 15s - 快速 ASR + LLM + TTS
-            ("中等操作", 35),   # 35s - 正常 ASR + LLM + TTS
-            ("长时间操作", 60), # 60s - 复杂 LLM 响应 + 多句 TTS
-            ("极端操作", 90),   # 90s - 网络波动 + 复杂操作
+            ("快速操作", 15),  # 15s - 快速 ASR + LLM + TTS
+            ("中等操作", 35),  # 35s - 正常 ASR + LLM + TTS
+            ("长时间操作", 60),  # 60s - 复杂 LLM 响应 + 多句 TTS
+            ("极端操作", 90),  # 90s - 网络波动 + 复杂操作
         ]
 
         rust_timeout = 120  # 修复后的超时
@@ -83,9 +83,9 @@ class TestPTTBlocking:
         # 从代码分析,我们知道 _play_audio 有这些特性:
         features = {
             "中断事件检查": True,  # 使用 self.interrupt_event.is_set()
-            "进程终止": True,     # 使用 process.terminate()
-            "超时保护": True,     # 使用 asyncio.wait_for
-            "跨平台支持": True,   # 支持 macOS/Linux/Windows
+            "进程终止": True,  # 使用 process.terminate()
+            "超时保护": True,  # 使用 asyncio.wait_for
+            "跨平台支持": True,  # 支持 macOS/Linux/Windows
         }
 
         all_features_present = all(features.values())
@@ -104,10 +104,10 @@ class TestPTTBlocking:
         print("检查 LLM 流式生成实现...")
 
         features = {
-            "流式生成": True,    # 使用 async for 逐句生成
-            "逐句TTS": True,     # 每句生成后立即 TTS
-            "中断支持": True,    # 检查 interrupt_event
-            "错误处理": True,    # 捕获 TTS 错误不中断流
+            "流式生成": True,  # 使用 async for 逐句生成
+            "逐句TTS": True,  # 每句生成后立即 TTS
+            "中断支持": True,  # 检查 interrupt_event
+            "错误处理": True,  # 捕获 TTS 错误不中断流
         }
 
         all_features_present = all(features.values())
@@ -126,10 +126,10 @@ class TestPTTBlocking:
         print("检查 Socket 服务器实现...")
 
         features = {
-            "非阻塞模式": True,      # setblocking(False)
-            "事件循环监听": True,    # 使用 add_reader
-            "客户端超时": True,      # socket.settimeout(60.0)
-            "后台任务处理": True,    # asyncio.create_task
+            "非阻塞模式": True,  # setblocking(False)
+            "事件循环监听": True,  # 使用 add_reader
+            "客户端超时": True,  # socket.settimeout(60.0)
+            "后台任务处理": True,  # asyncio.create_task
         }
 
         all_features_present = all(features.values())
@@ -170,10 +170,10 @@ class TestPTTBlocking:
         print("检查错误处理机制...")
 
         features = {
-            "超时错误捕获": True,    # socket.timeout 异常处理
-            "连接错误恢复": True,    # 自动重连机制
-            "操作失败清理": True,    # cleanup 函数
-            "中断信号处理": True,    # interrupt_event
+            "超时错误捕获": True,  # socket.timeout 异常处理
+            "连接错误恢复": True,  # 自动重连机制
+            "操作失败清理": True,  # cleanup 函数
+            "中断信号处理": True,  # interrupt_event
         }
 
         all_features_present = all(features.values())

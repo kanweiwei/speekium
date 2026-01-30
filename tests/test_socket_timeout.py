@@ -39,7 +39,7 @@ class TestSocketTimeout:
 
         expected_min_timeout = 60  # 最少需要 60 秒
         actual_rust_timeout = 120  # 修复后的 Rust 客户端超时 (socket_client.rs:158)
-        actual_python_timeout = 150 # 修复后的 Python 服务端超时 (socket_server.py:331)
+        actual_python_timeout = 150  # 修复后的 Python 服务端超时 (socket_server.py:331)
 
         print(f"期望最小超时: {expected_min_timeout}s")
         print(f"Rust 客户端实际超时: {actual_rust_timeout}s")
@@ -47,7 +47,9 @@ class TestSocketTimeout:
 
         # 断言: Rust 客户端超时应该至少为 60 秒
         if actual_rust_timeout < expected_min_timeout:
-            print(f"❌ 测试失败: Rust 客户端超时 ({actual_rust_timeout}s) 小于最小要求 ({expected_min_timeout}s)")
+            print(
+                f"❌ 测试失败: Rust 客户端超时 ({actual_rust_timeout}s) 小于最小要求 ({expected_min_timeout}s)"
+            )
             print("   这会导致长时间的 PTT 操作超时失败!")
             return False
         else:
@@ -96,10 +98,14 @@ class TestSocketTimeout:
         print(f"推荐服务端超时: {recommended_server_timeout}s")
 
         if recommended_client_timeout >= safe_time:
-            print(f"✅ 测试通过: 推荐客户端超时 ({recommended_client_timeout}s) 满足安全要求 ({safe_time}s)")
+            print(
+                f"✅ 测试通过: 推荐客户端超时 ({recommended_client_timeout}s) 满足安全要求 ({safe_time}s)"
+            )
             return True
         else:
-            print(f"❌ 测试失败: 推荐客户端超时 ({recommended_client_timeout}s) 不满足安全要求 ({safe_time}s)")
+            print(
+                f"❌ 测试失败: 推荐客户端超时 ({recommended_client_timeout}s) 不满足安全要求 ({safe_time}s)"
+            )
             return False
 
 

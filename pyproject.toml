@@ -160,7 +160,7 @@ pythonVersion = "3.10"
 pythonPlatform = "All"
 
 # Include/exclude files
-include = ["speekium", "tests"]
+include = ["speekium", "tests", "*.py"]
 exclude = [
     "**/__pycache__",
     ".venv",

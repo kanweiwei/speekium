@@ -94,11 +94,9 @@ def load_asr(
 
         # Notify callback about download start
         if on_progress:
-            on_progress({
-                "event_type": "started",
-                "model": "SenseVoice ASR",
-                "status": "downloading"
-            })
+            on_progress(
+                {"event_type": "started", "model": "SenseVoice ASR", "status": "downloading"}
+            )
 
         # Pre-download model using ModelScope with custom progress callback
         # This ensures progress events are emitted in JSON format for the frontend
@@ -109,10 +107,7 @@ def load_asr(
             # Create a factory for progress callbacks with socket server callback
             def create_progress_callback(filename: str, file_size: int):
                 return ModelScopeProgressCallback(
-                    filename,
-                    file_size,
-                    "SenseVoice ASR",
-                    progress_callback=on_progress
+                    filename, file_size, "SenseVoice ASR", progress_callback=on_progress
                 )
 
             # Download with progress tracking

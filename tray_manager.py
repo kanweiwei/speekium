@@ -110,25 +110,25 @@ class TrayManager:
                 MenuItem(
                     "🎤 按键录音模式",
                     self._handle_push_to_talk_mode,
-                    checked=lambda item: self.current_mode == "push_to_talk",
+                    checked=self.current_mode == "push_to_talk",
                     radio=True,
                 ),
                 MenuItem(
                     "💬 自由对话模式",
                     self._handle_continuous_mode,
-                    checked=lambda item: self.current_mode == "continuous",
+                    checked=self.current_mode == "continuous",
                     radio=True,
                 ),
                 Menu.SEPARATOR,
                 MenuItem(
                     "▶️ 开始监听",
                     self._handle_start_listening,
-                    enabled=lambda item: not self.is_listening,
+                    enabled=not self.is_listening,
                 ),
                 MenuItem(
                     "⏸️ 停止监听",
                     self._handle_stop_listening,
-                    enabled=lambda item: self.is_listening,
+                    enabled=self.is_listening,
                 ),
                 Menu.SEPARATOR,
                 MenuItem("🗑️ 清空对话历史", self._handle_clear_history),
@@ -146,7 +146,8 @@ class TrayManager:
             def run_icon():
                 self.is_running = True
                 print("📌 系统托盘已启动")
-                self.icon.run()
+                if self.icon:
+                    self.icon.run()
 
             tray_thread = threading.Thread(target=run_icon, daemon=False)
             tray_thread.start()

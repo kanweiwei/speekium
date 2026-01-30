@@ -66,7 +66,7 @@ def cleanup_old_socket(socket_path: str) -> bool:
                 test_socket.close()
                 logger.warning(f"socket_in_use: path={socket_path}, action=keep")
                 return False
-            except (ConnectionRefusedError, ConnectionResetError, socket.timeout, OSError):
+            except (TimeoutError, ConnectionRefusedError, ConnectionResetError, OSError):
                 # Socket file exists but no one listening = stale
                 test_socket.close()
                 os.remove(socket_path)
@@ -88,7 +88,7 @@ def cleanup_old_socket(socket_path: str) -> bool:
 # ===== JSON-RPC 2.0 Types =====
 
 
-def create_response(request_id: Any, result: Any = None, error: dict = None) -> dict:
+def create_response(request_id: Any, result: Any = None, error: Optional[dict] = None) -> dict:
     """Create JSON-RPC 2.0 response"""
     response = {"jsonrpc": "2.0", "id": request_id}
 
@@ -174,7 +174,9 @@ class SocketServer:
             await self._connect_notification_socket()
 
             # Start background reconnection task for notification socket
-            self._notification_reconnect_task = asyncio.create_task(self._notification_maintenance_loop())
+            self._notification_reconnect_task = asyncio.create_task(
+                self._notification_maintenance_loop()
+            )
 
             self.running = True
             logger.info(f"socket_server_started: socket_path={self.socket_path}")
@@ -232,6 +234,9 @@ class SocketServer:
 
     async def _accept_loop_unix(self):
         """Accept connections loop for Unix socket"""
+        # Assert that loop and server_socket are initialized
+        assert self.loop is not None
+        assert self.server_socket is not None
         # Accept connections loop
         logger.info("accept_loop_started")
 
@@ -242,6 +247,7 @@ class SocketServer:
             pass
 
         def on_readable():
+            assert self.server_socket is not None
             try:
                 client_socket, _ = self.server_socket.accept()
                 logger.info("client_connected")
@@ -276,6 +282,14 @@ class SocketServer:
             pass
 
         logger.info("accept_loop_ended")
+
+    async def _accept_loop_named_pipe(self):
+        """Accept connections loop for Windows (TCP socket fallback)"""
+        # Assert that loop and server_socket are initialized
+        assert self.loop is not None
+        assert self.server_socket is not None
+        # Use the same TCP socket accept logic as Unix
+        await self._accept_loop_unix()
 
     def _setup_named_pipe(self):
         """Create TCP socket for Windows (fallback for Named Pipe)"""
@@ -318,6 +332,8 @@ class SocketServer:
         self.server_socket.listen(5)
 
         while self.running:
+            assert self.loop is not None
+            assert self.server_socket is not None
             try:
                 client_socket, addr = await self.loop.sock_accept(self.server_socket)
                 logger.info(f"client_connected: address={addr}")
@@ -330,6 +346,7 @@ class SocketServer:
     async def _handle_client_unix(self, client_socket: socket.socket):
         """Handle Unix socket client connection"""
         import time
+
         client_id = id(client_socket)
         request_count = 0
         start_time = time.time()
@@ -349,16 +366,29 @@ class SocketServer:
                 try:
                     chunk = client_socket.recv(8192)
                     if not chunk:
-                        logger.info(f"client_eof: client_id={client_id}, requests={request_count}, duration={time.time()-start_time:.2f}s")
-                        print(f"[Speekium-Python] Client EOF (id={client_id}, requests={request_count})", flush=True)
+                        logger.info(
+                            f"client_eof: client_id={client_id}, requests={request_count}, duration={time.time() - start_time:.2f}s"
+                        )
+                        print(
+                            f"[Speekium-Python] Client EOF (id={client_id}, requests={request_count})",
+                            flush=True,
+                        )
                         break
                     data += chunk
-                    logger.info(f"received_chunk: client_id={client_id}, bytes={len(chunk)}, total={len(data)}")
+                    logger.info(
+                        f"received_chunk: client_id={client_id}, bytes={len(chunk)}, total={len(data)}"
+                    )
 
                     # Check for message size limit to prevent DoS
                     if len(data) > self._max_message_size:
-                        logger.error(f"message_too_large: client_id={client_id}, size={len(data)}, max={self._max_message_size}")
-                        error = create_error(-32600, "Message too large", f"Maximum size is {self._max_message_size} bytes")
+                        logger.error(
+                            f"message_too_large: client_id={client_id}, size={len(data)}, max={self._max_message_size}"
+                        )
+                        error = create_error(
+                            -32600,
+                            "Message too large",
+                            f"Maximum size is {self._max_message_size} bytes",
+                        )
                         response = create_response(None, error=error)
                         try:
                             client_socket.sendall((json.dumps(response) + "\n").encode())
@@ -377,7 +407,9 @@ class SocketServer:
                         try:
                             request = json.loads(line.decode())
                             method = request.get("method", "unknown")
-                            logger.info(f"processing_request: client_id={client_id}, req={request_count}, method={method}")
+                            logger.info(
+                                f"processing_request: client_id={client_id}, req={request_count}, method={method}"
+                            )
                         except json.JSONDecodeError as e:
                             logger.error(f"json_decode_error: client_id={client_id}, error={e}")
                             error = create_error(-32700, "Parse error", str(e))
@@ -391,11 +423,15 @@ class SocketServer:
                         # Send response
                         response_str = json.dumps(response) + "\n"
                         client_socket.sendall(response_str.encode())
-                        logger.info(f"response_sent: client_id={client_id}, req={request_count}, method={method}, bytes={len(response_str)}")
+                        logger.info(
+                            f"response_sent: client_id={client_id}, req={request_count}, method={method}, bytes={len(response_str)}"
+                        )
 
-                except socket.timeout:
+                except TimeoutError:
                     # Socket timeout - client hasn't sent data in 60s, check if still connected
-                    logger.info(f"socket_timeout: client_id={client_id}, duration={time.time()-start_time:.2f}s")
+                    logger.info(
+                        f"socket_timeout: client_id={client_id}, duration={time.time() - start_time:.2f}s"
+                    )
                     continue
                 except Exception as e:
                     logger.error(f"client_handler_error: client_id={client_id}, error={str(e)}")
@@ -409,8 +445,13 @@ class SocketServer:
             # Remove client from tracking set
             self._clients.discard(client_socket)
             client_socket.close()
-            logger.info(f"client_disconnected: client_id={client_id}, requests={request_count}, duration={duration:.2f}s")
-            print(f"[Speekium-Python] Client disconnected (id={client_id}, req={request_count}, dur={duration:.2f}s)", flush=True)
+            logger.info(
+                f"client_disconnected: client_id={client_id}, requests={request_count}, duration={duration:.2f}s"
+            )
+            print(
+                f"[Speekium-Python] Client disconnected (id={client_id}, req={request_count}, dur={duration:.2f}s)",
+                flush=True,
+            )
 
     async def _handle_request(self, request: dict) -> dict:
         """Handle JSON-RPC 2.0 request"""
@@ -464,11 +505,16 @@ class SocketServer:
                 # Use lock to serialize config access - prevents race conditions
                 # when multiple clients request config simultaneously
                 import time as time_module
+
                 async with self._config_lock:
                     current_time = time_module.time()
-                    if (self._config_cache is not None and
-                        current_time - self._config_cache_time < self._cache_ttl):
-                        logger.info(f"config_cache_hit: age={current_time - self._config_cache_time:.2f}s")
+                    if (
+                        self._config_cache is not None
+                        and current_time - self._config_cache_time < self._cache_ttl
+                    ):
+                        logger.info(
+                            f"config_cache_hit: age={current_time - self._config_cache_time:.2f}s"
+                        )
                         result = self._config_cache
                     else:
                         result = await self.daemon.handle_config()
@@ -504,7 +550,7 @@ class SocketServer:
                 return create_response(request_id, result=result)
             else:
                 return create_response(
-                    request_id, error=create_error(-32601, "Method not found", method=method)
+                    request_id, error=create_error(-32601, "Method not found", {"method": method})
                 )
 
             return create_response(request_id, result=result)
@@ -637,12 +683,16 @@ class SocketServer:
             if needs_reconnect:
                 reconnected = await self._reconnect_notification_socket()
                 if not reconnected:
-                    logger.debug(f"notification_reconnect_failed: attempt={attempt + 1}/{max_retries}")
+                    logger.debug(
+                        f"notification_reconnect_failed: attempt={attempt + 1}/{max_retries}"
+                    )
                     if attempt < max_retries - 1:
                         await asyncio.sleep(0.1 * (attempt + 1))  # Exponential backoff
                         continue
                     return False
 
+            # Socket should be connected at this point
+            assert self._notification_socket is not None
             try:
                 # Create JSON-RPC notification
                 notification = {"jsonrpc": "2.0", "method": method, "params": params}
@@ -655,7 +705,9 @@ class SocketServer:
                 return True
 
             except (ConnectionError, BrokenPipeError, OSError) as e:
-                logger.warning(f"notification_socket_send_failed: error={e}, attempt={attempt + 1}/{max_retries}")
+                logger.warning(
+                    f"notification_socket_send_failed: error={e}, attempt={attempt + 1}/{max_retries}"
+                )
                 self._notification_connected = False
                 # Try again if we have retries left
                 if attempt < max_retries - 1:
@@ -686,10 +738,14 @@ class SocketServer:
             # Queue notification for later sending when connection is restored
             if len(self._pending_notifications) < self._pending_notifications_max:
                 self._pending_notifications.append((method, params))
-                logger.debug(f"notification_queued: method={method}, pending={len(self._pending_notifications)}")
+                logger.debug(
+                    f"notification_queued: method={method}, pending={len(self._pending_notifications)}"
+                )
                 return True  # Return True to indicate notification was accepted
             else:
-                logger.warning(f"notification_queue_full: method={method}, max={self._pending_notifications_max}")
+                logger.warning(
+                    f"notification_queue_full: method={method}, max={self._pending_notifications_max}"
+                )
                 return False
 
         try:

@@ -39,11 +39,9 @@ class DownloadProgressTracker:
 
         # Send start event via callback
         if self.progress_callback:
-            self.progress_callback({
-                "event_type": "started",
-                "model": self.model_name,
-                "status": "downloading"
-            })
+            self.progress_callback(
+                {"event_type": "started", "model": self.model_name, "status": "downloading"}
+            )
 
     def on_progress(self, progress: "huggingface_hub.utils.Progress"):
         """Called by huggingface_hub during download"""
@@ -91,13 +89,15 @@ class DownloadProgressTracker:
 
             # Send progress event via callback
             if self.progress_callback:
-                self.progress_callback({
-                    "event_type": "progress",
-                    "model": self.model_name,
-                    "percent": percent,
-                    "speed": speed_str,
-                    "total_size": total_str
-                })
+                self.progress_callback(
+                    {
+                        "event_type": "progress",
+                        "model": self.model_name,
+                        "percent": percent,
+                        "speed": speed_str,
+                        "total_size": total_str,
+                    }
+                )
 
     def complete(self):
         """Mark download as complete"""
@@ -115,18 +115,26 @@ class DownloadProgressTracker:
 
         # Send completion event via callback
         if self.progress_callback:
-            self.progress_callback({
-                "event_type": "completed",
-                "model": self.model_name,
-                "elapsed_seconds": int(elapsed),
-                "status": "completed"
-            })
+            self.progress_callback(
+                {
+                    "event_type": "completed",
+                    "model": self.model_name,
+                    "elapsed_seconds": int(elapsed),
+                    "status": "completed",
+                }
+            )
 
 
 class ModelScopeProgressCallback:
     """Custom ModelScope progress callback that emits JSON logs for frontend"""
 
-    def __init__(self, filename: str, file_size: int, model_name: str = "SenseVoice ASR", progress_callback: Optional[Callable[[dict], None]] = None):
+    def __init__(
+        self,
+        filename: str,
+        file_size: int,
+        model_name: str = "SenseVoice ASR",
+        progress_callback: Optional[Callable[[dict], None]] = None,
+    ):
         self.filename = filename
         self.file_size = file_size
         self.model_name = model_name
@@ -182,13 +190,15 @@ class ModelScopeProgressCallback:
 
             # Send progress event via callback
             if self.progress_callback:
-                self.progress_callback({
-                    "event_type": "progress",
-                    "model": self.model_name,
-                    "percent": percent,
-                    "speed": speed_str,
-                    "total_size": total_str
-                })
+                self.progress_callback(
+                    {
+                        "event_type": "progress",
+                        "model": self.model_name,
+                        "percent": percent,
+                        "speed": speed_str,
+                        "total_size": total_str,
+                    }
+                )
 
     def end(self):
         """Called when download completes"""
@@ -206,9 +216,11 @@ class ModelScopeProgressCallback:
 
         # Send completion event via callback
         if self.progress_callback:
-            self.progress_callback({
-                "event_type": "completed",
-                "model": self.model_name,
-                "elapsed_seconds": int(elapsed),
-                "status": "completed"
-            })
+            self.progress_callback(
+                {
+                    "event_type": "completed",
+                    "model": self.model_name,
+                    "elapsed_seconds": int(elapsed),
+                    "status": "completed",
+                }
+            )

@@ -178,6 +178,7 @@ class ClaudeBackend(LLMBackend):
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
+        assert process.stdout is not None  # For type checker
         buffer = ""
         full_response = ""
         sentence_endings = re.compile(r"([。！？\n])")
