@@ -12,6 +12,7 @@ Services:
 - TTSService: Text-to-Speech conversion
 - VADService: Voice Activity Detection
 - ConfigService: Configuration management
+- ServiceContainer: Dependency injection container
 """
 
 from .asr_service import ASRService, TranscriptionResult
@@ -23,6 +24,7 @@ from .base import (
     ServiceInitializationError,
 )
 from .config_service import ConfigService
+from .container import ServiceContainer, get_container, shutdown_default_container
 from .llm_service import ChatResult, LLMService
 from .recording_service import RecordingResult, RecordingService, RecordingState
 from .tts_service import SynthesisResult, TTSService
@@ -53,4 +55,8 @@ __all__ = [
     "VADConfig",
     # Config
     "ConfigService",
+    # Container
+    "ServiceContainer",
+    "get_container",
+    "shutdown_default_container",
 ]
