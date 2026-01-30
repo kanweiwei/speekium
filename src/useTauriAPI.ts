@@ -11,12 +11,6 @@ import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 // Type Definitions
 // ============================================================================
 
-interface ConfigResult {
-  success: boolean;
-  config?: Record<string, any>;
-  error?: string;
-}
-
 interface RecordingResult {
   success: boolean;
   text?: string;
@@ -75,22 +69,19 @@ export function useTauriAPI() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [config, setConfig] = useState<Record<string, any> | null>(null);
+  // NOTE: config state removed - use configStore from '@/stores/ConfigStore' instead
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [daemonHealth, setDaemonHealth] = useState<HealthResult | null>(null);
   const [audioQueue, setAudioQueue] = useState<Array<{ path: string; text: string }>>([]);
   const [isPlayingQueue, setIsPlayingQueue] = useState(false);
   const [daemonReady, setDaemonReady] = useState(false);
 
-  // Load config and start periodic health check only after daemon is ready
+  // Start periodic health check only after daemon is ready
   useEffect(() => {
-    // Only load config after daemon is ready
+    // Only start health check after daemon is ready
     if (!daemonReady) {
       return;
     }
-
-    // Initial config load when daemon becomes ready
-    loadConfig();
 
     // Initial health check when daemon becomes ready
     checkDaemonHealth();
@@ -150,34 +141,10 @@ export function useTauriAPI() {
   // API Functions
   // ============================================================================
 
-  const loadConfig = async () => {
-    try {
-      const result = await invoke<ConfigResult>('load_config');
-      if (result.success && result.config) {
-        setConfig(result.config);
-      } else if (result.error) {
-        // Only log error if there's an actual error message
-        console.error('[Config] Load failed:', result.error);
-      }
-    } catch (error) {
-      console.error('[Config] Invoke failed:', error);
-    }
-  };
-
-  const saveConfig = async (newConfig: Record<string, any>) => {
-    try {
-      const result = await invoke<{ success: boolean; error?: string }>('save_config', { config: newConfig });
-      if (result.success) {
-        setConfig(newConfig);
-      } else {
-        console.error('[Config] Save failed:', result.error);
-        throw new Error(result.error || 'Save failed');
-      }
-    } catch (error) {
-      console.error('[Config] Save invoke failed:', error);
-      throw error;
-    }
-  };
+  // NOTE: loadConfig and saveConfig removed - use configStore from '@/stores/ConfigStore'
+  // import { configStore } from '@/stores/ConfigStore';
+  // const config = configStore.getConfig();
+  // configStore.updateConfig({ key: value });
 
   const startRecording = async (
     mode: string = 'push-to-talk',
@@ -623,7 +590,7 @@ export function useTauriAPI() {
     isRecording,
     isProcessing,
     isSpeaking,
-    config,
+    // NOTE: config removed - use configStore from '@/stores/ConfigStore'
     messages,
     daemonHealth,
     audioQueue,
@@ -631,8 +598,7 @@ export function useTauriAPI() {
     forceStopRecording,
     chatGenerator,
     clearHistory,
-    loadConfig,
-    saveConfig,
+    // NOTE: loadConfig/saveConfig removed - use configStore from '@/stores/ConfigStore'
     generateTTS,
     playAudio,
     checkDaemonHealth,

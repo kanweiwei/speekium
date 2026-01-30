@@ -2,6 +2,7 @@ import React from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useTauriAPI } from './useTauriAPI';
+import { useSettings } from './contexts/SettingsContext';
 import { Settings } from './Settings';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { NewSessionDialog } from './components/NewSessionDialog';
@@ -453,7 +454,6 @@ function App() {
     isRecording,
     isProcessing,
     messages,
-    config,
     startRecording,
     forceStopRecording,
     chatGenerator,
@@ -463,6 +463,8 @@ function App() {
     updateLastAssistantMessage,
     setDaemonReady,
   } = useTauriAPI();
+
+  const { config } = useSettings();
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [isNewSessionDialogOpen, setIsNewSessionDialogOpen] = React.useState(false);

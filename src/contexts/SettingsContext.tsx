@@ -1,15 +1,20 @@
 /**
  * Settings Context Provider
  *
- * Manages global settings state with auto-save functionality
+ * Manages global settings state using ConfigStore as single source of truth.
+ * Simplified to pure UI layer - all persistence handled by ConfigStore.
+ *
+ * Architecture Changes:
+ * - Uses ConfigStore for all config operations
+ * - Removed independent debounced save (handled by ConfigStore)
+ * - Subscribes to ConfigStore for reactive updates
+ * - Simplified to UI state management only
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { HotkeyConfig } from '../types/hotkey';
-
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+import { configStore, type SaveStatus } from '@/stores/ConfigStore';
 
 interface SettingsContextValue {
   /** Current configuration */
@@ -18,233 +23,104 @@ interface SettingsContextValue {
   saveStatus: SaveStatus;
   /** Last save error message */
   saveError: string | null;
-  /** Update a single config value and auto-save */
+  /** Whether config is currently loading */
+  loading: boolean;
+  /** Update a single config value (auto-save via ConfigStore) */
   updateConfig: (key: string, value: any) => void;
-  /** Update multiple config values and auto-save */
+  /** Update multiple config values (auto-save via ConfigStore) */
   updateConfigBatch: (updates: Record<string, any>) => void;
   /** Manually save current config */
   saveConfig: () => Promise<void>;
-  /** Update hotkey configuration and auto-save */
+  /** Update hotkey configuration (auto-save via ConfigStore) */
   updateHotkey: (hotkey: HotkeyConfig) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
 
 /**
- * Debounced save function
- */
-const createDebouncedSave = (
-  onSave: (config: Record<string, any>) => Promise<void>,
-  onStatusChange: (status: SaveStatus, error?: string) => void
-) => {
-  let timeoutId: NodeJS.Timeout | null = null;
-
-  return (config: Record<string, any>) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    timeoutId = setTimeout(async () => {
-      onStatusChange('saving');
-      try {
-        await onSave(config);
-        onStatusChange('saved');
-
-        // Reset to idle after 2 seconds
-        setTimeout(() => {
-          onStatusChange('idle');
-        }, 2000);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Save failed';
-        onStatusChange('error', errorMessage);
-        console.error('[Settings] Auto-save failed:', error);
-      }
-    }, 500); // 500ms debounce
-  };
-};
-
-/**
  * SettingsProvider component
  *
- * Provides global state management for settings with auto-save
+ * Provides global state management for settings using ConfigStore
  */
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  // Local state for UI updates (synced with ConfigStore via subscription)
   const [config, setConfig] = useState<Record<string, any> | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [daemonReady, setDaemonReady] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Load config on mount (only after daemon is ready)
+  // Subscribe to ConfigStore for state updates
   useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
-        if (result.success && result.config) {
-          // Debug log
-          console.log('[SettingsContext] Raw config from backend:', result.config);
-
-          // Check zhipu provider
-          const zhipuProvider = result.config.llm_providers?.find((p: any) => p.name === 'zhipu');
-          console.log('[SettingsContext] Zhipu provider from backend:', zhipuProvider);
-
-          // Ensure push_to_talk_hotkey has default value if not present
-          const configWithDefaults = {
-            ...result.config,
-            push_to_talk_hotkey: result.config.push_to_talk_hotkey || {
-              modifiers: ['Alt'],
-              key: 'Digit3',
-              displayName: '⌥3',
-            },
-          };
-          setConfig(configWithDefaults);
-        }
-      } catch (error) {
-        // Silently ignore errors during daemon initialization
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (!errorMessage.includes('语音服务正在启动中')) {
-          console.error('[Settings] Failed to load config:', error);
-        }
-      }
-    };
-
-    // Only load config after daemon is ready
-    if (daemonReady) {
-      loadConfig();
-    }
-  }, [daemonReady]);
-
-  // Listen for daemon status events
-  useEffect(() => {
-    const unlistenPromise = listen<{ status: string; message: string }>('daemon-status', (event) => {
-      if (event.payload.status === 'ready') {
-        setDaemonReady(true);
-      }
+    const unsubscribe = configStore.subscribe((state) => {
+      setConfig(state.config ? { ...state.config } : null);
+      setSaveStatus(state.saveStatus);
+      setSaveError(state.error);
+      setLoading(state.loading);
     });
 
-    return () => {
-      unlistenPromise.then(unlisten => unlisten());
-    };
+    return unsubscribe;
   }, []);
 
-  // Create debounced save function
-  const debouncedSave = useMemo(() => {
-    const saveFunction = async (newConfig: Record<string, any>) => {
-      const result = await invoke<{ success: boolean; error?: string }>('save_config', {
-        config: newConfig,
+  // Ensure hotkey default value
+  useEffect(() => {
+    if (config && !config.push_to_talk_hotkey) {
+      configStore.updateConfig({
+        push_to_talk_hotkey: {
+          modifiers: ['Alt'],
+          key: 'Digit3',
+          displayName: '⌥3',
+        },
       });
-
-      if (!result.success) {
-        throw new Error(result.error || 'Save failed');
-      }
-    };
-
-    return createDebouncedSave(saveFunction, setSaveError);
-  }, []);
+    }
+  }, [config]);
 
   /**
    * Update a single config value
    */
   const updateConfig = useCallback((key: string, value: any) => {
-    setConfig(prev => {
-      if (!prev) return prev;
-
-      const newConfig = {
-        ...prev,
-        [key]: value,
-      };
-
-      // Trigger auto-save
-      debouncedSave(newConfig);
-
-      return newConfig;
-    });
-  }, [debouncedSave]);
+    configStore.updateConfig({ [key]: value });
+  }, []);
 
   /**
    * Update multiple config values at once
    */
   const updateConfigBatch = useCallback((updates: Record<string, any>) => {
-    setConfig(prev => {
-      if (!prev) return prev;
-
-      const newConfig = {
-        ...prev,
-        ...updates,
-      };
-
-      // Trigger auto-save
-      debouncedSave(newConfig);
-
-      return newConfig;
-    });
-  }, [debouncedSave]);
+    configStore.updateConfig(updates);
+  }, []);
 
   /**
    * Manually save current config
    */
   const saveConfig = useCallback(async () => {
-    if (!config) {
-      throw new Error('No config to save');
-    }
-
-    setSaveStatus('saving');
-    setSaveError(null);
-
-    try {
-      const result = await invoke<{ success: boolean; error?: string }>('save_config', {
-        config: config,
-      });
-
-      if (result.success) {
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      } else {
-        throw new Error(result.error || 'Save failed');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Save failed';
-      setSaveStatus('error');
-      setSaveError(errorMessage);
-      console.error('[Settings] Manual save failed:', error);
-      throw error;
-    }
-  }, [config]);
+    await configStore.saveConfig(true); // immediate save
+  }, []);
 
   /**
    * Update hotkey configuration
+   * Special handling: also update backend hotkey immediately
    */
-  const updateHotkey = useCallback(async (hotkey: HotkeyConfig) => {
-    setConfig(prev => {
-      if (!prev) return prev;
+  const updateHotkey = useCallback((hotkey: HotkeyConfig) => {
+    // Update config via ConfigStore
+    configStore.updateConfig({ push_to_talk_hotkey: hotkey });
 
-      const newConfig = {
-        ...prev,
-        push_to_talk_hotkey: hotkey,
-      };
-
-      // Trigger auto-save
-      debouncedSave(newConfig);
-
-      // Also update hotkey in backend immediately
-      invoke('update_hotkey', { hotkeyConfig: hotkey })
-        .then((result: unknown) => {
-          const res = result as { success: boolean; error?: string };
-          if (!res.success) {
-            console.error('[Settings] Failed to update hotkey:', res.error);
-          }
-        })
-        .catch((error) => {
-          console.error('[Settings] Failed to update hotkey:', error);
-        });
-
-      return newConfig;
-    });
-  }, [debouncedSave]);
+    // Also update hotkey in backend immediately (for PTT)
+    invoke('update_hotkey', { hotkeyConfig: hotkey })
+      .then((result: unknown) => {
+        const res = result as { success: boolean; error?: string };
+        if (!res.success) {
+          console.error('[Settings] Failed to update hotkey:', res.error);
+        }
+      })
+      .catch((error) => {
+        console.error('[Settings] Failed to update hotkey:', error);
+      });
+  }, []);
 
   const contextValue: SettingsContextValue = {
     config,
     saveStatus,
     saveError,
+    loading,
     updateConfig,
     updateConfigBatch,
     saveConfig,

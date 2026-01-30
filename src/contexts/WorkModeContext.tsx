@@ -1,16 +1,24 @@
 /**
  * Work Mode Context Provider
  *
- * Manages global state for work mode, provides mode switching and persistence functionality
+ * Manages global state for work mode, provides mode switching and persistence functionality.
+ * Now uses ConfigStore as the single source of truth for configuration management.
+ *
+ * Architecture Changes:
+ * - Uses ConfigStore for all config operations (no duplicate saves)
+ * - Subscribes to ConfigStore for reactive updates (no polling needed)
+ * - Keeps localStorage sync for fast initial loading
+ * - Simplified save logic (handled by ConfigStore)
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import type { WorkMode, WorkModeChangeEvent } from '@/types/workMode';
 import {
   DEFAULT_WORK_MODE,
   WORK_MODE_STORAGE_KEY,
 } from '@/types/workMode';
+import { configStore } from '@/stores/ConfigStore';
 
 /**
  * WorkModeContext interface definition
@@ -18,7 +26,7 @@ import {
 interface WorkModeContextValue {
   /** Current work mode */
   workMode: WorkMode;
-  /** Set work mode (persist to backend) */
+  /** Set work mode (persist to backend via ConfigStore) */
   setWorkMode: (mode: WorkMode, source?: WorkModeChangeEvent['source']) => void;
   /** Set work mode locally only (no backend call, used by hotkey events) */
   setWorkModeLocal: (mode: WorkMode) => void;
@@ -40,11 +48,11 @@ const WorkModeContext = createContext<WorkModeContextValue | undefined>(undefine
 /**
  * WorkModeProvider component
  *
- * Provides global state management for work mode
+ * Provides global state management for work mode using ConfigStore
  */
 export function WorkModeProvider({ children }: { children: React.ReactNode }) {
+  // Initialize state from localStorage (fast loading) or default
   const [workMode, setWorkModeState] = useState<WorkMode>(() => {
-    // Read saved mode from localStorage, use default value if not exists
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(WORK_MODE_STORAGE_KEY);
       if (saved === 'conversation' || saved === 'text-input') {
@@ -55,132 +63,80 @@ export function WorkModeProvider({ children }: { children: React.ReactNode }) {
   });
 
   /**
-   * Load work mode from localStorage and config file
-   * Also poll for changes from backend (e.g., hotkey shortcuts)
+   * Subscribe to ConfigStore for work mode changes
+   * This replaces the polling mechanism - we get notified when config changes
    */
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    let lastKnownMode: WorkMode | null = workMode;
 
-    let lastKnownMode: WorkMode | null = null;
-
-    // First read from localStorage (fast loading)
-    const saved = localStorage.getItem(WORK_MODE_STORAGE_KEY);
-    if (saved === 'conversation' || saved === 'text-input') {
-      setWorkModeState(saved);
-      lastKnownMode = saved;
-    }
-
-    // Sync from config file and poll for changes
-    const syncFromConfig = async () => {
-      try {
-        // Use lightweight get_work_mode command (reads from Rust state, no daemon call)
-        const currentMode = await invoke<string>('get_work_mode');
-
-        if (currentMode === 'conversation' || currentMode === 'text-input') {
-          // Only update if mode changed (avoid unnecessary re-renders)
-          if (currentMode !== lastKnownMode) {
-            console.log('[WorkMode] Mode changed (detected via polling):', currentMode);
-            setWorkModeState(currentMode);
-            localStorage.setItem(WORK_MODE_STORAGE_KEY, currentMode);
-            lastKnownMode = currentMode;
-
-            // Save to config file (persist the change)
-            try {
-              const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
-              if (result.success && result.config) {
-                const updatedConfig = {
-                  ...result.config,
-                  work_mode: currentMode,
-                };
-                await invoke<{ success: boolean; error?: string }>('save_config', {
-                  config: updatedConfig,
-                });
-              }
-            } catch (saveError) {
-              console.error('[WorkMode] Failed to save config after detecting change:', saveError);
-            }
-          }
+    // Subscribe to ConfigStore changes
+    const unsubscribe = configStore.subscribe((state) => {
+      const newMode = state.config?.work_mode;
+      if (newMode === 'conversation' || newMode === 'text-input') {
+        // Only update if mode actually changed
+        if (newMode !== lastKnownMode) {
+          console.log('[WorkMode] Mode changed (via ConfigStore):', newMode);
+          setWorkModeState(newMode);
+          localStorage.setItem(WORK_MODE_STORAGE_KEY, newMode);
+          lastKnownMode = newMode;
         }
-      } catch (error) {
-        console.error('[WorkMode] Failed to get work mode:', error);
       }
-    };
+    });
 
-    // Initial sync
-    syncFromConfig();
-
-    // Poll every 500ms for config changes (lightweight operation)
-    const intervalId = setInterval(syncFromConfig, 500);
+    // Also listen for ptt-state events from backend (hotkey shortcuts)
+    const unlistenPromise = listen<{ work_mode?: WorkMode }>('ptt-state', (event) => {
+      const newMode = event.payload.work_mode;
+      if (newMode && newMode !== lastKnownMode) {
+        console.log('[WorkMode] Mode changed (via PTT event):', newMode);
+        setWorkModeState(newMode);
+        localStorage.setItem(WORK_MODE_STORAGE_KEY, newMode);
+        lastKnownMode = newMode;
+      }
+    });
 
     return () => {
-      clearInterval(intervalId);
+      unsubscribe();
+      unlistenPromise.then(unlisten => unlisten());
     };
   }, []);
 
   /**
-   * Set work mode and persist to localStorage and config file
+   * Set work mode and persist via ConfigStore
+   * ConfigStore handles:
+   * - Updating config state
+   * - Updating localStorage
+   * - Updating backend WORK_MODE state
+   * - Debounced save to config file
    */
   const setWorkMode = useCallback(async (mode: WorkMode, _source: WorkModeChangeEvent['source'] = 'settings') => {
-    // Update state
+    // Update local state immediately (optimistic update)
     setWorkModeState(mode);
 
-    // Persist to localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(WORK_MODE_STORAGE_KEY, mode);
-    }
-
-    // CRITICAL: Update backend WORK_MODE state immediately
-    // This ensures PTT shortcut and other backend features use the correct mode
+    // Use ConfigStore for all persistence
     try {
-      await invoke('set_work_mode', { mode });
-      console.log('[WorkMode] Backend state updated to:', mode);
+      await configStore.setWorkMode(mode);
+      console.log('[WorkMode] Mode set via ConfigStore:', mode);
     } catch (error) {
-      console.error('[WorkMode] Failed to update backend state:', error);
+      console.error('[WorkMode] Failed to set work mode:', error);
+      // Revert state on error
+      setWorkModeState(configStore.getWorkMode());
     }
-
-    // Save to config file (Python daemon reads from here)
-    try {
-      // First load complete configuration
-      const result = await invoke<{ success: boolean; config?: Record<string, any> }>('load_config');
-
-      if (result.success && result.config) {
-        // Update work_mode field
-        const updatedConfig = {
-          ...result.config,
-          work_mode: mode,
-        };
-
-        // Save complete configuration and check return value
-        const saveResult = await invoke<{ success: boolean; error?: string }>('save_config', {
-          config: updatedConfig,
-        });
-
-        if (saveResult.success) {
-          // Configuration saved successfully
-        } else {
-          console.error(`[WorkMode] Failed to save configuration: ${saveResult.error}`);
-        }
-      } else {
-        console.error('[WorkMode] Failed to load configuration:', result);
-      }
-    } catch (error) {
-      console.error('[WorkMode] Failed to save configuration:', error);
-    }
-  }, [workMode]);
+  }, []);
 
   /**
    * Set work mode locally without calling backend
    * Used when the backend has already saved the config (e.g., hotkey events)
+   * ConfigStore subscription will sync the state
    */
   const setWorkModeLocal = useCallback((mode: WorkMode) => {
-    // Update state
+    console.log('[WorkMode] Setting mode locally:', mode);
     setWorkModeState(mode);
 
-    // Persist to localStorage
+    // Persist to localStorage for fast loading
     if (typeof window !== 'undefined') {
       localStorage.setItem(WORK_MODE_STORAGE_KEY, mode);
     }
-    // Note: No backend call - backend already saved the config
+    // Note: No backend call - ConfigStore will sync via subscription
   }, []);
 
   /**
