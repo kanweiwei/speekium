@@ -4,7 +4,7 @@ use crate::audio::AudioRecorder;
 use crate::daemon::AUDIO_RECORDER;
 use crate::database;
 use crate::database::Database;
-use crate::state::AppState;
+use crate::state;
 use crate::ui;
 use crate::shortcuts;
 use crate::daemon;
@@ -50,7 +50,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let db = Database::new(db_path)
         .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!("Failed to initialize database: {}", e)))?;
 
-    app.manage(AppState { db });
+    app.manage(state::AppState { db });
 
     // Create tray icon (reads language from config file)
     ui::create_tray(app.handle(), cleanup_daemon)?;

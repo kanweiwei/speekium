@@ -1,0 +1,26 @@
+{
+  "name": "@speekium/shared-types",
+  "version": "0.1.0",
+  "description": "Shared type definitions for Speekium application",
+  "type": "module",
+  "main": "pkg/shared_types.js",
+  "types": "pkg/shared_types.d.ts",
+  "files": [
+    "pkg/"
+  ],
+  "scripts": {
+    "build": "wasm-pack build --target web --out-dir pkg",
+    "build:node": "wasm-pack build --target nodejs --out-dir pkg",
+    "build:bundler": "wasm-pack build --target bundler --out-dir pkg",
+    "dev": "wasm-pack build --dev --target web --out-dir pkg",
+    "test": "cargo test",
+    "clean": "rm -rf pkg target"
+  },
+  "keywords": [
+    "speekium",
+    "shared-types",
+    "wasm"
+  ],
+  "author": "Speekium contributors",
+  "license": "MIT"
+}

@@ -12,6 +12,7 @@ mod shortcuts;
 mod commands;
 mod db_commands;
 mod app;
+mod event;
 
 // Public API
 pub use app::run;
