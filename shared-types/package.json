@@ -3,18 +3,31 @@
   "version": "0.1.0",
   "description": "Shared type definitions for Speekium application",
   "type": "module",
-  "main": "pkg/shared_types.js",
-  "types": "pkg/shared_types.d.ts",
+  "main": "index.ts",
+  "types": "index.d.ts",
   "files": [
+    "index.ts",
+    "index.d.ts",
     "pkg/"
   ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.ts"
+    },
+    "./wasm": {
+      "types": "./pkg/shared_types.d.ts",
+      "import": "./pkg/shared_types.js"
+    }
+  },
   "scripts": {
     "build": "wasm-pack build --target web --out-dir pkg",
     "build:node": "wasm-pack build --target nodejs --out-dir pkg",
     "build:bundler": "wasm-pack build --target bundler --out-dir pkg",
     "dev": "wasm-pack build --dev --target web --out-dir pkg",
     "test": "cargo test",
-    "clean": "rm -rf pkg target"
+    "clean": "rm -rf pkg target",
+    "generate-types": "echo 'TypeScript types are auto-generated from Rust source'"
   },
   "keywords": [
     "speekium",

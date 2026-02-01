@@ -186,11 +186,21 @@ class TTSService(BaseService):
         Args:
             config: Configuration dictionary
         """
-        tts_config = config.get("tts_backend", {})
+        # tts_backend can be a string (legacy) or a dict (new format)
+        tts_backend_value = config.get("tts_backend", "edge")
+
+        if isinstance(tts_backend_value, str):
+            # Legacy format: tts_backend is just a string like "edge" or "piper"
+            default_backend = tts_backend_value
+            languages_config = {}
+        else:
+            # New format: tts_backend is a dict with 'default' and 'languages'
+            default_backend = tts_backend_value.get("default", self.default_backend)
+            languages_config = tts_backend_value.get("languages", {})
 
         self._backend_config = {
-            "default": tts_config.get("default", self.default_backend),
-            "languages": tts_config.get("languages", {}).copy(),
+            "default": default_backend,
+            "languages": languages_config.copy() if isinstance(languages_config, dict) else {},
         }
 
         logger.info("tts_config_loaded", config=self._backend_config)

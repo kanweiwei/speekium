@@ -61,8 +61,8 @@ class VADService(BaseService):
     ):
         super().__init__(config, progress_callback)
 
-        # VAD configuration
-        self.config = VADConfig(
+        # VAD configuration - store separately to avoid overriding BaseService.config
+        self._vad_config = VADConfig(
             threshold=config.threshold,
             consecutive_threshold=config.consecutive_threshold,
             silence_duration=config.silence_duration,
@@ -88,12 +88,12 @@ class VADService(BaseService):
     @property
     def threshold(self) -> float:
         """Get VAD threshold."""
-        return self.config.threshold
+        return self._vad_config.threshold
 
     @property
     def consecutive_threshold(self) -> int:
         """Get consecutive threshold."""
-        return self.config.consecutive_threshold
+        return self._vad_config.consecutive_threshold
 
     async def _on_initialize(self) -> None:
         """Initialize VAD service (defer model loading until needed)."""
@@ -207,7 +207,7 @@ class VADService(BaseService):
             # Get speech probability
             prob = self._model(audio_chunk, sample_rate).item()
 
-            return prob >= self.config.threshold
+            return prob >= self._vad_config.threshold
 
         except Exception as e:
             logger.error("vad_detection_failed", error=str(e))
@@ -274,22 +274,22 @@ class VADService(BaseService):
             max_recording_duration: Maximum recording duration
         """
         if threshold is not None:
-            self.config.threshold = max(0.0, min(1.0, threshold))
+            self._vad_config.threshold = max(0.0, min(1.0, threshold))
 
         if consecutive_threshold is not None:
-            self.config.consecutive_threshold = max(1, consecutive_threshold)
+            self._vad_config.consecutive_threshold = max(1, consecutive_threshold)
 
         if silence_duration is not None:
-            self.config.silence_duration = max(0.1, silence_duration)
+            self._vad_config.silence_duration = max(0.1, silence_duration)
 
         if pre_buffer is not None:
-            self.config.pre_buffer = max(0.0, pre_buffer)
+            self._vad_config.pre_buffer = max(0.0, pre_buffer)
 
         if min_speech_duration is not None:
-            self.config.min_speech_duration = max(0.1, min_speech_duration)
+            self._vad_config.min_speech_duration = max(0.1, min_speech_duration)
 
         if max_recording_duration is not None:
-            self.config.max_recording_duration = max(1.0, max_recording_duration)
+            self._vad_config.max_recording_duration = max(1.0, max_recording_duration)
 
         logger.info("vad_config_updated", config=self.config)
 
@@ -301,12 +301,12 @@ class VADService(BaseService):
             Dictionary with VAD config
         """
         return {
-            "threshold": self.config.threshold,
-            "consecutive_threshold": self.config.consecutive_threshold,
-            "silence_duration": self.config.silence_duration,
-            "pre_buffer": self.config.pre_buffer,
-            "min_speech_duration": self.config.min_speech_duration,
-            "max_recording_duration": self.config.max_recording_duration,
+            "threshold": self._vad_config.threshold,
+            "consecutive_threshold": self._vad_config.consecutive_threshold,
+            "silence_duration": self._vad_config.silence_duration,
+            "pre_buffer": self._vad_config.pre_buffer,
+            "min_speech_duration": self._vad_config.min_speech_duration,
+            "max_recording_duration": self._vad_config.max_recording_duration,
         }
 
     async def load_config_from_dict(self, config: dict) -> None:

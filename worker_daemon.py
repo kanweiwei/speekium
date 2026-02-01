@@ -165,12 +165,17 @@ class SpeekiumDaemon:
         if self.socket_server:
             self.socket_server.broadcast_notification("ptt_event", event)
 
-    def _on_download_progress(self, progress_data: dict):
+    def _on_download_progress(self, event: Any) -> None:
         """Download progress callback - broadcasts to all socket clients
 
         Args:
-            progress_data: Progress data dict with event_type, model, percent, etc.
+            event: ProgressEvent with service, stage, progress, message
         """
+        from dataclasses import asdict
+
+        # Convert ProgressEvent to dict for broadcasting
+        progress_data = asdict(event) if hasattr(event, "__dataclass_fields__") else event
+
         if self.socket_server:
             self.socket_server.broadcast_notification("download_progress", progress_data)
         else:
@@ -245,32 +250,8 @@ class SpeekiumDaemon:
             print("[Speekium] 正在加载语音助手...", file=sys.stderr, flush=True)
             self.assistant = VoiceAssistant(progress_callback=self._on_download_progress)
 
-            # Notify: Loading VAD model
-            self._emit_init_progress(
-                "loading_vad", "正在加载语音活动检测模型...", "Loading VAD model..."
-            )
-            logger.info("preloading_vad_model")
-            print("[Speekium] 正在加载 VAD 模型...", file=sys.stderr, flush=True)
-            self.assistant.load_vad()
-            print("[Speekium] VAD 模型加载完成", file=sys.stderr, flush=True)
-
-            # Notify: Loading ASR model
-            self._emit_init_progress(
-                "loading_asr", "正在加载语音识别模型...", "Loading ASR model..."
-            )
-            logger.info("preloading_asr_model")
-            print("[Speekium] 正在加载 ASR 模型...", file=sys.stderr, flush=True)
-            self.assistant.load_asr()
-            print("[Speekium] ASR 模型加载完成", file=sys.stderr, flush=True)
-
-            # Notify: LLM preloading skipped
-            self._emit_init_progress(
-                "llm_skipped", "LLM 后端将在需要时加载", "LLM backend will load on demand"
-            )
-            print("[Speekium] LLM 后端将在需要时加载", file=sys.stderr, flush=True)
-            # TODO: Load LLM backend when API key is configured
-            # For now, skip LLM preloading to allow daemon to start without API key
-            # self.assistant.load_llm()
+            # Start the voice assistant - this loads VAD and ASR models
+            await self.assistant.start()
 
             # Note: PTT hotkey is now handled by Tauri global shortcuts (Rust side)
             # The pynput hotkey manager is no longer needed
@@ -309,7 +290,7 @@ class SpeekiumDaemon:
                     self._emit_ptt_event("detected")
                     self._log("🎤 检测到声音，开始录音...")
 
-                audio = self.assistant.record_with_vad(on_speech_detected=on_speech)
+                audio = await self.assistant.record_with_vad(on_speech_detected=on_speech)
             else:
                 # Push-to-talk recording mode - send recording event
                 self._emit_ptt_event("recording")
@@ -323,7 +304,7 @@ class SpeekiumDaemon:
 
             self._log("🔄 识别中...")
             self._emit_ptt_event("processing")
-            text, language = self.assistant.transcribe(audio)
+            text, language = await self.assistant.transcribe_async(audio)
 
             self._log(f"✅ 识别完成: '{text}' ({language})")
             self._emit_ptt_event("idle")
@@ -425,7 +406,7 @@ class SpeekiumDaemon:
 
             # ASR
             self._log("🔄 识别中...")
-            text, language = self.assistant.transcribe(samples)
+            text, language = await self.assistant.transcribe_async(samples)
             self._log(f"✅ 识别完成: '{text}' ({language})")
 
             if not text or not text.strip():
@@ -487,7 +468,7 @@ class SpeekiumDaemon:
 
             # ASR
             self._log("🔄 识别中...")
-            text, language = self.assistant.transcribe(audio)
+            text, language = await self.assistant.transcribe_async(audio)
             self._log(f"✅ 识别完成: '{text}' ({language})")
 
             if not text or not text.strip():
@@ -526,46 +507,31 @@ class SpeekiumDaemon:
         try:
             self._log(f"💬🔊 PTT LLM+TTS: {text[:50]}...")
 
-            backend = self.assistant.load_llm()
+            container = await self.assistant._ensure_container()
+            llm_service = container.llm
             full_response = ""
 
-            # Check if streaming is supported
-            if not hasattr(backend, "chat_stream"):
-                # Fallback to non-streaming mode
-                response = backend.chat(text)
-                full_response = response
-                self._emit_ptt_event("assistant_chunk", {"content": response})
+            # Stream LLM + TTS generation
+            async for sentence in llm_service.chat_stream(text):
+                if sentence and sentence.strip():
+                    full_response += sentence
+                    self._log(f"📤 PTT streaming: {sentence[:30]}...")
 
-                # Generate TTS
-                if use_tts:
-                    audio_path = await self.assistant.generate_audio(response)
-                    if audio_path:
-                        self._emit_ptt_event(
-                            "audio_chunk", {"audio_path": audio_path, "text": response}
-                        )
-                        await self._play_audio(audio_path)
-            else:
-                # Stream LLM + TTS generation
-                async for sentence in backend.chat_stream(text):
-                    if sentence and sentence.strip():
-                        full_response += sentence
-                        self._log(f"📤 PTT streaming: {sentence[:30]}...")
+                    # Send text chunk via stderr
+                    self._emit_ptt_event("assistant_chunk", {"content": sentence})
 
-                        # Send text chunk via stderr
-                        self._emit_ptt_event("assistant_chunk", {"content": sentence})
-
-                        # Generate TTS immediately
-                        if use_tts:
-                            try:
-                                audio_path = await self.assistant.generate_audio(sentence)
-                                if audio_path:
-                                    self._log(f"🔊 TTS completed: {audio_path}")
-                                    self._emit_ptt_event(
-                                        "audio_chunk", {"audio_path": audio_path, "text": sentence}
-                                    )
-                                    await self._play_audio(audio_path)
-                            except Exception as tts_error:
-                                self._log(f"⚠️ TTS generation failed: {tts_error}")
+                    # Generate TTS immediately
+                    if use_tts:
+                        try:
+                            audio_path = await self.assistant.generate_audio(sentence)
+                            if audio_path:
+                                self._log(f"🔊 TTS completed: {audio_path}")
+                                self._emit_ptt_event(
+                                    "audio_chunk", {"audio_path": audio_path, "text": sentence}
+                                )
+                                await self._play_audio(audio_path)
+                        except Exception as tts_error:
+                            self._log(f"⚠️ TTS generation failed: {tts_error}")
 
             # Send completion marker
             self._emit_ptt_event("assistant_done", {"content": full_response})
@@ -581,8 +547,9 @@ class SpeekiumDaemon:
         try:
             self._log(f"💬 LLM 对话: {text[:50]}...")
 
-            backend = self.assistant.load_llm()
-            response = backend.chat(text)
+            container = await self.assistant._ensure_container()
+            llm_service = container.llm
+            response = await asyncio.to_thread(llm_service.chat, text)
 
             self._log(f"✅ LLM 响应: {response[:50]}...")
 
@@ -604,18 +571,11 @@ class SpeekiumDaemon:
         try:
             self._log(f"💬 LLM 流式对话: {text[:50]}...")
 
-            backend = self.assistant.load_llm()
-
-            # Check if streaming is supported
-            if not hasattr(backend, "chat_stream"):
-                # Streaming not supported, return complete response
-                response = backend.chat(text)
-                print(json.dumps({"type": "chunk", "content": response}), flush=True)
-                print(json.dumps({"type": "done"}), flush=True)
-                return
+            container = await self.assistant._ensure_container()
+            llm_service = container.llm
 
             # Stream generation
-            async for sentence in backend.chat_stream(text):
+            async for sentence in llm_service.chat_stream(text):
                 if sentence:
                     self._log(f"📤 流式输出: {sentence[:30]}...")
                     print(json.dumps({"type": "chunk", "content": sentence}), flush=True)
@@ -647,64 +607,14 @@ class SpeekiumDaemon:
             # Set TTS generation state to pause VAD
             self.assistant.is_generating_tts = True
 
-            backend = self.assistant.load_llm()
+            container = await self.assistant._ensure_container()
+            llm_service = container.llm
 
             # Clear interrupt flag at start
             self.interrupt_event.clear()
 
-            # Check if streaming is supported
-            if not hasattr(backend, "chat_stream"):
-                # Fallback to non-streaming mode
-                response = backend.chat(text)
-
-                # Check for interrupt before TTS generation
-                if self.interrupt_event.is_set():
-                    self._log("🚫 LLM response interrupted (before TTS)")
-                    print(
-                        json.dumps({"type": "interrupted", "reason": "Interrupted before TTS"}),
-                        flush=True,
-                    )
-                    # Clear TTS generation state to resume VAD
-                    self.assistant.is_generating_tts = False
-                    return
-
-                print(json.dumps({"type": "text_chunk", "content": response}), flush=True)
-
-                # Generate TTS
-                audio_path = await self.assistant.generate_audio(response)
-
-                # Check for interrupt before playback
-                if self.interrupt_event.is_set():
-                    self._log("🚫 TTS generation interrupted (before playback)")
-                    print(
-                        json.dumps(
-                            {"type": "interrupted", "reason": "Interrupted before playback"}
-                        ),
-                        flush=True,
-                    )
-                    # Clear TTS generation state to resume VAD
-                    self.assistant.is_generating_tts = False
-                    return
-
-                if audio_path and auto_play:
-                    print(
-                        json.dumps(
-                            {"type": "audio_chunk", "audio_path": audio_path, "text": response}
-                        ),
-                        flush=True,
-                    )
-                    # Play audio immediately
-                    await self._play_audio(audio_path)
-
-                    # Clear TTS generation state to resume VAD
-                    self.assistant.is_generating_tts = False
-                    return
-
-                print(json.dumps({"type": "done"}), flush=True)
-                return
-
             # Stream LLM + TTS generation
-            async for sentence in backend.chat_stream(text):
+            async for sentence in llm_service.chat_stream(text):
                 # Check for interrupt in streaming loop
                 if self.interrupt_event.is_set():
                     self._log("🚫 LLM streaming interrupted")
@@ -960,28 +870,12 @@ class SpeekiumDaemon:
             # CRITICAL: Reload all configuration immediately
             # This ensures all changes take effect without needing to track what changed
             if self.assistant:
-                # Reload VAD settings
-                if hasattr(self.assistant, "_load_vad_config"):
-                    self.assistant._load_vad_config()
+                # Reload service container configuration
+                container = await self.assistant._ensure_container()
+                await container.config.reload()
 
-                # Reload TTS settings
-                if hasattr(self.assistant, "_load_tts_config"):
-                    self.assistant._load_tts_config()
-
-                # Reload LLM settings (including provider and model)
-                if hasattr(self.assistant, "_load_llm_config"):
-                    self.assistant._load_llm_config()
-
-                # Reset backend so it will be recreated with new config
-                old_backend = self.assistant.llm_backend
-                self.assistant.llm_backend = None
-
-                # Log the change
-                backend_name = old_backend.__class__.__name__ if old_backend else "None"
                 self._log(f"✅ 所有配置已重新加载 (VAD, TTS, LLM)")
-                self._log(
-                    f"🔄 LLM backend 已重置: {backend_name} → 将在下次对话时使用新配置 ({llm_provider})"
-                )
+                self._log(f"🔄 将在下次对话时使用新配置 ({llm_provider})")
 
             return {"success": True}
         except Exception as e:
@@ -1006,14 +900,29 @@ class SpeekiumDaemon:
 
     async def handle_health(self) -> dict:
         """Health check"""
+        # Check if models are loaded via container
+        vad_loaded = False
+        asr_loaded = False
+        llm_loaded = False
+
+        if self.assistant and self.assistant.container:
+            container = self.assistant.container
+            vad_loaded = container.vad.is_loaded if hasattr(container.vad, "is_loaded") else False
+            asr_loaded = container.asr.is_loaded if hasattr(container.asr, "is_loaded") else False
+            llm_loaded = (
+                container.llm.is_backend_loaded
+                if hasattr(container.llm, "is_backend_loaded")
+                else False
+            )
+
         return {
             "success": True,
             "status": "healthy",
             "command_count": self.command_count,
             "models_loaded": {
-                "vad": self.assistant.vad_model is not None,
-                "asr": self.assistant.asr_model is not None,
-                "llm": self.assistant.llm_backend is not None,
+                "vad": vad_loaded,
+                "asr": asr_loaded,
+                "llm": llm_loaded,
             },
         }
 
@@ -1088,6 +997,30 @@ class SpeekiumDaemon:
         - Interrupt flag status
         """
         try:
+            # Check if models are loaded via container
+            vad_loaded = False
+            asr_loaded = False
+            llm_loaded = False
+            tts_loaded = False
+
+            if self.assistant and self.assistant.container:
+                container = self.assistant.container
+                vad_loaded = (
+                    container.vad.is_loaded if hasattr(container.vad, "is_loaded") else False
+                )
+                asr_loaded = (
+                    container.asr.is_loaded if hasattr(container.asr, "is_loaded") else False
+                )
+                llm_loaded = (
+                    container.llm.is_backend_loaded
+                    if hasattr(container.llm, "is_backend_loaded")
+                    else False
+                )
+                # TTS doesn't have is_loaded, check if backend is set
+                tts_loaded = (
+                    hasattr(container.tts, "_backend") and container.tts._backend is not None
+                )
+
             # Get current state
             state = {
                 "success": True,
@@ -1096,10 +1029,10 @@ class SpeekiumDaemon:
                 "ptt_recording": self.ptt_recording,
                 "interrupt_flag_set": self.interrupt_event.is_set(),
                 "models_loaded": {
-                    "vad": self.assistant.vad_model is not None,
-                    "asr": self.assistant.asr_model is not None,
-                    "llm": self.assistant.llm_backend is not None,
-                    "tts": self.assistant.tts_backend is not None,
+                    "vad": vad_loaded,
+                    "asr": asr_loaded,
+                    "llm": llm_loaded,
+                    "tts": tts_loaded,
                 },
                 "audio_frames_count": len(self.ptt_audio_frames) if self.ptt_audio_frames else 0,
                 "ptt_stream_active": self.ptt_stream is not None,

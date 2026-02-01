@@ -88,7 +88,8 @@ class VoiceAssistant:
             )
             self._own_container = True
 
-        if not self.container.config.is_initialized:
+        # Use private _initialized flag since config is not available before initialize()
+        if not self.container._initialized:
             await self.container.initialize()
 
         return self.container
