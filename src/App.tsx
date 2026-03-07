@@ -399,6 +399,14 @@ function App() {
 
           // Then call type_text_command to paste text to focused field
           try {
+            // 同时复制到剪贴板
+            try {
+              await navigator.clipboard.writeText(userText);
+              console.log('[PTT] 已复制到剪贴板');
+            } catch (clipErr) {
+              console.warn('[PTT] 剪贴板复制失败:', clipErr);
+            }
+            
             await invoke<string>('type_text_command', { text: userText });
           } catch (error) {
             console.error('[PTT] 文字输入失败:', error);
