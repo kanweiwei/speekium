@@ -474,8 +474,19 @@ class VoiceAssistant:
                 logger.info("asr_model_found_in_cache", path=model_path)
 
             logger.info("model_loading", model="SenseVoice")
-            self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
-            logger.info("model_loaded", model="SenseVoice")
+            try:
+                self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
+                logger.info("model_loaded", model="SenseVoice")
+            except Exception as e:
+                # 记录 ASR 加载错误
+                error_tracker = get_error_tracker()
+                error_tracker.capture(
+                    e,
+                    level="error",
+                    context={"model": ASR_MODEL, "function": "load_asr"}
+                )
+                logger.error("asr_load_failed", error=str(e))
+                raise
         return self.asr_model
 
     def _check_vad_model_exists(self):
@@ -513,45 +524,57 @@ class VoiceAssistant:
                     "download_started", model="Silero VAD", status="downloading", size="~60MB"
                 )
 
-            logger.info("model_loading", model="VAD")
+            try:
+                logger.info("model_loading", model="VAD")
 
-            # Load VAD model with retry logic for PyTorch Hub rate limit
-            max_retries = 5
-            for attempt in range(max_retries):
-                try:
-                    self.vad_model, _ = torch.hub.load(  # nosec B614
-                        repo_or_dir="snakers4/silero-vad",
-                        model="silero_vad",
-                        force_reload=False,
-                        trust_repo=True,
-                    )
-                    logger.info("model_loaded", model="VAD", attempt=attempt + 1)
-                    break
-                except Exception as e:
-                    error_str = str(e)
-                    logger.warning(
-                        "vad_load_attempt_failed", attempt=attempt + 1, error=error_str[:100]
-                    )
-
-                    # Check if it's a rate limit or authorization error
-                    is_rate_limit = (
-                        "rate limit" in error_str.lower()
-                        or "403" in error_str
-                        or "authorization" in error_str.lower()
-                    )
-                    if is_rate_limit and attempt < max_retries - 1:
-                        wait_time = 15 * (attempt + 1)  # 15s, 30s, 45s, 60s, 75s
-                        logger.warning(
-                            "vad_rate_limited",
-                            retry_in=f"{wait_time}s",
-                            message="PyTorch Hub is rate limited, waiting...",
+                # Load VAD model with retry logic for PyTorch Hub rate limit
+                max_retries = 5
+                for attempt in range(max_retries):
+                    try:
+                        self.vad_model, _ = torch.hub.load(  # nosec B614
+                            repo_or_dir="snakers4/silero-vad",
+                            model="silero_vad",
+                            force_reload=False,
+                            trust_repo=True,
                         )
-                        time.sleep(wait_time)
-                        continue
+                        logger.info("model_loaded", model="VAD", attempt=attempt + 1)
+                        break
+                    except Exception as e:
+                        error_str = str(e)
+                        logger.warning(
+                            "vad_load_attempt_failed", attempt=attempt + 1, error=error_str[:100]
+                        )
 
-                    raise Exception(f"VAD model loading failed: {error_str}") from e
+                        # Check if it's a rate limit or authorization error
+                        is_rate_limit = (
+                            "rate limit" in error_str.lower()
+                            or "403" in error_str
+                            or "authorization" in error_str.lower()
+                        )
+                        if is_rate_limit and attempt < max_retries - 1:
+                            wait_time = 15 * (attempt + 1)  # 15s, 30s, 45s, 60s, 75s
+                            logger.warning(
+                                "vad_rate_limited",
+                                retry_in=f"{wait_time}s",
+                                message="PyTorch Hub is rate limited, waiting...",
+                            )
+                            time.sleep(wait_time)
+                            continue
 
-            logger.info("model_loaded", model="VAD")
+                        raise Exception(f"VAD model loading failed: {error_str}") from e
+
+                logger.info("model_loaded", model="VAD")
+            except Exception as e:
+                # 记录 VAD 加载错误
+                error_tracker = get_error_tracker()
+                error_tracker.capture(
+                    e,
+                    level="error",
+                    context={"model": "Silero VAD", "function": "load_vad"}
+                )
+                logger.error("vad_load_failed", error=str(e))
+                raise
+
         return self.vad_model
 
     def load_llm(self):
