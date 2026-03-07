@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Clock, Trash2, MessageSquare, ChevronLeft, PenSquare, Star } from 'lucide-react';
+import { X, Clock, Trash2, MessageSquare, ChevronLeft, PenSquare, Star, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { historyAPI, Session, HistoryMessage } from '../useTauriAPI';
@@ -36,6 +36,7 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
   const [sessionMessages, setSessionMessages] = useState<HistoryMessage[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [favoriteFilter, setFavoriteFilter] = useState<boolean | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Load sessions function - defined before useEffect
   const loadSessions = useCallback(async () => {
@@ -156,7 +157,14 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
 
   if (!isOpen) return null;
 
-  const grouped = groupSessionsByDate(sessions);
+  // Filter sessions by search query
+  const filteredSessions = searchQuery
+    ? sessions.filter(s => 
+        s.title?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : sessions;
+  
+  const grouped = groupSessionsByDate(filteredSessions);
 
   return (
     <>
@@ -221,6 +229,22 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
               </Button>
             </div>
           </div>
+
+          {/* Search bar */}
+          {!selectedSession && (
+            <div className="px-4 pb-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder={t('history.search') || 'Search...'}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-muted/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Filter bar - Only show in list view */}
           {!selectedSession && (

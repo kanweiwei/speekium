@@ -226,6 +226,7 @@
   },
   "history": {
     "title": "History",
+    "search": "Search conversations...",
     "newSession": "New Session",
     "filter": {
       "all": "All Conversations",
