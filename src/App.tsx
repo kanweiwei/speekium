@@ -100,6 +100,7 @@ function App() {
     addMessage,
     updateLastAssistantMessage,
     setDaemonReady,
+    interruptTTS,
   } = useTauriAPI();
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
@@ -347,6 +348,21 @@ function App() {
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Listen for Escape key to interrupt TTS
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape key to interrupt TTS
+      if (e.key === 'Escape' && isSpeaking) {
+        console.log('[App] Escape pressed - interrupting TTS');
+        interruptTTS();
+        setIsSpeaking(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSpeaking, interruptTTS]);
 
   // Listen for PTT events
   React.useEffect(() => {

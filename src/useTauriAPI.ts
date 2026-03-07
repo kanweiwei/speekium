@@ -495,6 +495,19 @@ export function useTauriAPI() {
     }
   };
 
+  /**
+   * Interrupt TTS playback - sends interrupt signal to backend
+   */
+  const interruptTTS = async () => {
+    try {
+      await invoke('interrupt');
+      setIsSpeaking(false);
+      console.log('[TTS] Interrupt signal sent');
+    } catch (error) {
+      console.error('[TTS] Interrupt failed:', error);
+    }
+  };
+
   const clearHistory = () => {
     setMessages([]);
   };
@@ -635,6 +648,7 @@ export function useTauriAPI() {
     saveConfig,
     generateTTS,
     playAudio,
+    interruptTTS,
     checkDaemonHealth,
     setDaemonReady,
     addMessage,
