@@ -7,7 +7,16 @@ interface HotkeyRecorderProps {
   value: HotkeyConfig;
   onChange: (config: HotkeyConfig) => void;
   disabled?: boolean;
+  defaultValue?: HotkeyConfig;
 }
+
+// 预设快捷键方案
+const PRESET_HOTKEYS: { label: string; config: HotkeyConfig }[] = [
+  { label: '空格', config: { modifiers: [], key: 'Space', displayName: 'Space' } },
+  { label: '⌘ + 空格', config: { modifiers: ['CmdOrCtrl'], key: 'Space', displayName: '⌘+Space' } },
+  { label: '⌘ + Shift + S', config: { modifiers: ['CmdOrCtrl', 'Shift'], key: 'KeyS', displayName: '⌘+⇧+S' } },
+  { label: '⌥ + 空格', config: { modifiers: ['Alt'], key: 'Space', displayName: '⌥+Space' } },
+];
 
 const MODIFIER_DISPLAY: Record<ModifierKey, string> = {
   'CmdOrCtrl': '⌘',
@@ -16,15 +25,19 @@ const MODIFIER_DISPLAY: Record<ModifierKey, string> = {
   'Meta': '◆',
 };
 
-// Helper function to parse hotkey config into display keys
 function getDisplayKeys(config: HotkeyConfig): string[] {
-  // Use the same parsing logic as parseHotkeyDisplay for consistency
   return parseHotkeyDisplay(config);
 }
 
-export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProps) {
+export function HotkeyRecorder({ 
+  value, 
+  onChange, 
+  disabled,
+  defaultValue 
+}: HotkeyRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [currentKeys, setCurrentKeys] = useState<string[]>([]);
+  const [showPresets, setShowPresets] = useState(false);
   const recordingRef = useRef(false);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -44,7 +57,6 @@ export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProp
     const keys: string[] = [];
     const modifiers: ModifierKey[] = [];
 
-    // Collect modifiers
     if (e.metaKey || e.ctrlKey) {
       modifiers.push('CmdOrCtrl');
       keys.push(MODIFIER_DISPLAY['CmdOrCtrl']);
@@ -58,7 +70,6 @@ export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProp
       keys.push(MODIFIER_DISPLAY['Alt']);
     }
 
-    // Get main key (not a modifier)
     if (!['Control', 'Meta', 'Alt', 'Shift'].includes(e.key)) {
       const displayKey = e.key.length === 1 ? e.key.toUpperCase() : e.key;
       keys.push(displayKey);
@@ -74,7 +85,6 @@ export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProp
       setCurrentKeys([]);
       recordingRef.current = false;
     } else {
-      // Show current modifiers being pressed
       setCurrentKeys(keys);
     }
   }, [onChange]);
@@ -92,6 +102,12 @@ export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProp
     recordingRef.current = true;
   }, [disabled]);
 
+  const resetToDefault = useCallback(() => {
+    if (defaultValue) {
+      onChange(defaultValue);
+    }
+  }, [defaultValue, onChange]);
+
   useEffect(() => {
     if (isRecording) {
       window.addEventListener('keydown', handleKeyDown, { capture: true });
@@ -104,6 +120,13 @@ export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProp
     }
   }, [isRecording, handleKeyDown, handleKeyUp]);
 
+  const handlePresetClick = (preset: typeof PRESET_HOTKEYS[number]) => {
+    onChange(preset.config);
+    setShowPresets(false);
+  };
+
+  const hasValue = value && (value.modifiers.length > 0 || value.key);
+
   return (
     <div className={styles.recorderContainer}>
       <div className={styles.hotkeyDisplay}>
@@ -115,19 +138,58 @@ export function HotkeyRecorder({ value, onChange, disabled }: HotkeyRecorderProp
           ) : (
             <span className={styles.hint}>按下快捷键...</span>
           )
-        ) : (
+        ) : hasValue ? (
           getDisplayKeys(value).map((key, i) => (
             <span key={i} className={styles.key}>{key}</span>
           ))
+        ) : (
+          <span className={styles.hint}>点击录制...</span>
         )}
       </div>
-      <button
-        className={`${styles.recorderButton} ${isRecording ? styles.recording : ''}`}
-        onClick={startRecording}
-        disabled={disabled}
-      >
-        {isRecording ? '录制中... (ESC 取消)' : '录制'}
-      </button>
+      
+      <div className={styles.buttonGroup}>
+        <button
+          className={`${styles.recorderButton} ${isRecording ? styles.recording : ''}`}
+          onClick={startRecording}
+          disabled={disabled}
+        >
+          {isRecording ? '录制中... (ESC 取消)' : '录制'}
+        </button>
+
+        {defaultValue && hasValue && (
+          <button
+            className={`${styles.recorderButton} ${styles.resetButton}`}
+            onClick={resetToDefault}
+            disabled={disabled}
+            title="重置为默认"
+          >
+            ↩
+          </button>
+        )}
+
+        <button
+          className={`${styles.recorderButton} ${showPresets ? styles.presetsActive : ''}`}
+          onClick={() => setShowPresets(!showPresets)}
+          disabled={disabled}
+        >
+          ⋮
+        </button>
+      </div>
+
+      {showPresets && (
+        <div className={styles.presetsDropdown}>
+          {PRESET_HOTKEYS.map((preset, i) => (
+            <button
+              key={i}
+              className={styles.presetItem}
+              onClick={() => handlePresetClick(preset)}
+              disabled={disabled}
+            >
+              <span className={styles.presetLabel}>{preset.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
