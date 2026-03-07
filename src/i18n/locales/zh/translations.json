@@ -88,7 +88,9 @@
     "system": "跟随系统",
     "lightMode": "浅色模式",
     "darkMode": "深色模式",
-    "systemMode": "跟随系统"
+    "systemMode": "跟随系统",
+    "accentColor": "主题色",
+    "accentColorDescription": "自定义应用主题色"
   },
   "languages": {
     "en": "English",
@@ -139,6 +141,7 @@
       "language": "语言",
       "showModeBadges": "显示模式状态",
       "theme": "主题",
+      "accentColor": "主题色",
       "toggleWindow": "显示/隐藏窗口",
       "serviceStatus": "服务状态",
       "running": "运行中"

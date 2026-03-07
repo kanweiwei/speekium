@@ -1025,6 +1025,35 @@ export function Settings({
                     </p>
                   </div>
 
+                  {/* Accent Color */}
+                  <div className="p-4 rounded-lg border border-border bg-muted">
+                    <Label className="text-foreground mb-3 block">{t('settings.fields.accentColor') || 'Accent Color'}</Label>
+                    <div className="flex gap-2">
+                      {[
+                        { name: 'Blue', value: '217.2 91.2% 59.8%' },
+                        { name: 'Purple', value: '263.4 70.1% 55.3%' },
+                        { name: 'Pink', value: '330.4 81% 64.7%' },
+                        { name: 'Red', value: '0 72% 50%' },
+                        { name: 'Green', value: '142.1 69.7% 45.3%' },
+                        { name: 'Orange', value: '24.6 95% 54%' },
+                      ].map((color) => (
+                        <button
+                          key={color.name}
+                          onClick={() => {
+                            updateLocalConfig('accent_color', color.value);
+                            document.documentElement.style.setProperty('--primary', color.value);
+                          }}
+                          className="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110"
+                          style={{ 
+                            backgroundColor: `hsl(${color.value})`,
+                            borderColor: localConfig.accent_color === color.value ? '#fff' : 'transparent'
+                          }}
+                          title={color.name}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="p-4 rounded-lg border border-border bg-muted">
                     <div className="flex items-center justify-between mb-2">
                       <div className="space-y-0.5">

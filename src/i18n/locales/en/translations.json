@@ -88,7 +88,9 @@
     "system": "System",
     "lightMode": "Light mode",
     "darkMode": "Dark mode",
-    "systemMode": "System"
+    "systemMode": "System",
+    "accentColor": "Accent Color",
+    "accentColorDescription": "Customize app accent color"
   },
   "languages": {
     "en": "English",
@@ -139,6 +141,7 @@
       "language": "Language",
       "showModeBadges": "Show Mode Status",
       "theme": "Theme",
+      "accentColor": "Accent Color",
       "toggleWindow": "Show/Hide Window",
       "serviceStatus": "Service Status",
       "running": "Running"
