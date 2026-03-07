@@ -19,6 +19,8 @@ interface CollapsibleInputProps {
   isProcessing?: boolean;
   /** Whether currently recording (for waveform) */
   isRecording?: boolean;
+  /** Whether currently speaking TTS (for waveform) */
+  isSpeaking?: boolean;
 }
 
 export function CollapsibleInput({
@@ -27,6 +29,7 @@ export function CollapsibleInput({
   onSend,
   isProcessing = false,
   isRecording = false,
+  isSpeaking = false,
 }: CollapsibleInputProps) {
   const { t } = useTranslation();
   const { config } = useSettings();
@@ -198,7 +201,7 @@ export function CollapsibleInput({
               className="flex items-center justify-center gap-2 text-xs text-muted-foreground"
               aria-live="polite"
             >
-              <AudioWaveform isRecording={isRecording} audioLevel={0.5} />
+              <AudioWaveform isRecording={isRecording} isSpeaking={isSpeaking} audioLevel={0.5} />
               <span className={isRecording ? "text-red-500" : ""}>
                 {isRecording 
                   ? t('app.ptt.recording') 

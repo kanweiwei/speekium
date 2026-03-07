@@ -1026,6 +1026,7 @@ function App() {
         onSend={handleSendText}
         isProcessing={isProcessing}
         isRecording={isRecording}
+        isSpeaking={isSpeaking}
       />
       )}
 
