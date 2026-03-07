@@ -44,14 +44,14 @@ def set_resource_limits():
     Set resource limits to prevent resource exhaustion attacks
 
     Limits:
-    - Memory: 2GB virtual memory (soft), 4GB (hard)
+    - Memory: 4GB virtual memory (soft), 8GB (hard)
     - CPU: 600 seconds per process (10 minutes)
     - File size: 1GB max file size
     - Open files: 1024 max file descriptors
     """
     try:
-        # Memory limit: 2GB soft, 4GB hard
-        resource.setrlimit(resource.RLIMIT_AS, (2 * 1024 * 1024 * 1024, 4 * 1024 * 1024 * 1024))
+        # Memory limit: 4GB soft, 8GB hard (increased for model loading)
+        resource.setrlimit(resource.RLIMIT_AS, (4 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024))
 
         # CPU time limit: 600 seconds (10 minutes)
         resource.setrlimit(resource.RLIMIT_CPU, (600, 600))
@@ -64,6 +64,8 @@ def set_resource_limits():
 
         logger.info("resource_limits_set")
     except Exception as e:
+        # Resource limits may fail on some systems (e.g., macOS sandbox)
+        # Don't block startup - just log the warning
         logger.warning("resource_limits_failed", error=str(e))
 
 
@@ -1129,7 +1131,11 @@ class SpeekiumDaemon:
             self._log("❌ 初始化失败，退出")
             return
 
-        self._log("✅ 守护进程就绪，等待命令...")
+        self._log("✅ Daemon ready, waiting for commands...")
+        logger.info("daemon_success", message="Daemon ready, waiting for commands")
+
+        # Send ready signal to stdout (Rust expects JSON with "event" field)
+        print(json.dumps({"event": "daemon_success", "message": "就绪，守护进程已准备好接受命令"}), flush=True)
 
         # Main loop: listen for stdin commands
         loop = asyncio.get_event_loop()
@@ -1140,9 +1146,10 @@ class SpeekiumDaemon:
                 line = await loop.run_in_executor(None, sys.stdin.readline)
 
                 if not line:
-                    # stdin closed, exit
-                    self._log("📪 stdin 关闭，退出守护进程")
-                    break
+                    # stdin closed, wait and retry (don't exit - might be reopened)
+                    self._log("📪 stdin 关闭，等待重新连接...")
+                    await asyncio.sleep(1)
+                    continue
 
                 line = line.strip()
                 if not line:

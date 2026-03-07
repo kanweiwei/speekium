@@ -726,4 +726,9 @@ export const historyAPI = {
     });
     return result;
   },
+
+  exportConversation: async (sessionId: string) => {
+    const result = await invoke<string>('export_conversation', { sessionId });
+    return result;
+  },
 };

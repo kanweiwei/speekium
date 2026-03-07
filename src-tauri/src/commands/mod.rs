@@ -694,3 +694,5 @@ pub fn set_app_language(language: String, app: tauri::AppHandle) -> Result<(), S
     crate::ui::update_tray_menu(&app)
         .map_err(|e| format!("Failed to update tray menu: {}", e))
 }
+
+// ============================================================================

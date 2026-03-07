@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Clock, Trash2, MessageSquare, ChevronLeft, PenSquare, Star, Search } from 'lucide-react';
+import { X, Clock, Trash2, MessageSquare, ChevronLeft, PenSquare, Star, Search, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { historyAPI, Session, HistoryMessage } from '../useTauriAPI';
@@ -120,6 +120,24 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
       console.error('[Favorite] Error type:', err?.constructor?.name);
       console.error('[Favorite] Error message:', err?.message);
       console.error('[Favorite] Error stack:', err?.stack);
+    }
+  };
+
+  const handleExport = async (sessionId: string) => {
+    try {
+      const markdown = await historyAPI.exportConversation(sessionId);
+      // Create and download file
+      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `conversation-${sessionId.slice(0, 8)}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export conversation:', error);
     }
   };
 
@@ -411,6 +429,18 @@ export function HistoryDrawer({ isOpen, onClose, onLoadSession, onNewSession }: 
                                 className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-muted-foreground hover:text-red-400 border border-transparent hover:border-red-500/20 transition-all duration-200"
                               >
                                 <Trash2 className="w-4 h-4" />
+                              </button>
+
+                              {/* Export button */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleExport(session.id);
+                                }}
+                                className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-blue-500/10 text-muted-foreground hover:text-blue-400 border border-transparent hover:border-blue-500/20 transition-all duration-200"
+                                title={t('history.actions.export')}
+                              >
+                                <Download className="w-4 h-4" />
                               </button>
                             </div>
                           )}

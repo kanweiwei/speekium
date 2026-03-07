@@ -85,3 +85,39 @@ pub async fn db_delete_message(
 ) -> Result<bool, String> {
     state.db.delete_message(&message_id)
 }
+
+#[tauri::command]
+pub async fn export_conversation(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<String, String> {
+    use chrono::{DateTime, Local};
+    
+    // Get session info
+    let session = state.db.get_session(&session_id)
+        .map_err(|e| format!("Failed to get session: {}", e))?;
+    
+    // Get all messages for the session
+    let messages = state.db.get_messages(&session_id, 0, 1000)
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+    
+    // Build Markdown content
+    let mut markdown = format!("# {}\n\n", session.title);
+    markdown.push_str(&format!("导出时间: {}\n\n", Local::now().format("%Y-%m-%d %H:%M:%S")));
+    markdown.push_str("---\n\n");
+    
+    for msg in messages.items {
+        let role_emoji = match msg.role.as_str() {
+            "user" => "👤 用户",
+            "assistant" => "🤖 助手",
+            _ => "📝 系统",
+        };
+        let timestamp = DateTime::from_timestamp_millis(msg.timestamp)
+            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+        
+        markdown.push_str(&format!("### {} - {}\n\n{}\n\n", role_emoji, timestamp, msg.content));
+    }
+    
+    Ok(markdown)
+}

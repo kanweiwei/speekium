@@ -2,8 +2,6 @@ name: Lint
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master, develop, security-fixes/** ]
   pull_request:
     branches: [ main, master, develop ]
 

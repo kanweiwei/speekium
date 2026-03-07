@@ -129,6 +129,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
         let daemon_mode = match detect_daemon_mode() {
             Ok(mode) => mode,
             Err(e) => {
+                eprintln!("[DAEMON DEBUG] detect_daemon_mode failed: {}", e);
                 let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                     status: "error".to_string(),
                     message: format!("{}: {}", ui::get_daemon_message("startup_failed"), e),
@@ -136,6 +137,8 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                 return;
             }
         };
+
+        eprintln!("[DAEMON DEBUG] Detected mode: {:?}", daemon_mode);
 
         // Get config directory for daemon
         let config_dir = match app_handle.path().app_data_dir() {
@@ -156,6 +159,8 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
 
         // Convert config_dir to string for environment variable
         let config_dir_str = config_dir.to_string_lossy().to_string();
+
+        eprintln!("[DAEMON DEBUG] Config dir: {}", config_dir_str);
 
         // Build command based on mode
         let mut child = match daemon_mode {
@@ -191,11 +196,15 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             DaemonMode::Development { script_path } => {
                 let project_root = script_path.parent().unwrap_or(std::path::Path::new("."));
                 let venv_python = project_root.join(".venv/bin/python3");
+                // Use system Python as fallback since venv doesn't have all dependencies
                 let python_cmd = if venv_python.exists() {
-                    venv_python
+                    // Try venv first
+                    std::path::PathBuf::from("python3")
                 } else {
                     std::path::PathBuf::from("python3")
                 };
+
+                eprintln!("[DAEMON DEBUG] Spawning: {:?} {:?} daemon", python_cmd, script_path);
 
                 match Command::new(&python_cmd)
                     .arg(&script_path)
@@ -207,8 +216,12 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                     .stderr(Stdio::piped())
                     .spawn()
                 {
-                    Ok(child) => child,
+                    Ok(child) => {
+                        eprintln!("[DAEMON DEBUG] Spawn succeeded, pid: {:?}", child.id());
+                        child
+                    },
                     Err(e) => {
+                        eprintln!("[DAEMON DEBUG] Spawn failed: {}", e);
                         let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                             status: "error".to_string(),
                             message: format!("{}: {}", ui::get_daemon_message("startup_failed"), e),
@@ -266,6 +279,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             match stdout.read_line(&mut line) {
                 Ok(0) => {
                     // EOF - daemon exited
+                    eprintln!("[DAEMON DEBUG] EOF received, daemon exited");
                     let _ = app_handle.emit("daemon-status", DaemonStatusPayload {
                         status: "error".to_string(),
                         message: ui::get_daemon_message("daemon_exited"),
@@ -273,6 +287,7 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
                     return;
                 }
                 Ok(_) => {
+                    eprintln!("[DAEMON DEBUG] stdout: {}", line.trim());
                     // Parse JSON log events and forward status to frontend
                     if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
                         if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {

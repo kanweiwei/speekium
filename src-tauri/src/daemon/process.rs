@@ -117,12 +117,14 @@ impl PythonDaemon {
                     return Err("Daemon exited during initialization".to_string());
                 }
                 Ok(_) => {
+                    eprintln!("[DAEMON DEBUG] stdout line: {}", line.trim());
                     // Parse JSON log events
                     if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
                         if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
                             // Check if this is the "ready" daemon_success event (last init event)
                             if event_type == "daemon_success" {
                                 if let Some(message) = event.get("message").and_then(|v| v.as_str()) {
+                                    eprintln!("[DAEMON DEBUG] Got daemon_success message: {}", message);
                                     if message.contains("就绪") || message.contains("ready") {
                                         initialized = true;
                                         break;
