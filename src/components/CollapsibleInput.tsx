@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, ChevronDown, ChevronUp, AlertCircle, X, Loader2, Send } from 'lucide-react';
+import { ChevronDown, ChevronUp, AlertCircle, X, Loader2, Send } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getHotkeyDisplayName } from '@/utils/hotkeyParser';
+import { AudioWaveform } from './AudioWaveform';
 
 interface CollapsibleInputProps {
   /** Input value */
@@ -16,6 +17,8 @@ interface CollapsibleInputProps {
   onSend: () => void;
   /** Whether processing */
   isProcessing?: boolean;
+  /** Whether currently recording (for waveform) */
+  isRecording?: boolean;
 }
 
 export function CollapsibleInput({
@@ -23,6 +26,7 @@ export function CollapsibleInput({
   onChange,
   onSend,
   isProcessing = false,
+  isRecording = false,
 }: CollapsibleInputProps) {
   const { t } = useTranslation();
   const { config } = useSettings();
@@ -194,13 +198,12 @@ export function CollapsibleInput({
               className="flex items-center justify-center gap-2 text-xs text-muted-foreground"
               aria-live="polite"
             >
-              <Mic className="w-3 h-3" />
-              <span>
-                {t('app.ptt.hint')}{' '}
-                <kbd className="mx-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono border border-border">
-                  {hotkeyDisplay}
-                </kbd>{' '}
-                {t('app.ptt.hintAction')}
+              <AudioWaveform isRecording={isRecording} audioLevel={0.5} />
+              <span className={isRecording ? "text-red-500" : ""}>
+                {isRecording 
+                  ? t('app.ptt.recording') 
+                  : `${t('app.ptt.hint')} ${hotkeyDisplay} ${t('app.ptt.hintAction')}`
+                }
               </span>
             </div>
 

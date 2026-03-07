@@ -956,6 +956,7 @@ function App() {
         onChange={setTextInput}
         onSend={handleSendText}
         isProcessing={isProcessing}
+        isRecording={isRecording}
       />
 
       {/* 设置弹窗 */}
