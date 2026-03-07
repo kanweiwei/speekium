@@ -33,6 +33,7 @@ import { ChatBubble, LoadingIndicator } from './components/ChatBubble';
 import { HotkeyStatusPanel } from './components/HotkeyStatusPanel';
 import { MiniModeBubble } from './components/MiniModeBubble';
 import { ConversationTemplates } from './components/ConversationTemplates';
+import { ClipboardHistory, addToClipboardHistory } from './components/ClipboardHistory';
 function App() {
   const { t } = useTranslation();
   const { workMode, setWorkMode } = useWorkMode();
@@ -112,6 +113,7 @@ function App() {
   const [isNewSessionDialogOpen, setIsNewSessionDialogOpen] = React.useState(false);
   const [isMiniMode, setIsMiniMode] = React.useState(false);
   const [showTemplates, setShowTemplates] = React.useState(false);
+  const [showClipboardHistory, setShowClipboardHistory] = React.useState(false);
   const [showModeBadges, setShowModeBadges] = React.useState(() => {
     const saved = localStorage.getItem('showModeBadges');
     return saved !== 'false'; // Default to true
@@ -414,6 +416,7 @@ function App() {
             // 同时复制到剪贴板
             try {
               await navigator.clipboard.writeText(userText);
+              addToClipboardHistory(userText); // 保存到历史
               console.log('[PTT] 已复制到剪贴板');
             } catch (clipErr) {
               console.warn('[PTT] 剪贴板复制失败:', clipErr);
@@ -855,6 +858,16 @@ function App() {
           <Button
             variant="ghost"
             size="sm"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            onClick={() => setShowClipboardHistory(true)}
+          >
+            <PenSquare className="w-4 h-4 mr-2" />
+            剪贴板
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
             className="text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200 active:scale-[0.98]"
             onClick={() => setIsNewSessionDialogOpen(true)}
             disabled={isProcessing}
@@ -1055,6 +1068,16 @@ function App() {
         <ConversationTemplates
           onSelectTemplate={handleTemplateSelect}
           onClose={() => setShowTemplates(false)}
+        />
+      )}
+
+      {/* 剪贴板历史弹窗 */}
+      {showClipboardHistory && (
+        <ClipboardHistory
+          onSelect={(_content) => {
+            setShowClipboardHistory(false);
+          }}
+          onClose={() => setShowClipboardHistory(false)}
         />
       )}
 
