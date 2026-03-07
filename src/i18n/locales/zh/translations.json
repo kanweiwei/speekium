@@ -278,5 +278,12 @@
     },
     "switchWorkMode": "切换工作模式",
     "switchRecordMode": "切换录音模式"
+  },
+  "tray": {
+    "newConversation": "🗣️ 开始新对话",
+    "history": "📖 历史记录",
+    "clearHistory": "🗑️ 清空对话历史",
+    "settings": "⚙️ 设置",
+    "quit": "❌ 退出应用"
   }
 }

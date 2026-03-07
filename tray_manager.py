@@ -12,10 +12,34 @@ from PIL import Image, ImageDraw
 class TrayManager:
     """系统托盘管理器"""
 
-    def __init__(self):
+    # 托盘菜单翻译
+    TRAY_MENU_ZH = {
+        "show_window": "📱 显示主窗口",
+        "push_to_talk": "🎤 按键录音模式",
+        "continuous": "💬 自由对话模式",
+        "start_listening": "▶️ 开始监听",
+        "stop_listening": "⏸️ 停止监听",
+        "clear_history": "🗑️ 清空对话历史",
+        "settings": "⚙️ 设置",
+        "quit": "❌ 退出应用",
+    }
+
+    TRAY_MENU_EN = {
+        "show_window": "📱 Show Window",
+        "push_to_talk": "🎤 Push-to-Talk",
+        "continuous": "💬 Continuous Mode",
+        "start_listening": "▶️ Start Listening",
+        "stop_listening": "⏸️ Stop Listening",
+        "clear_history": "🗑️ Clear History",
+        "settings": "⚙️ Settings",
+        "quit": "❌ Quit",
+    }
+
+    def __init__(self, language: str = "zh"):
         self.icon = None
         self.is_running = False
         self._lock = threading.Lock()
+        self.language = language  # "zh" or "en"
 
         # 回调函数
         self.on_show_window: Callable | None = None
@@ -99,47 +123,51 @@ class TrayManager:
             # 创建图标
             icon_image = self.create_icon_image()
 
+            # 选择翻译
+            menu_text = self.TRAY_MENU_ZH if self.language == "zh" else self.TRAY_MENU_EN
+
             # 创建菜单
             menu = Menu(
                 MenuItem(
-                    "📱 显示主窗口",
+                    menu_text["show_window"],
                     self._handle_show_window,
                     default=True,  # 左键默认动作
                 ),
                 Menu.SEPARATOR,
                 MenuItem(
-                    "🎤 按键录音模式",
+                    menu_text["push_to_talk"],
                     self._handle_push_to_talk_mode,
                     checked=lambda item: self.current_mode == "push_to_talk",
                     radio=True,
                 ),
                 MenuItem(
-                    "💬 自由对话模式",
+                    menu_text["continuous"],
                     self._handle_continuous_mode,
                     checked=lambda item: self.current_mode == "continuous",
                     radio=True,
                 ),
                 Menu.SEPARATOR,
                 MenuItem(
-                    "▶️ 开始监听",
+                    menu_text["start_listening"],
                     self._handle_start_listening,
                     enabled=lambda item: not self.is_listening,
                 ),
                 MenuItem(
-                    "⏸️ 停止监听",
+                    menu_text["stop_listening"],
                     self._handle_stop_listening,
                     enabled=lambda item: self.is_listening,
                 ),
                 Menu.SEPARATOR,
-                MenuItem("🗑️ 清空对话历史", self._handle_clear_history),
-                MenuItem("⚙️ 设置", self._handle_open_settings),
+                MenuItem(menu_text["clear_history"], self._handle_clear_history),
+                MenuItem(menu_text["settings"], self._handle_open_settings),
                 Menu.SEPARATOR,
-                MenuItem("❌ 退出应用", self._handle_quit),
+                MenuItem(menu_text["quit"], self._handle_quit),
             )
 
             # 创建托盘图标
+            title = "Speekium - 智能语音助手" if self.language == "zh" else "Speekium - Voice Assistant"
             self.icon = Icon(
-                name="Speekium", icon=icon_image, title="Speekium - 智能语音助手", menu=menu
+                name="Speekium", icon=icon_image, title=title, menu=menu
             )
 
             # 在新线程中运行（非daemon，保持应用运行）
@@ -187,6 +215,20 @@ class TrayManager:
                 self.icon.icon = icon_image
             except Exception as e:
                 print(f"⚠️ 更新托盘图标失败: {e}")
+
+    def set_language(self, language: str):
+        """
+        设置托盘菜单语言
+
+        Args:
+            language: 语言代码 "zh" 或 "en"
+        """
+        if language not in ("zh", "en"):
+            print(f"⚠️ 不支持的语言: {language}")
+            return
+
+        self.language = language
+        print(f"🌐 托盘菜单语言已切换到: {'中文' if language == 'zh' else 'English'}")
 
     # 菜单项处理函数
     def _handle_show_window(self, icon, item):

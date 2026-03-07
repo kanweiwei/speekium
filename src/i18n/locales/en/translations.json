@@ -278,5 +278,12 @@
     },
     "switchWorkMode": "Switch work mode",
     "switchRecordMode": "Switch recording mode"
+  },
+  "tray": {
+    "newConversation": "🗣️ New Conversation",
+    "history": "📖 History",
+    "clearHistory": "🗑️ Clear History",
+    "settings": "⚙️ Settings",
+    "quit": "❌ Quit"
   }
 }
