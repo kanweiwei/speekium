@@ -21,6 +21,7 @@ import {
   X,
   Clock,
   PenSquare,
+  Bell,
   Mic,
 } from 'lucide-react';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
@@ -34,6 +35,7 @@ import { HotkeyStatusPanel } from './components/HotkeyStatusPanel';
 import { MiniModeBubble } from './components/MiniModeBubble';
 import { ConversationTemplates } from './components/ConversationTemplates';
 import { ClipboardHistory, addToClipboardHistory } from './components/ClipboardHistory';
+import { NotificationCenter } from './components/NotificationCenter';
 function App() {
   const { t } = useTranslation();
   const { workMode, setWorkMode } = useWorkMode();
@@ -133,6 +135,7 @@ function App() {
   };
   const [showTemplates, setShowTemplates] = React.useState(false);
   const [showClipboardHistory, setShowClipboardHistory] = React.useState(false);
+  const [showNotificationCenter, setShowNotificationCenter] = React.useState(false);
   const [showModeBadges, setShowModeBadges] = React.useState(() => {
     const saved = localStorage.getItem('showModeBadges');
     return saved !== 'false'; // Default to true
@@ -887,6 +890,16 @@ function App() {
           <Button
             variant="ghost"
             size="sm"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            onClick={() => setShowNotificationCenter(true)}
+          >
+            <Bell className="w-4 h-4 mr-2" />
+            通知
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
             className="text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200 active:scale-[0.98]"
             onClick={() => setIsNewSessionDialogOpen(true)}
             disabled={isProcessing}
@@ -1099,6 +1112,14 @@ function App() {
             setShowClipboardHistory(false);
           }}
           onClose={() => setShowClipboardHistory(false)}
+        />
+      )}
+
+      {/* 通知中心弹窗 */}
+      {showNotificationCenter && (
+        <NotificationCenter
+          isOpen={showNotificationCenter}
+          onClose={() => setShowNotificationCenter(false)}
         />
       )}
 
