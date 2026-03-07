@@ -285,5 +285,33 @@
     "clearHistory": "🗑️ Clear History",
     "settings": "⚙️ Settings",
     "quit": "❌ Quit"
+  },
+  "guide": {
+    "welcome": {
+      "title": "Welcome to Speekium",
+      "desc": "Your intelligent voice assistant",
+      "feature1": "Voice Input",
+      "feature2": "AI Chat"
+    },
+    "hotkey": {
+      "title": "Set Up Shortcut",
+      "desc": "Hold the shortcut to record your voice"
+    },
+    "llm": {
+      "title": "Choose LLM",
+      "desc": "Select your preferred AI model",
+      "local": "Local (Ollama)",
+      "localDesc": "Offline, privacy-first",
+      "api": "Cloud API",
+      "apiDesc": "More powerful models"
+    },
+    "complete": {
+      "title": "You're All Set!",
+      "desc": "Ready to start chatting",
+      "tip": "Try saying hello!"
+    },
+    "skip": "Skip",
+    "next": "Next",
+    "start": "Get Started"
   }
 }

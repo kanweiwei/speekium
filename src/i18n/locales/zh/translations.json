@@ -285,5 +285,33 @@
     "clearHistory": "🗑️ 清空对话历史",
     "settings": "⚙️ 设置",
     "quit": "❌ 退出应用"
+  },
+  "guide": {
+    "welcome": {
+      "title": "欢迎使用 Speekium",
+      "desc": "您的智能语音助手",
+      "feature1": "语音输入",
+      "feature2": "AI 对话"
+    },
+    "hotkey": {
+      "title": "设置快捷键",
+      "desc": "按住快捷键开始录音"
+    },
+    "llm": {
+      "title": "选择 AI 模型",
+      "desc": "选择您喜欢的 AI 服务",
+      "local": "本地 (Ollama)",
+      "localDesc": "离线运行，保护隐私",
+      "api": "云端 API",
+      "apiDesc": "更强大的模型"
+    },
+    "complete": {
+      "title": "设置完成！",
+      "desc": "准备开始聊天吧",
+      "tip": "试着说声你好吧！"
+    },
+    "skip": "跳过",
+    "next": "下一步",
+    "start": "开始使用"
   }
 }
