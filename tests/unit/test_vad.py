@@ -8,13 +8,21 @@ VAD (Voice Activity Detection) 单元测试
 4. 录音控制流程
 """
 
+import pytest
+
+pytestmark = pytest.mark.requires_model
+
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-import torch
+
+try:
+    import torch
+except ImportError:
+    torch = None
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

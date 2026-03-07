@@ -28,6 +28,7 @@ import type { WorkMode } from './types/workMode';
 import { EmptyState } from './components/EmptyState';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ChatBubble, LoadingIndicator } from './components/ChatBubble';
+import { HotkeyStatusPanel } from './components/HotkeyStatusPanel';
 function App() {
   const { t } = useTranslation();
   const { workMode, setWorkMode } = useWorkMode();
@@ -858,6 +859,15 @@ function App() {
 
       {/* 主内容区 */}
       <div className="flex-1 overflow-hidden relative">
+        {/* 快捷键状态面板 */}
+        <div className="max-w-[680px] mx-auto pt-4 px-4">
+          <HotkeyStatusPanel
+            pushToTalkHotkey={config?.push_to_talk_hotkey}
+            workMode={workMode}
+            recordMode={recordMode}
+          />
+        </div>
+
         {/* 消息区域 */}
         <div className="h-full overflow-y-auto px-4">
           {/* 错误提示 */}
