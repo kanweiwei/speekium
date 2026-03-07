@@ -16,9 +16,7 @@ import type { WorkModeChangeEvent } from './types/workMode';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import {
-  Mic,
   Settings as SettingsIcon,
-  Play,
   AlertCircle,
   X,
   Clock,
@@ -29,6 +27,7 @@ import { useTranslation } from '@/i18n';
 import type { WorkMode } from './types/workMode';
 import { EmptyState } from './components/EmptyState';
 import { LoadingScreen } from './components/LoadingScreen';
+import { ChatBubble, LoadingIndicator } from './components/ChatBubble';
 function App() {
   const { t } = useTranslation();
   const { workMode, setWorkMode } = useWorkMode();
@@ -872,75 +871,31 @@ function App() {
               <div className="space-y-4">
                 {messages.map((message, index) => {
                   const isUser = message.role === 'user';
-                  const isVoice = message.content.startsWith('🎤');
                   const isLastAssistantMessage = !isUser && index === messages.length - 1;
-                  const showStreamingCursor = isStreaming && isLastAssistantMessage;
+                  const showStreaming = isStreaming && isLastAssistantMessage;
 
                   return (
-                    <div
+                    <ChatBubble
                       key={index}
-                      className={cn(
-                        "flex gap-3 animate-in slide-in-from-bottom-4 duration-300",
-                        isUser ? "justify-end" : "justify-start"
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "max-w-[85%] rounded-2xl px-4 py-3 transition-all",
-                          isUser
-                            ? "bg-blue-600 text-white rounded-tr-sm"
-                            : "bg-muted text-foreground border border-border/50 rounded-tl-sm"
-                        )}
-                      >
-                        {isVoice && (
-                          <div className="flex items-center gap-1.5 mb-1.5 opacity-70">
-                            <Mic className="h-3 w-3" />
-                            <span className="text-xs">{t('app.messages.voiceLabel')}</span>
-                          </div>
-                        )}
-                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                          {message.content.replace(/^🎤\s*/, '')}
-                          {showStreamingCursor && (
-                            <span
-                              className="inline-block w-[2px] h-[1.1em] bg-blue-500 ml-0.5 align-middle rounded-sm animate-cursor-blink"
-                              aria-hidden="true"
-                            />
-                          )}
-                        </p>
-
-                        {/* AI 消息播放按钮 */}
-                        {!isUser && (
-                          <button
-                            className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={() => {
-                              if (!isSpeaking) {
-                                setIsSpeaking(true);
-                                generateTTS(message.content)
-                                  .catch(err => setError(`${t('app.errors.ttsFailed')}: ${err}`))
-                                  .finally(() => setIsSpeaking(false));
-                              }
-                            }}
-                          >
-                            <Play className="w-3 h-3" />
-                            <span>{isSpeaking ? t('app.messages.playing') : t('app.messages.play')}</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                      message={message}
+                      index={index}
+                      isStreaming={showStreaming}
+                      isSpeaking={isSpeaking}
+                      onPlayTTS={!isUser ? (content) => {
+                        if (!isSpeaking) {
+                          setIsSpeaking(true);
+                          generateTTS(content)
+                            .catch(err => setError(`${t('app.errors.ttsFailed')}: ${err}`))
+                            .finally(() => setIsSpeaking(false));
+                        }
+                      } : undefined}
+                    />
                   );
                 })}
 
                 {/* Loading indicator - shown while waiting for LLM response */}
                 {(isProcessing || isWaitingForLLM) && (
-                  <div className="flex gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                    <div className="bg-muted border border-border/50 rounded-2xl rounded-tl-sm px-4 py-3">
-                      <div className="flex gap-1">
-                        <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </div>
-                    </div>
-                  </div>
+                  <LoadingIndicator />
                 )}
 
                 <div ref={messagesEndRef} />
