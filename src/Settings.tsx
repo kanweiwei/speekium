@@ -893,6 +893,27 @@ export function Settings({
               {/* TTS Settings */}
               {activeCategory === 'tts' && (
                 <div className="space-y-6">
+                  {/* Voice Selection */}
+                  <div className="space-y-2">
+                    <Label className="text-foreground">{t('settings.fields.ttsVoice') || 'Voice'}</Label>
+                    <Select
+                      value={localConfig.tts_voice || 'zh-CN-XiaoxiaoNeural'}
+                      onValueChange={(value) => updateLocalConfig('tts_voice', value)}
+                    >
+                      <SelectTrigger className="bg-muted border-border text-foreground focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
+                        <SelectValue placeholder={t('settings.fields.ttsVoice') || 'Select voice'} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-muted border-border">
+                        <SelectItem value="zh-CN-XiaoxiaoNeural">Xiaoxiao (中文女声)</SelectItem>
+                        <SelectItem value="zh-CN-YunxiNeural">Yunxi (中文男声)</SelectItem>
+                        <SelectItem value="zh-CN-YunyangNeural">Yunyang (中文男声)</SelectItem>
+                        <SelectItem value="en-US-JennyNeural">Jenny (英文女声)</SelectItem>
+                        <SelectItem value="en-US-GuyNeural">Guy (英文男声)</SelectItem>
+                        <SelectItem value="ja-JP-NanamiNeural">Nanami (日文女声)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="tts-rate" className="text-foreground">{t('settings.fields.ttsRate')}</Label>
                     <Input

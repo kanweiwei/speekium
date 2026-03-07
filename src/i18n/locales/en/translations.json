@@ -134,6 +134,7 @@
       "ollamaUrl": "API URL",
       "ttsEngine": "TTS Engine",
       "ttsRate": "Speech Rate",
+      "ttsVoice": "Voice",
       "autoTTS": "Auto Play",
       "language": "Language",
       "showModeBadges": "Show Mode Status",
@@ -192,7 +193,9 @@
     },
     "tts": {
       "preview": "Preview",
-      "previewText": "Hello, this is a voice preview test."
+      "previewText": "Hello, this is a voice preview test.",
+      "voice": "Voice",
+      "voiceDescription": "Select TTS voice"
     },
     "connection": {
       "test": "Test Connection",

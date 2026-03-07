@@ -134,6 +134,7 @@
       "ollamaUrl": "API URL",
       "ttsEngine": "TTS 引擎",
       "ttsRate": "语速调整",
+      "ttsVoice": "语音",
       "autoTTS": "自动播放",
       "language": "语言",
       "showModeBadges": "显示模式状态",
@@ -181,7 +182,9 @@
     },
     "tts": {
       "preview": "预览语音",
-      "previewText": "你好，这是语音预览测试。"
+      "previewText": "你好，这是语音预览测试。",
+      "voice": "语音选择",
+      "voiceDescription": "选择 TTS 语音"
     },
     "connection": {
       "test": "测试连接",
