@@ -455,7 +455,7 @@ export function Settings({
                     ${
                       isActive
                         ? 'bg-gradient-to-r from-blue-500/15 to-purple-600/10 text-blue-400 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-8 before:w-1 before:rounded-r-full before:bg-gradient-to-b before:from-blue-500 before:to-purple-600'
-                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                        : 'text-muted-foreground dark:hover:bg-muted/70 dark:hover:text-foreground hover:bg-muted/50 hover:text-foreground'
                     }
                   `}
                 >
@@ -859,7 +859,7 @@ export function Settings({
                       <Button
                         onClick={handleTestConnection}
                         disabled={isTestingConnection}
-                        className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border"
+                        className="w-full bg-muted hover:bg-muted/80 dark:hover:bg-muted/90 text-foreground border border-border"
                       >
                         {isTestingConnection ? (
                           <>
@@ -926,7 +926,7 @@ export function Settings({
                     <Button
                       onClick={handlePreviewTTS}
                       disabled={isPreviewingTTS && connectionStatus !== 'error'}
-                      className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border"
+                      className="w-full bg-muted hover:bg-muted/80 dark:hover:bg-muted/90 text-foreground border border-border"
                     >
                       {isPreviewingTTS ? (
                         <>
