@@ -101,7 +101,7 @@ class TestAudioTranscription:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_transcribe_success(
@@ -126,11 +126,11 @@ class TestAudioTranscription:
         assert language == "zh"
         mock_model.generate.assert_called_once()
         mock_write_wav.assert_called_once()
-        mock_remove.assert_called_once()
+        mock_remove.assert_called_once_with("/tmp/test_audio.wav")
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_transcribe_empty_result(
@@ -155,7 +155,7 @@ class TestAudioTranscription:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_transcribe_cleans_up_temp_file(
@@ -175,7 +175,7 @@ class TestAudioTranscription:
         assistant = VoiceAssistant()
         assistant.transcribe(audio)
 
-        # Verify temp file is removed
+        # Verify temp file cleanup
         mock_remove.assert_called_once_with(tmp_file_path)
 
 
@@ -184,7 +184,7 @@ class TestLanguageDetection:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_detect_chinese(
@@ -205,7 +205,7 @@ class TestLanguageDetection:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_detect_english(
@@ -226,7 +226,7 @@ class TestLanguageDetection:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_detect_japanese(
@@ -247,7 +247,7 @@ class TestLanguageDetection:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_no_language_tag_uses_default(
@@ -273,7 +273,7 @@ class TestAsyncTranscription:
     @pytest.mark.asyncio
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     async def test_transcribe_async_success(
@@ -300,7 +300,7 @@ class TestAsyncTranscription:
     @pytest.mark.asyncio
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     async def test_transcribe_async_runs_in_executor(
@@ -379,7 +379,7 @@ class TestASRIntegration:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_audio_format_conversion(
@@ -424,7 +424,7 @@ class TestASRErrorHandling:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     def test_transcribe_write_failure(self, mock_write_wav, mock_temp_file, mock_automodel):
         """测试写入临时文件失败"""
         mock_model = MagicMock()
@@ -440,7 +440,7 @@ class TestASRErrorHandling:
 
     @patch("funasr.AutoModel")
     @patch("speekium.create_secure_temp_file")
-    @patch("speekium.write_wav")
+    @patch("scipy.io.wavfile.write")
     @patch("os.path.exists")
     @patch("os.remove")
     def test_transcribe_generation_failure(
@@ -460,7 +460,7 @@ class TestASRErrorHandling:
             assistant.transcribe(audio)
 
         # Temp file should still be cleaned up
-        mock_remove.assert_called_once()
+        mock_remove.assert_called_once_with("/tmp/test.wav")
 
 
 # Mark tests for categorization

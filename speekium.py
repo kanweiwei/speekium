@@ -340,11 +340,17 @@ class VoiceAssistant:
         # VAD configuration (load from config file)
         vad_config = config.get("vad", {})
         self.vad_threshold = vad_config.get("vad_threshold", VAD_THRESHOLD)
-        self.vad_consecutive_threshold = vad_config.get("vad_consecutive_threshold", VAD_CONSECUTIVE_THRESHOLD)
+        self.vad_consecutive_threshold = vad_config.get(
+            "vad_consecutive_threshold", VAD_CONSECUTIVE_THRESHOLD
+        )
         self.vad_silence_duration = vad_config.get("vad_silence_duration", SILENCE_AFTER_SPEECH)
         self.vad_pre_buffer = vad_config.get("vad_pre_buffer", VAD_PRE_BUFFER)
-        self.vad_min_speech_duration = vad_config.get("vad_min_speech_duration", MIN_SPEECH_DURATION)
-        self.vad_max_recording_duration = vad_config.get("vad_max_recording_duration", MAX_RECORDING_DURATION)
+        self.vad_min_speech_duration = vad_config.get(
+            "vad_min_speech_duration", MIN_SPEECH_DURATION
+        )
+        self.vad_max_recording_duration = vad_config.get(
+            "vad_max_recording_duration", MAX_RECORDING_DURATION
+        )
 
     def get_tts_backend(self):
         """Get current TTS backend from config (refreshes on each call)."""
@@ -483,9 +489,7 @@ class VoiceAssistant:
                 # 记录 ASR 加载错误
                 error_tracker = get_error_tracker()
                 error_tracker.capture(
-                    e,
-                    level="error",
-                    context={"model": ASR_MODEL, "function": "load_asr"}
+                    e, level="error", context={"model": ASR_MODEL, "function": "load_asr"}
                 )
                 logger.error("asr_load_failed", error=str(e))
                 raise
@@ -573,9 +577,7 @@ class VoiceAssistant:
                 # 记录 VAD 加载错误
                 error_tracker = get_error_tracker()
                 error_tracker.capture(
-                    e,
-                    level="error",
-                    context={"model": "Silero VAD", "function": "load_vad"}
+                    e, level="error", context={"model": "Silero VAD", "function": "load_vad"}
                 )
                 logger.error("vad_load_failed", error=str(e))
                 raise
@@ -687,8 +689,8 @@ class VoiceAssistant:
                     context={
                         "provider": current_config["provider"],
                         "model": current_config["model"],
-                        "function": "load_llm"
-                    }
+                        "function": "load_llm",
+                    },
                 )
                 logger.error("llm_load_failed", error=str(e))
                 raise
@@ -722,6 +724,11 @@ class VoiceAssistant:
                                    Used when user interrupts TTS (barge-in).
             on_speech_detected: Optional callback called when speech is first detected.
         """
+        # Lazy imports for cold start optimization
+        import numpy as np
+        import sounddevice as sd
+        import torch
+
         model = self.load_vad()
         model.reset_states()  # Reset VAD state
 
@@ -889,6 +896,10 @@ class VoiceAssistant:
         按键录音模式：手动控制录音开始和结束
         通过 mode_manager.start_recording() 和 stop_recording() 控制
         """
+        # Lazy imports for cold start optimization
+        import numpy as np
+        import sounddevice as sd
+
         logger.info("ptt_mode_activated")
 
         chunk_size = 512
@@ -931,6 +942,10 @@ class VoiceAssistant:
         logger.info("asr_processing")
         model = self.load_asr()
 
+        # Lazy imports for cold start optimization
+        import numpy as np
+        from scipy.io.wavfile import write as write_wav
+
         # Security: Use secure temp file
         tmp_file = create_secure_temp_file(suffix=".wav")
 
@@ -955,6 +970,11 @@ class VoiceAssistant:
 
     def detect_speech_start(self, timeout=1.5):
         """Check if speech starts within timeout. Returns True if speech detected."""
+        # Lazy imports for cold start optimization
+        import sounddevice as sd
+        import torch
+        import numpy as np
+
         model = self.load_vad()
         model.reset_states()
 
@@ -1008,6 +1028,9 @@ class VoiceAssistant:
 
     async def record_with_interruption(self):
         """Record with support for interruption - if user continues speaking, keep recording."""
+        # Lazy import for cold start optimization
+        import numpy as np
+
         all_segments = []
 
         # Check if we're coming from a barge-in interrupt
@@ -1136,8 +1159,8 @@ class VoiceAssistant:
                 context={
                     "language": language,
                     "text_length": len(text),
-                    "function": "_generate_audio_edge"
-                }
+                    "function": "_generate_audio_edge",
+                },
             )
             logger.error("edge_tts_error", error=str(e))
             return None
@@ -1180,6 +1203,7 @@ class VoiceAssistant:
         """Load audio file and return numpy array at SAMPLE_RATE.
         Supports WAV and MP3 formats using torchaudio (pure Python, no ffmpeg needed).
         """
+        import numpy as np
         import torchaudio
 
         # torchaudio can load WAV, MP3, and other formats directly
