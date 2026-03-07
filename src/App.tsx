@@ -112,6 +112,25 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [isNewSessionDialogOpen, setIsNewSessionDialogOpen] = React.useState(false);
   const [isMiniMode, setIsMiniMode] = React.useState(false);
+  
+  // Mini mode settings
+  const [miniModeSettings, setMiniModeSettings] = React.useState(() => {
+    const saved = localStorage.getItem('miniModeSettings');
+    return saved ? JSON.parse(saved) : {
+      position: { x: 20, y: 200 },
+      opacity: 100,
+      color: 'purple'
+    };
+  });
+
+  // Save mini mode settings when changed
+  React.useEffect(() => {
+    localStorage.setItem('miniModeSettings', JSON.stringify(miniModeSettings));
+  }, [miniModeSettings]);
+
+  const updateMiniModeSettings = (updates: { position?: { x: number; y: number }; opacity?: number; color?: string }) => {
+    setMiniModeSettings((prev: { position: { x: number; y: number }; opacity: number; color: string }) => ({ ...prev, ...updates }));
+  };
   const [showTemplates, setShowTemplates] = React.useState(false);
   const [showClipboardHistory, setShowClipboardHistory] = React.useState(false);
   const [showModeBadges, setShowModeBadges] = React.useState(() => {
@@ -939,15 +958,15 @@ function App() {
       <div className="flex-1 overflow-hidden relative">
         {/* 迷你模式悬浮球 - 固定在右侧 */}
         {isMiniMode && (
-          <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50">
-            <MiniModeBubble
-              isRecording={isRecording}
-              isProcessing={isProcessing}
-              isSpeaking={isSpeaking}
-              workMode={workMode}
-              onClick={() => setIsMiniMode(false)}
-            />
-          </div>
+          <MiniModeBubble
+            isRecording={isRecording}
+            isProcessing={isProcessing}
+            isSpeaking={isSpeaking}
+            workMode={workMode}
+            settings={miniModeSettings}
+            onSettingsChange={updateMiniModeSettings}
+            onClick={() => setIsMiniMode(false)}
+          />
         )}
 
         {/* 快捷键状态面板 */}
@@ -1061,6 +1080,8 @@ function App() {
           setShowModeBadges(value);
           localStorage.setItem('showModeBadges', value.toString());
         }}
+        miniModeSettings={miniModeSettings}
+        onMiniModeSettingsChange={updateMiniModeSettings}
       />
 
       {/* 对话模板弹窗 */}

@@ -33,6 +33,7 @@ import {
   Palette,
   Eye,
   EyeOff,
+  Maximize2,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -69,9 +70,15 @@ interface SettingsProps {
   onClearHistory?: () => void;
   showModeBadges?: boolean;
   onToggleModeBadges?: (value: boolean) => void;
+  miniModeSettings?: {
+    position: { x: number; y: number };
+    opacity: number;
+    color: string;
+  };
+  onMiniModeSettingsChange?: (settings: { position?: { x: number; y: number }; opacity?: number; color?: string }) => void;
 }
 
-type SettingsCategory = 'assistant' | 'voice-recognition' | 'ai-model' | 'tts' | 'shortcuts' | 'appearance' | 'advanced';
+type SettingsCategory = 'assistant' | 'voice-recognition' | 'ai-model' | 'tts' | 'shortcuts' | 'appearance' | 'advanced' | 'mini-mode';
 
 export function Settings({
   isOpen,
@@ -85,6 +92,8 @@ export function Settings({
   onClearHistory,
   showModeBadges,
   onToggleModeBadges,
+  miniModeSettings,
+  onMiniModeSettingsChange,
 }: SettingsProps) {
   const { t } = useTranslation();
   const { config, updateConfig, updateHotkey, saveStatus, saveError } = useSettings();
@@ -425,6 +434,7 @@ export function Settings({
     { id: 'tts' as const, label: t('settings.categories.tts'), icon: Volume2 },
     { id: 'shortcuts' as const, label: t('settings.categories.shortcuts'), icon: Keyboard },
     { id: 'appearance' as const, label: t('settings.categories.appearance'), icon: Palette },
+    { id: 'mini-mode' as const, label: t('settings.categories.miniMode') || '迷你模式', icon: Maximize2 },
     { id: 'advanced' as const, label: t('settings.categories.advanced'), icon: Zap },
   ], [t]);
 
@@ -506,6 +516,66 @@ export function Settings({
                 <>
                   <h3 className="text-lg font-semibold text-foreground mb-1">{t('settings.categories.appearance')}</h3>
                   <p className="text-sm text-muted-foreground">{t('settings.descriptions.appearance')}</p>
+                </>
+              )}
+              {activeCategory === 'mini-mode' && (
+                <>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">迷你模式设置</h3>
+                  <p className="text-sm text-muted-foreground mb-4">自定义迷你模式的显示效果</p>
+                  
+                  {/* 透明度设置 */}
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <Label className="text-foreground">透明度</Label>
+                      <div className="flex items-center gap-3 mt-2">
+                        <Slider
+                          value={[miniModeSettings?.opacity || 100]}
+                          onValueChange={(value) => onMiniModeSettingsChange?.({ opacity: value[0] })}
+                          max={100}
+                          min={50}
+                          step={5}
+                          className="flex-1"
+                        />
+                        <span className="text-sm text-muted-foreground w-12">
+                          {miniModeSettings?.opacity || 100}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 颜色设置 */}
+                  <div>
+                    <Label className="text-foreground mb-3 block">颜色</Label>
+                    <div className="flex gap-3">
+                      {[
+                        { id: 'purple', gradient: 'from-violet-500 to-indigo-600', label: '紫色' },
+                        { id: 'blue', gradient: 'from-blue-500 to-cyan-600', label: '蓝色' },
+                        { id: 'green', gradient: 'from-green-500 to-emerald-600', label: '绿色' },
+                        { id: 'gray', gradient: 'from-gray-500 to-slate-600', label: '灰色' },
+                      ].map((color) => (
+                        <button
+                          key={color.id}
+                          onClick={() => onMiniModeSettingsChange?.({ color: color.id })}
+                          className={`
+                            w-10 h-10 rounded-full bg-gradient-to-br ${color.gradient}
+                            ${miniModeSettings?.color === color.id ? 'ring-2 ring-white ring-offset-2 ring-offset-background' : ''}
+                            transition-all hover:scale-110
+                          `}
+                          title={color.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 位置重置 */}
+                  <div className="mt-6 pt-4 border-t border-border">
+                    <Button
+                      variant="outline"
+                      onClick={() => onMiniModeSettingsChange?.({ position: { x: 20, y: 200 } })}
+                    >
+                      重置位置
+                    </Button>
+                  </div>
                 </>
               )}
               {activeCategory === 'advanced' && (
