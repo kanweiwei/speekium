@@ -23,6 +23,7 @@ import {
   PenSquare,
   Mic,
 } from 'lucide-react';
+import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
 import type { WorkMode } from './types/workMode';
@@ -764,6 +765,24 @@ function App() {
 
       if (autoTTS && result && result.success && result.content) {
         setIsSpeaking(true);
+        
+        // 发送系统通知
+        try {
+          let hasPermission = await isPermissionGranted();
+          if (!hasPermission) {
+            const permission = await requestPermission();
+            hasPermission = permission === 'granted';
+          }
+          if (hasPermission) {
+            sendNotification({
+              title: 'Speekium',
+              body: 'AI 正在回复...',
+            });
+          }
+        } catch (notifyError) {
+          console.warn('[Notification] Failed to send:', notifyError);
+        }
+        
         try {
           const ttsResult = await generateTTS(result.content);
           if (!ttsResult.success) {

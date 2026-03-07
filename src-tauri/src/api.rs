@@ -2,7 +2,8 @@
 // API Module - LLM API Testing and Connection
 // ============================================================================
 
-use reqwest;
+use reqwest::Client;
+use tauri::Manager;
 
 /// Test Ollama API connection
 #[tauri::command]

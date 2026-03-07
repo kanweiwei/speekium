@@ -11,6 +11,7 @@
     "core:webview:default",
     "core:app:default",
     "opener:default",
-    "global-shortcut:default"
+    "global-shortcut:default",
+    "notification:default"
   ]
 }

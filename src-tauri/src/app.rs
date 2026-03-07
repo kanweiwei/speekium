@@ -145,7 +145,8 @@ fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunEvent) {
 pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_notification::init());
 
     #[cfg(target_os = "macos")]
     {
