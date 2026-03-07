@@ -105,6 +105,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "key": "Digit3",
         "displayName": "⌥3",
     },
+    # Onboarding Configuration
+    "onboarding_completed": False,
 }
 
 
@@ -167,3 +169,16 @@ class ConfigManager:
     def get_path() -> str:
         """Get configuration file path"""
         return CONFIG_PATH
+
+    @staticmethod
+    def is_onboarding_completed() -> bool:
+        """Check if onboarding is completed"""
+        config = ConfigManager.load(silent=True)
+        return config.get("onboarding_completed", False)
+
+    @staticmethod
+    def set_onboarding_completed(completed: bool = True) -> None:
+        """Set onboarding completed status"""
+        config = ConfigManager.load(silent=True)
+        config["onboarding_completed"] = completed
+        ConfigManager.save(config)
