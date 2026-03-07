@@ -1045,6 +1045,10 @@ export function Settings({
               {/* Shortcuts Settings */}
               {activeCategory === 'shortcuts' && (
                 <div className="space-y-6">
+                  <p className="text-sm text-muted-foreground">
+                    点击快捷键然后按下新的组合键来修改
+                  </p>
+
                   {/* Push-to-Talk Hotkey */}
                   <div className="space-y-2">
                     <Label className="text-foreground">{t('settings.fields.pushToTalk')}</Label>
@@ -1062,19 +1066,61 @@ export function Settings({
                     />
                   </div>
 
-                  {/* Show/Hide Window Info */}
-                  <div className="p-4 rounded-lg border border-border bg-muted">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label className="text-foreground">{t('settings.fields.toggleWindow')}</Label>
-                        <p className="text-xs text-muted-foreground">
-                          {t('settings.hints.toggleWindow')}
-                        </p>
+                  {/* Quick Actions */}
+                  <div className="space-y-3">
+                    <Label className="text-foreground">快捷操作</Label>
+                    
+                    {/* Toggle Mini Mode */}
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+                      <div>
+                        <p className="font-medium">迷你模式</p>
+                        <p className="text-xs text-muted-foreground">切换迷你模式显示</p>
                       </div>
-                      <kbd className="px-3 py-1.5 text-xs font-mono font-semibold text-foreground bg-muted/80 border border-border rounded-md shadow-sm">
+                      <kbd className="px-3 py-1.5 text-xs font-mono bg-muted border border-border rounded">
+                        Ctrl+Alt+M
+                      </kbd>
+                    </div>
+
+                    {/* Toggle Window */}
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+                      <div>
+                        <p className="font-medium">显示/隐藏窗口</p>
+                        <p className="text-xs text-muted-foreground">切换主窗口显示</p>
+                      </div>
+                      <kbd className="px-3 py-1.5 text-xs font-mono bg-muted border border-border rounded">
                         ⌘⇧Space
                       </kbd>
                     </div>
+
+                    {/* New Session */}
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+                      <div>
+                        <p className="font-medium">新建会话</p>
+                        <p className="text-xs text-muted-foreground">开始新的对话</p>
+                      </div>
+                      <kbd className="px-3 py-1.5 text-xs font-mono bg-muted border border-border rounded">
+                        ⌘N
+                      </kbd>
+                    </div>
+
+                    {/* Settings */}
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+                      <div>
+                        <p className="font-medium">打开设置</p>
+                        <p className="text-xs text-muted-foreground">打开设置面板</p>
+                      </div>
+                      <kbd className="px-3 py-1.5 text-xs font-mono bg-muted border border-border rounded">
+                        ⌘,
+                      </kbd>
+                    </div>
+                  </div>
+
+                  {/* System Hotkeys Info */}
+                  <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                    <h4 className="font-medium mb-2">系统快捷键</h4>
+                    <p className="text-xs text-muted-foreground">
+                      部分快捷键由系统全局控制，无法在应用内修改
+                    </p>
                   </div>
                 </div>
               )}
