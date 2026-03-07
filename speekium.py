@@ -27,6 +27,7 @@ from scipy.io.wavfile import write as write_wav
 
 from backends import create_backend
 from config_loader import ConfigLoader, get_config_loader
+from error_tracker import get_error_tracker
 from logger import get_logger, set_component
 from mode_manager import ModeManager, RecordingMode
 from voice_pipeline import VoicePipeline
@@ -643,11 +644,26 @@ class VoiceAssistant:
             if current_config["api_key"]:
                 backend_kwargs["api_key"] = current_config["api_key"]
 
-            self.llm_backend = create_backend(
-                current_config["provider"],
-                SYSTEM_PROMPT,
-                **backend_kwargs,
-            )
+            try:
+                self.llm_backend = create_backend(
+                    current_config["provider"],
+                    SYSTEM_PROMPT,
+                    **backend_kwargs,
+                )
+            except Exception as e:
+                # 记录 LLM 加载错误
+                error_tracker = get_error_tracker()
+                error_tracker.capture(
+                    e,
+                    level="error",
+                    context={
+                        "provider": current_config["provider"],
+                        "model": current_config["model"],
+                        "function": "load_llm"
+                    }
+                )
+                logger.error("llm_load_failed", error=str(e))
+                raise
 
             # Save current config
             self._last_llm_config = current_config
@@ -1081,6 +1097,17 @@ class VoiceAssistant:
             await communicate.save(tmp_file)
             return tmp_file
         except Exception as e:
+            # 记录 TTS 错误
+            error_tracker = get_error_tracker()
+            error_tracker.capture(
+                e,
+                level="error",
+                context={
+                    "language": language,
+                    "text_length": len(text),
+                    "function": "_generate_audio_edge"
+                }
+            )
             logger.error("edge_tts_error", error=str(e))
             return None
 
