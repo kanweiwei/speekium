@@ -178,6 +178,9 @@ pub fn run() {
             crate::commands::set_app_language,
             crate::commands::get_model_status,
             crate::commands::open_folder,
+            crate::commands::cloud_sync_upload,
+            crate::commands::cloud_sync_download,
+            crate::commands::get_dropbox_auth_url,
             // API commands
             crate::api::test_ollama_connection,
             crate::api::list_ollama_models,

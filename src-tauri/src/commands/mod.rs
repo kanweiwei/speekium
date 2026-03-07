@@ -500,6 +500,92 @@ pub async fn update_hotkey(hotkey_config: serde_json::Value) -> Result<serde_jso
 }
 
 // ============================================================================
+// Cloud Sync Commands (3 commands)
+// ============================================================================
+
+#[tauri::command]
+pub async fn cloud_sync_upload(token: String) -> Result<bool, String> {
+    use std::process::Command;
+    
+    let script = r#"
+import sys
+sys.path.insert(0, '.')
+from cloud_sync import sync_to_cloud
+import json
+
+config_path = 'config.json'
+result = sync_to_cloud(config_path, '''""" + &token + r"""''')
+print(json.dumps({'success': result}))
+"#;
+
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .current_dir("/Users/mac/github/speekium")
+        .output()
+        .map_err(|e| format!("Failed to run: {}", e))?;
+
+    if output.status.success() {
+        Ok(true)
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn cloud_sync_download(token: String) -> Result<bool, String> {
+    use std::process::Command;
+    
+    let script = r#"
+import sys
+sys.path.insert(0, '.')
+from cloud_sync import sync_from_cloud
+import json
+
+config_path = 'config.json'
+result = sync_from_cloud(config_path, '''""" + &token + r"""''')
+print(json.dumps({'success': result}))
+"#;
+
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .current_dir("/Users/mac/github/speekium")
+        .output()
+        .map_err(|e| format!("Failed to run: {}", e))?;
+
+    if output.status.success() {
+        Ok(true)
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[tauri::command]
+pub fn get_dropbox_auth_url() -> String {
+    use std::process::Command;
+    
+    let script = r#"
+import sys
+sys.path.insert(0, '.')
+from cloud_sync import get_dropbox_auth_url
+print(get_dropbox_auth_url('speekium://oauth/callback'))
+"#;
+
+    match Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .current_dir("/Users/mac/github/speekium")
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => String::new(),
+    }
+}
+
+// ============================================================================
 // Daemon Commands (2 commands)
 // ============================================================================
 

@@ -42,6 +42,8 @@ import {
   RefreshCw,
   HardDrive,
   Download,
+  Cloud,
+  Upload,
   Info,
   FolderOpen,
 } from 'lucide-react';
@@ -1235,6 +1237,87 @@ export function Settings({
                         Failed to load model status
                       </div>
                     )}
+                  </div>
+
+                  {/* Cloud Sync */}
+                  <div className="pt-4 border-t border-border">
+                    <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                      <Cloud className="h-4 w-4" />
+                      {t('settings.cloudSync.title') || 'Cloud Sync'}
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted">
+                        <div className="space-y-0.5">
+                          <Label className="text-foreground text-sm">Dropbox</Label>
+                          <p className="text-xs text-muted-foreground">
+                            {t('settings.cloudSync.dropboxHint') || 'Sync config across devices'}
+                          </p>
+                        </div>
+                        <Switch
+                          id="cloud-sync"
+                          checked={!!localConfig.cloud_sync_token}
+                          onCheckedChange={async (checked) => {
+                            if (checked) {
+                              try {
+                                // 获取 OAuth 授权 URL
+                                const authUrl = await invoke<string>('get_dropbox_auth_url');
+                                // 打开浏览器授权
+                                window.open(authUrl, '_blank');
+                                // 提示用户授权后粘贴 token
+                                const token = prompt('请在授权后粘贴 Dropbox Access Token:');
+                                if (token) {
+                                  updateLocalConfig('cloud_sync_token', token);
+                                }
+                              } catch (error) {
+                                console.error('OAuth error:', error);
+                                alert('获取授权失败，请重试');
+                              }
+                            } else {
+                              updateLocalConfig('cloud_sync_token', '');
+                            }
+                          }}
+                          className="data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-blue-500 data-[state=checked]:to-purple-600"
+                        />
+                      </div>
+                      {localConfig.cloud_sync_token && (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 bg-muted border-border text-foreground hover:bg-muted/80"
+                            onClick={async () => {
+                              try {
+                                await invoke('cloud_sync_upload', { token: localConfig.cloud_sync_token });
+                                alert('配置已上传到 Dropbox ✅');
+                              } catch (error) {
+                                console.error('Upload error:', error);
+                                alert('上传失败: ' + error);
+                              }
+                            }}
+                          >
+                            <Upload className="h-3 w-3 mr-1" />
+                            {t('settings.cloudSync.upload') || 'Upload'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 bg-muted border-border text-foreground hover:bg-muted/80"
+                            onClick={async () => {
+                              try {
+                                const result = await invoke<string>('cloud_sync_download', { token: localConfig.cloud_sync_token });
+                                alert('配置已下载: ' + result);
+                              } catch (error) {
+                                console.error('Download error:', error);
+                                alert('下载失败: ' + error);
+                              }
+                            }}
+                          >
+                            <Download className="h-3 w-3 mr-1" />
+                            {t('settings.cloudSync.download') || 'Download'}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="pt-4 border-t border-border">
