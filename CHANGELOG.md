@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Modular architecture: config_loader.py and voice_pipeline.py for better code organization
+- EmptyState and LoadingScreen React components
+- Model constants (models.ts) for better maintainability
 - Branded Speekium icon with sound wave design
 - ZhipuAI (智谱AI) LLM backend support with glm-4 models
 - Loading screen with animated sound wave rings and gradient background
@@ -15,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Contributing guide for developers
 
 ### Changed
+- Refactored speekium.py (1444→1361 lines) using ConfigLoader for centralized config management
+- Refactored App.tsx (1374→1010 lines) with extracted components
 - Hotkey unified to `Alt+3` across all platforms
 - LLM provider configuration restructured to unified array format
 - Recording mode now writes directly to config file for faster VAD detection
@@ -22,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated development documentation for Tauri 2.0 architecture
 
 ### Fixed
+- Variable naming issue: current_config → provider_config in load_llm()
+- VAD_THRESHOLD parameter naming in voice_pipeline.py
+- PowerShell path injection vulnerability (escaped single quotes)
+- Removed duplicate import os in voice_pipeline.py
 - VAD recording not stopping when switching from continuous to push-to-talk mode
 - PTT overlay window display issues
 - Daemon initialization timing on page refresh
