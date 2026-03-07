@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 // Import all translation files and merge them
 import en from './locales/en/translations.json';
 import zh from './locales/zh/translations.json';
+import ja from './locales/ja/translations.json';
 
 // Initial language from config file (will be updated asynchronously)
 let initialLanguage = 'zh'; // default fallback
@@ -14,7 +15,7 @@ let initialLanguage = 'zh'; // default fallback
 async function initLanguageFromConfig() {
   try {
     const lang = await invoke<string>('get_app_language');
-    initialLanguage = lang as 'en' | 'zh';
+    initialLanguage = lang as 'en' | 'zh' | 'ja';
     // Update i18n if it was initialized with a different language
     if (i18n.language !== initialLanguage) {
       await i18n.changeLanguage(initialLanguage);
@@ -22,7 +23,7 @@ async function initLanguageFromConfig() {
   } catch (error) {
     console.error('Failed to get language from config:', error);
     // Use browser language as fallback
-    const browserLang = navigator.language.startsWith('zh') ? 'zh' : 'en';
+    const browserLang = navigator.language.startsWith('zh') ? 'zh' : navigator.language.startsWith('ja') ? 'ja' : 'en';
     if (i18n.language !== browserLang) {
       await i18n.changeLanguage(browserLang);
     }
@@ -36,6 +37,7 @@ i18n
     resources: {
       en: { translation: en },
       zh: { translation: zh },
+      ja: { translation: ja },
     },
     fallbackLng: 'zh',
     lng: initialLanguage,

@@ -1,0 +1,111 @@
+{
+  "app": {
+    "title": "Speekium",
+    "loading": {
+      "startingService": "音声サービスを起動中...",
+      "firstLaunchHint": "初回起動は30-60秒かかります",
+      "retry": "再試行",
+      "loadingModels": "モデル読み込み中",
+      "vad": "VAD",
+      "vadDesc": "音声アクティビティ検出",
+      "asr": "ASR",
+      "asrDesc": "音声認識",
+      "downloadComplete": "ダウンロード完了"
+    },
+    "header": {
+      "history": "履歴",
+      "newSession": "新規",
+      "settings": "設定"
+    },
+    "emptyState": {
+      "title": "会話を始める",
+      "description": "メッセージを入力するか音声アシスタントを使用",
+      "prompts": {
+        "introduce": "自己紹介してください",
+        "weather": "今日の天気は？",
+        "joke": "話を聞いて",
+        "book": "本を推薦して"
+      },
+      "shortcutHint": "押し続けて",
+      "shortcutKey1": "⌘ Cmd",
+      "shortcutKey2": "⌥ Alt",
+      "shortcutAction": "話す"
+    },
+    "ptt": {
+      "recording": "録音中...",
+      "recordingHint": "離して録音停止",
+      "processing": "思考中...",
+      "processingHint": "メッセージを処理中",
+      "hint": "押して",
+      "shortcutKey": "⌘+⌥",
+      "hintAction": "話す"
+    },
+    "collapse": "折りたたむ",
+    "expand": "展開",
+    "messages": {
+      "placeholder": "メッセージを入力...",
+      "user": "あなた",
+      "assistant": "アシスタント",
+      "voiceLabel": "音声メッセージ",
+      "play": "再生",
+      "playing": "再生中..."
+    },
+    "errors": {
+      "pttError": "PTTエラー",
+      "listenFailed": "リスニング失敗",
+      "ttsFailed": "TTS失敗",
+      "ttsError": "TTSエラー",
+      "chatFailed": "チャット失敗"
+    }
+  },
+  "buttons": {
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "create": "作成",
+    "save": "保存",
+    "delete": "削除",
+    "close": "閉じる",
+    "back": "戻る",
+    "send": "送信"
+  },
+  "themes": {
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システム",
+    "accentColor": "アクセントカラー"
+  },
+  "languages": {
+    "en": "English",
+    "zh": "中文",
+    "ja": "日本語",
+    "switch": "言語を切り替え"
+  },
+  "settings": {
+    "title": "設定",
+    "categories": {
+      "assistant": "アシスタント設定",
+      "voiceRecognition": "音声認識",
+      "aiModel": "AIモデル",
+      "tts": "音声合成",
+      "shortcuts": "ショートカット",
+      "appearance": "外観設定",
+      "advanced": "高度な設定"
+    },
+    "fields": {
+      "workMode": "モード",
+      "systemPrompt": "システムプロンプト",
+      "maxHistory": "最大履歴数",
+      "llmBackend": "プロバイダー",
+      "ttsEngine": "TTSエンジン",
+      "theme": "テーマ"
+    }
+  },
+  "history": {
+    "title": "履歴",
+    "newSession": "新規セッション",
+    "empty": {
+      "title": "履歴がありません",
+      "description": "会話を始めると自動保存されます"
+    }
+  }
+}
