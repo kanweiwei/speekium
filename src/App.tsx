@@ -32,6 +32,7 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { ChatBubble, LoadingIndicator } from './components/ChatBubble';
 import { HotkeyStatusPanel } from './components/HotkeyStatusPanel';
 import { MiniModeBubble } from './components/MiniModeBubble';
+import { ConversationTemplates } from './components/ConversationTemplates';
 function App() {
   const { t } = useTranslation();
   const { workMode, setWorkMode } = useWorkMode();
@@ -110,6 +111,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [isNewSessionDialogOpen, setIsNewSessionDialogOpen] = React.useState(false);
   const [isMiniMode, setIsMiniMode] = React.useState(false);
+  const [showTemplates, setShowTemplates] = React.useState(false);
   const [showModeBadges, setShowModeBadges] = React.useState(() => {
     const saved = localStorage.getItem('showModeBadges');
     return saved !== 'false'; // Default to true
@@ -804,6 +806,11 @@ function App() {
     await handleSendText(prompt);
   };
 
+  // Handle template selection
+  const handleTemplateSelect = (_prompt: string) => {
+    setShowTemplates(false);
+  };
+
   // Show loading screen while daemon is initializing
   if (daemonStatus !== 'ready') {
     return (
@@ -833,6 +840,16 @@ function App() {
           >
             <Clock className="w-4 h-4 mr-2" />
             {t('app.header.history')}
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            onClick={() => setShowTemplates(true)}
+          >
+            <PenSquare className="w-4 h-4 mr-2" />
+            {t('app.templates.button') || '模板'}
           </Button>
 
           <Button
@@ -1031,6 +1048,14 @@ function App() {
           localStorage.setItem('showModeBadges', value.toString());
         }}
       />
+
+      {/* 对话模板弹窗 */}
+      {showTemplates && (
+        <ConversationTemplates
+          onSelectTemplate={handleTemplateSelect}
+          onClose={() => setShowTemplates(false)}
+        />
+      )}
 
       {/* 历史抽屉 */}
       <HistoryDrawer
