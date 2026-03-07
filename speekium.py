@@ -26,8 +26,10 @@ import torch
 from scipy.io.wavfile import write as write_wav
 
 from backends import create_backend
+from config_loader import ConfigLoader, get_config_loader
 from logger import get_logger, set_component
 from mode_manager import ModeManager, RecordingMode
+from voice_pipeline import VoicePipeline
 
 if TYPE_CHECKING:
     import huggingface_hub.utils
@@ -315,7 +317,14 @@ class VoiceAssistant:
         )  # Default: continuous conversation mode
         self.interrupt_audio_buffer = []  # Buffer for interrupt audio
         self._tts_backend = None  # Cache TTS backend setting
-        self._load_tts_config()  # Load TTS config on initialization
+
+        # Use ConfigLoader for centralized config management
+        self.config_loader = get_config_loader()
+        config = self.config_loader.load_all_config()
+
+        # Load TTS config
+        tts_config = config.get("tts", {})
+        self._tts_backend = tts_config.get("tts_backend", "edge")
 
         # TTS generation/playback state - to pause VAD during TTS
         self.is_generating_tts = False
@@ -326,97 +335,17 @@ class VoiceAssistant:
         self.recording_interrupt_event = threading.Event()
 
         # VAD configuration (load from config file)
-        self.vad_threshold = VAD_THRESHOLD
-        self.vad_consecutive_threshold = VAD_CONSECUTIVE_THRESHOLD
-        self.vad_silence_duration = SILENCE_AFTER_SPEECH
-        self.vad_pre_buffer = VAD_PRE_BUFFER
-        self.vad_min_speech_duration = MIN_SPEECH_DURATION
-        self.vad_max_recording_duration = MAX_RECORDING_DURATION
-        self._load_vad_config()  # Load VAD config on initialization
-
-    def _load_vad_config(self):
-        """Load VAD configuration from config file."""
-        try:
-            from config_manager import ConfigManager
-
-            config = ConfigManager.load()
-            self.vad_threshold = config.get("vad_threshold", VAD_THRESHOLD)
-            self.vad_consecutive_threshold = config.get(
-                "vad_consecutive_threshold", VAD_CONSECUTIVE_THRESHOLD
-            )
-            self.vad_silence_duration = config.get("vad_silence_duration", SILENCE_AFTER_SPEECH)
-            self.vad_pre_buffer = config.get("vad_pre_buffer", VAD_PRE_BUFFER)
-            self.vad_min_speech_duration = config.get(
-                "vad_min_speech_duration", MIN_SPEECH_DURATION
-            )
-            self.vad_max_recording_duration = config.get(
-                "vad_max_recording_duration", MAX_RECORDING_DURATION
-            )
-            logger.info(
-                "vad_config_loaded",
-                threshold=self.vad_threshold,
-                consecutive=self.vad_consecutive_threshold,
-                silence=self.vad_silence_duration,
-            )
-        except Exception as e:
-            logger.warning("vad_config_load_failed", error=str(e), fallback="default")
-
-    def _load_tts_config(self):
-        """Load TTS backend and rate from config file."""
-        try:
-            from config_manager import ConfigManager
-
-            config = ConfigManager.load()
-            self._tts_backend = config.get("tts_backend", "edge")
-            # Update global TTS_RATE as well (used in _generate_audio_edge)
-            global TTS_RATE
-            TTS_RATE = config.get("tts_rate", "+0%")
-            logger.info("tts_config_loaded", backend=self._tts_backend, rate=TTS_RATE)
-        except Exception as e:
-            logger.warning("tts_config_load_failed", error=str(e), fallback="edge")
-            self._tts_backend = "edge"
-
-    def _load_llm_config(self):
-        """Load LLM backend configuration from config file and update global variables."""
-        try:
-            from config_manager import ConfigManager
-
-            config = ConfigManager.load()
-
-            # Update global LLM configuration variables (new unified structure)
-            global LLM_PROVIDER, LLM_PROVIDERS, LLM_BACKEND
-
-            # Load current provider and providers array
-            LLM_PROVIDER = config.get("llm_provider", "ollama")
-            LLM_PROVIDERS = config.get("llm_providers", [])
-
-            # Find current provider config to log details
-            current_provider_config = {}
-            for provider in LLM_PROVIDERS:
-                if provider.get("name") == LLM_PROVIDER:
-                    current_provider_config = provider
-                    break
-
-            # For backwards compatibility, also update LLM_BACKEND
-            LLM_BACKEND = LLM_PROVIDER
-
-            logger.info(
-                "llm_config_loaded",
-                provider=LLM_PROVIDER,
-                model=current_provider_config.get("model", "N/A"),
-                base_url=current_provider_config.get("base_url", "N/A"),
-                has_api_key=bool(current_provider_config.get("api_key")),
-            )
-            print(
-                f"🤖 LLM 配置已加载: 服务商={LLM_PROVIDER}, 模型={current_provider_config.get('model', 'N/A')}",
-                file=sys.stderr,
-            )
-        except Exception as e:
-            logger.warning("llm_config_load_failed", error=str(e), fallback="default")
+        vad_config = config.get("vad", {})
+        self.vad_threshold = vad_config.get("vad_threshold", VAD_THRESHOLD)
+        self.vad_consecutive_threshold = vad_config.get("vad_consecutive_threshold", VAD_CONSECUTIVE_THRESHOLD)
+        self.vad_silence_duration = vad_config.get("vad_silence_duration", SILENCE_AFTER_SPEECH)
+        self.vad_pre_buffer = vad_config.get("vad_pre_buffer", VAD_PRE_BUFFER)
+        self.vad_min_speech_duration = vad_config.get("vad_min_speech_duration", MIN_SPEECH_DURATION)
+        self.vad_max_recording_duration = vad_config.get("vad_max_recording_duration", MAX_RECORDING_DURATION)
 
     def get_tts_backend(self):
         """Get current TTS backend from config (refreshes on each call)."""
-        self._load_tts_config()  # Refresh to get latest config
+        self._tts_backend = self.config_loader.get_tts_backend()
         return self._tts_backend
 
     def _get_size_str(self, path: str) -> str:
@@ -625,30 +554,28 @@ class VoiceAssistant:
         return self.vad_model
 
     def load_llm(self):
-        # Always reload configuration to get latest settings
-        self._load_llm_config()
+        # Load LLM config using ConfigLoader
+        config = self.config_loader.load_all_config()
+        llm_config = config.get("llm", {})
+
+        # Update global LLM variables
+        global LLM_PROVIDER, LLM_PROVIDERS, LLM_BACKEND
+        LLM_PROVIDER = llm_config.get("llm_provider", "ollama")
+        LLM_PROVIDERS = llm_config.get("llm_providers", [])
+        LLM_BACKEND = llm_config.get("llm_backend", "ollama")
 
         # Track last used config to detect changes
         self._last_llm_config = getattr(self, "_last_llm_config", {})
 
         # Find current provider config from LLM_PROVIDERS array
-        provider_config = None
-        for provider in LLM_PROVIDERS:
-            if provider.get("name") == LLM_PROVIDER:
-                provider_config = provider
-                break
+        provider_config = llm_config.get("current_provider_config", {})
 
-        if provider_config is None:
-            # Fallback to empty config if provider not found
-            logger.warning("provider_not_found", provider=LLM_PROVIDER, fallback="empty_config")
-            provider_config = {"name": LLM_PROVIDER, "base_url": "", "api_key": "", "model": ""}
-
-        # Extract current config values
+        # Build current config for comparison
         current_config = {
             "provider": LLM_PROVIDER,
+            "model": provider_config.get("model", ""),
             "base_url": provider_config.get("base_url", ""),
             "api_key": provider_config.get("api_key", ""),
-            "model": provider_config.get("model", ""),
         }
 
         # Check if backend needs to be recreated
@@ -1174,10 +1101,12 @@ class VoiceAssistant:
                         tmp_file,
                     ]
                 elif system == "Windows":
+                    # Escape single quotes in path to prevent injection
+                    safe_path = tmp_file.replace("'", "''")
                     cmd = [
                         "powershell",
                         "-c",
-                        f"(New-Object Media.SoundPlayer '{tmp_file}').PlaySync()",
+                        f"(New-Object Media.SoundPlayer '{safe_path}').PlaySync()",
                     ]
                 else:
                     logger.warning("unsupported_platform", platform=system)
