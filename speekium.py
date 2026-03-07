@@ -5,6 +5,9 @@ Natural voice conversation with large language models
 Flow: [VAD voice detection] → Record → SenseVoice ASR → LLM streaming → TTS playback
 
 Supported backends: Claude Code CLI, Ollama
+
+Performance optimization: Heavy modules (torch, edge_tts, sounddevice) are lazy-loaded
+to improve cold start time.
 """
 
 import asyncio
@@ -19,11 +22,10 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
-import edge_tts
-import numpy as np
-import sounddevice as sd
-import torch
-from scipy.io.wavfile import write as write_wav
+# Lazy-loaded modules (imported on-demand for cold start optimization)
+# - torch: loaded when needed for VAD/ASR
+# - edge_tts: loaded when needed for TTS
+# - sounddevice: loaded when needed for recording
 
 from backends import create_backend
 from config_loader import ConfigLoader, get_config_loader
@@ -526,6 +528,9 @@ class VoiceAssistant:
 
             try:
                 logger.info("model_loading", model="VAD")
+
+                # Lazy import for cold start optimization
+                import torch
 
                 # Load VAD model with retry logic for PyTorch Hub rate limit
                 max_retries = 5
@@ -1112,6 +1117,9 @@ class VoiceAssistant:
 
     async def _generate_audio_edge(self, text, language):
         """Generate audio using Edge TTS (online)."""
+        # Lazy import for cold start optimization
+        import edge_tts
+
         try:
             voice = EDGE_TTS_VOICES.get(language, EDGE_TTS_VOICES[DEFAULT_LANGUAGE])
             # Security: Use secure temp file
