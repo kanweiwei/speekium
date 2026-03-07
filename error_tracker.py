@@ -8,6 +8,7 @@ import os
 import traceback
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from typing import Any
 
 # Error severity levels
@@ -26,8 +27,8 @@ class ErrorRecord:
         level: str,
         message: str,
         error_type: str,
-        context: dict | None = None,
-        stack_trace: str | None = None
+        context: Optional[dict] = None,
+        stack_trace: Optional[str] = None
     ):
         self.timestamp = datetime.now().isoformat()
         self.level = level
@@ -60,7 +61,7 @@ class ErrorTracker:
     - Privacy filtering
     """
     
-    def __init__(self, storage_path: str | None = None):
+    def __init__(self, storage_path: Optional[str] = None):
         """
         Initialize error tracker.
         
@@ -96,9 +97,9 @@ class ErrorTracker:
     
     def capture(
         self,
-        error: Exception | str,
+        error: Exception,
         level: str = "error",
-        context: dict | None = None
+        context: Optional[dict] = None
     ) -> ErrorRecord:
         """
         Capture an error.
@@ -195,7 +196,7 @@ class ErrorTracker:
 
 
 # Global instance
-_error_tracker: ErrorTracker | None = None
+_error_tracker: Optional[ErrorTracker] = None
 
 
 def get_error_tracker() -> ErrorTracker:
