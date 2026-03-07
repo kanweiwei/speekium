@@ -873,6 +873,10 @@ function App() {
                   const isUser = message.role === 'user';
                   const isLastAssistantMessage = !isUser && index === messages.length - 1;
                   const showStreaming = isStreaming && isLastAssistantMessage;
+                  
+                  // 连续相同角色消息隐藏头像
+                  const prevMessage = messages[index - 1];
+                  const hideAvatar = prevMessage && prevMessage.role === message.role;
 
                   return (
                     <ChatBubble
@@ -881,6 +885,7 @@ function App() {
                       index={index}
                       isStreaming={showStreaming}
                       isSpeaking={isSpeaking}
+                      hideAvatar={hideAvatar}
                       onPlayTTS={!isUser ? (content) => {
                         if (!isSpeaking) {
                           setIsSpeaking(true);

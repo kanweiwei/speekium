@@ -15,6 +15,7 @@ interface ChatBubbleProps {
   isSpeaking?: boolean;
   onPlayTTS?: (content: string) => void;
   showTime?: boolean;
+  hideAvatar?: boolean; // 连续消息时隐藏头像
 }
 
 /**
@@ -27,6 +28,7 @@ interface ChatBubbleProps {
  * | 背景 | 渐变蓝 (#3b82f6 → #2563eb) | 深灰 (#21262d) |
  * | 圆角 | 右上角直角 | 左上角直角 |
  * | 头像 | 蓝底用户图标 | 紫底机器人 |
+ * | 气泡尾巴 | 用户右侧小三角 | AI 左侧小三角 |
  */
 export function ChatBubble({ 
   message, 
@@ -34,15 +36,13 @@ export function ChatBubble({
   isStreaming = false, 
   isSpeaking = false,
   onPlayTTS,
-  showTime = true 
+  showTime = true,
+  hideAvatar = false
 }: ChatBubbleProps) {
   const { t } = useTranslation();
   const isUser = message.role === 'user';
   const isVoice = message.content.startsWith('🎤');
   const content = message.content.replace(/^🎤\s*/, '');
-  
-  // 判断是否需要显示头像（连续相同角色消息则隐藏）
-  // 这个逻辑在父组件处理更合适，这里只负责渲染
   
   // 格式化时间
   const formatTime = (timestamp?: number) => {
@@ -61,7 +61,7 @@ export function ChatBubble({
       )}
     >
       {/* AI 头像 - 仅在非用户时显示 */}
-      {!isUser && (
+      {!isUser && !hideAvatar && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="white" fillOpacity="0.9"/>
@@ -70,8 +70,11 @@ export function ChatBubble({
         </div>
       )}
 
+      {/* 占位 - 保持气泡区域对齐 */}
+      {!isUser && hideAvatar && <div className="w-8" />}
+
       {/* 气泡内容区域 */}
-      <div className={cn("max-w-[75%] group", isUser && "order-1")}>
+      <div className={cn("max-w-[70%] group", isUser && "order-1")}>
         {/* 气泡 */}
         <div
           className={cn(
@@ -81,6 +84,17 @@ export function ChatBubble({
               : "bg-[#21262d] text-gray-100 border border-gray-700/50 rounded-2xl rounded-tl-sm"
           )}
         >
+          {/* 气泡尾巴 - 小三角装饰 */}
+          <span
+            className={cn(
+              "absolute top-3 w-0 h-0 border-[6px] border-transparent",
+              isUser 
+                ? "right-[-12px] border-l-blue-500" 
+                : "left-[-12px] border-r-gray-700"
+            )}
+            style={isUser ? { borderLeftColor: '#3b82f6' } : { borderRightColor: '#2d333b' }}
+          />
+
           {/* 语音输入标识 */}
           {isVoice && (
             <div className="flex items-center gap-1.5 mb-1.5 opacity-70">
@@ -130,7 +144,7 @@ export function ChatBubble({
       </div>
 
       {/* 用户头像 - 仅在用户时显示 */}
-      {isUser && (
+      {isUser && !hideAvatar && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -138,6 +152,9 @@ export function ChatBubble({
           </svg>
         </div>
       )}
+
+      {/* 占位 - 保持气泡区域对齐 */}
+      {isUser && hideAvatar && <div className="w-8" />}
     </div>
   );
 }
