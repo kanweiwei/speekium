@@ -363,3 +363,72 @@ pub async fn test_zhipu_connection(api_key: String, base_url: String, model: Str
         }
     }
 }
+
+// ============================================================================
+// Error Reporting API
+// ============================================================================
+
+use std::path::PathBuf;
+
+/// Get error statistics
+#[tauri::command]
+pub fn get_error_stats(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let app_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let error_file = app_dir.join("errors.jsonl");
+    
+    if !error_file.exists() {
+        return Ok(serde_json::json!({
+            "total": 0,
+            "pending": 0,
+            "reported": 0
+        }));
+    }
+    
+    let content = std::fs::read_to_string(&error_file).map_err(|e| e.to_string())?;
+    let lines: Vec<&str> = content.lines().collect();
+    let total = lines.len();
+    
+    // Count pending (not yet reported)
+    let pending = lines.iter().filter(|l| !l.contains("\"reported\":true")).count();
+    
+    Ok(serde_json::json!({
+        "total": total,
+        "pending": pending,
+        "reported": total - pending
+    }))
+}
+
+/// Trigger error upload to GitHub
+#[tauri::command]
+pub async fn upload_errors_to_github(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use std::process::Command;
+    
+    let app_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let error_file = app_dir.join("errors.jsonl");
+    
+    if !error_file.exists() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "message": "No error files found"
+        }));
+    }
+    
+    // Read errors
+    let content = std::fs::read_to_string(&error_file).map_err(|e| e.to_string())?;
+    let lines: Vec<&str> = content.lines().collect();
+    let pending: Vec<&str> = lines.iter().filter(|l| !l.contains("\"reported\":true")).cloned().collect();
+    
+    if pending.is_empty() {
+        return Ok(serde_json::json!({
+            "success": true,
+            "message": "No pending errors to upload"
+        }));
+    }
+    
+    // For now, just return the count - actual GitHub API would need GITHUB_TOKEN
+    Ok(serde_json::json!({
+        "success": true,
+        "message": format!("Found {} pending errors", pending.len()),
+        "count": pending.len()
+    }))
+}

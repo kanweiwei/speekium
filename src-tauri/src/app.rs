@@ -184,6 +184,8 @@ pub fn run() {
             crate::api::test_openrouter_connection,
             crate::api::test_custom_connection,
             crate::api::test_zhipu_connection,
+            crate::api::get_error_stats,
+            crate::api::upload_errors_to_github,
             crate::platform::type_text_command,
             // Database commands
             crate::db_commands::db_create_session,

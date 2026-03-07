@@ -313,5 +313,13 @@
     "skip": "跳过",
     "next": "下一步",
     "start": "开始使用"
+  },
+  "errors": {
+    "report": "上报错误",
+    "pending": "待处理",
+    "total": "总计",
+    "reported": "已上报",
+    "success": "错误上报成功",
+    "noErrors": "没有需要上报的错误"
   }
 }
