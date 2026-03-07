@@ -177,6 +177,26 @@ export function LoadingScreen({
           <span className="text-sm font-medium">{message || t('app.loading.startingService')}</span>
         </div>
 
+        {/* Progress bar */}
+        {displayStatus === 'loading' && downloadProgress?.show && (
+          <div className="mt-4 w-72 animate-fade-in">
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span>{downloadProgress.model}</span>
+              <span>{downloadProgress.percent}%</span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden border border-border/50">
+              <div 
+                className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 transition-all duration-300"
+                style={{ width: `${downloadProgress.percent}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>{downloadProgress.speed}</span>
+              <span>{downloadProgress.totalSize}</span>
+            </div>
+          </div>
+        )}
+
         {/* Model loading stages */}
         {modelLoadingStages && displayStatus === 'loading' && (
           <div className="mt-4 w-72 animate-fade-in">

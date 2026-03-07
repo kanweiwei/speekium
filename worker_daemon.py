@@ -23,6 +23,7 @@ import resource  # NEW: For resource limits
 import signal  # NEW: For signal handling
 import sys
 import traceback
+from typing import Optional
 
 import sounddevice as sd
 
@@ -808,7 +809,7 @@ class SpeekiumDaemon:
             self._log(f"⚠️ Audio playback failed: {e}")
             traceback.print_exc(file=sys.stderr)
 
-    async def handle_tts(self, text: str, language: str | None = None) -> dict:
+    async def handle_tts(self, text: str, language: Optional[str] = None) -> dict:
         """Handle TTS generation command"""
         try:
             self._log(f"🔊 TTS 生成: {text[:50]}...")
