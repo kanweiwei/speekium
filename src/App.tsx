@@ -21,6 +21,7 @@ import {
   X,
   Clock,
   PenSquare,
+  Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
@@ -29,6 +30,7 @@ import { EmptyState } from './components/EmptyState';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ChatBubble, LoadingIndicator } from './components/ChatBubble';
 import { HotkeyStatusPanel } from './components/HotkeyStatusPanel';
+import { MiniModeBubble } from './components/MiniModeBubble';
 function App() {
   const { t } = useTranslation();
   const { workMode, setWorkMode } = useWorkMode();
@@ -106,6 +108,7 @@ function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [isNewSessionDialogOpen, setIsNewSessionDialogOpen] = React.useState(false);
+  const [isMiniMode, setIsMiniMode] = React.useState(false);
   const [showModeBadges, setShowModeBadges] = React.useState(() => {
     const saved = localStorage.getItem('showModeBadges');
     return saved !== 'false'; // Default to true
@@ -358,6 +361,12 @@ function App() {
         console.log('[App] Escape pressed - interrupting TTS');
         interruptTTS();
         setIsSpeaking(false);
+      }
+      
+      // Ctrl+Alt+M to toggle mini mode
+      if (e.ctrlKey && e.altKey && e.key === 'm') {
+        console.log('[App] Ctrl+Alt+M pressed - toggling mini mode');
+        setIsMiniMode(prev => !prev);
       }
     };
 
@@ -856,6 +865,18 @@ function App() {
           <Button
             variant="ghost"
             size="sm"
+            className={cn(
+              "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+              isMiniMode && "text-violet-500 bg-violet-500/10"
+            )}
+            onClick={() => setIsMiniMode(!isMiniMode)}
+            title="Ctrl+Alt+M 切换迷你模式"
+          >
+            <Mic className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
             onClick={() => setIsSettingsOpen(true)}
           >
@@ -867,7 +888,21 @@ function App() {
 
       {/* 主内容区 */}
       <div className="flex-1 overflow-hidden relative">
+        {/* 迷你模式悬浮球 - 固定在右侧 */}
+        {isMiniMode && (
+          <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50">
+            <MiniModeBubble
+              isRecording={isRecording}
+              isProcessing={isProcessing}
+              isSpeaking={isSpeaking}
+              workMode={workMode}
+              onClick={() => setIsMiniMode(false)}
+            />
+          </div>
+        )}
+
         {/* 快捷键状态面板 */}
+        {!isMiniMode && (
         <div className="max-w-[680px] mx-auto pt-4 px-4">
           <HotkeyStatusPanel
             pushToTalkHotkey={config?.push_to_talk_hotkey}
@@ -875,8 +910,10 @@ function App() {
             recordMode={recordMode}
           />
         </div>
+        )}
 
         {/* 消息区域 */}
+        {!isMiniMode && (
         <div className="h-full overflow-y-auto px-4">
           {/* 错误提示 */}
           {error && (
@@ -942,9 +979,11 @@ function App() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* 底部输入区 - 使用可折叠输入框 */}
+      {!isMiniMode && (
       <CollapsibleInput
         value={textInput}
         onChange={setTextInput}
@@ -952,6 +991,7 @@ function App() {
         isProcessing={isProcessing}
         isRecording={isRecording}
       />
+      )}
 
       {/* 设置弹窗 */}
       <Settings
