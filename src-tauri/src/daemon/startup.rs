@@ -196,10 +196,9 @@ pub fn start_daemon_async(app_handle: tauri::AppHandle, on_ready: Option<impl Fn
             DaemonMode::Development { script_path } => {
                 let project_root = script_path.parent().unwrap_or(std::path::Path::new("."));
                 let venv_python = project_root.join(".venv/bin/python3");
-                // Use system Python as fallback since venv doesn't have all dependencies
+                // Use venv Python if available, fallback to system Python
                 let python_cmd = if venv_python.exists() {
-                    // Try venv first
-                    std::path::PathBuf::from("python3")
+                    venv_python
                 } else {
                     std::path::PathBuf::from("python3")
                 };

@@ -681,7 +681,7 @@ class VoiceAssistant:
                     **backend_kwargs,
                 )
             except Exception as e:
-                # 记录 LLM 加载错误
+                # 记录 LLM 加载错误，但不阻止应用启动
                 error_tracker = get_error_tracker()
                 error_tracker.capture(
                     e,
@@ -693,7 +693,9 @@ class VoiceAssistant:
                     },
                 )
                 logger.error("llm_load_failed", error=str(e))
-                raise
+                # 不抛出异常，让应用可以在 LLM 配置错误时继续启动
+                # 用户可以稍后配置正确的 API key
+                self.llm_backend = None
 
             # Save current config
             self._last_llm_config = current_config

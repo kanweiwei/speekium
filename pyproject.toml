@@ -7,7 +7,7 @@ license = {text = "MIT"}
 authors = [
     {name = "kanweiwei", email = "kwwnjujlc@gmail.com"}
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 keywords = [
     "voice-assistant",
     "llm",
@@ -41,6 +41,18 @@ dependencies = [
     'torchaudio>=2.9.0,<3.0.0; platform_machine != "x86_64" or sys_platform != "darwin"',  # PyTorch audio - skip on macOS x86_64
     'funasr>=1.3.0,<2.0.0; platform_machine != "x86_64" or sys_platform != "darwin"',  # ASR model - skip on macOS x86_64
 
+    # FunASR dependencies (not declared by funasr itself)
+    "omegaconf>=2.3.0,<3.0.0",  # Configuration management
+    "hydra-core>=1.3.0,<2.0.0",  # Configuration framework
+    "tqdm>=4.65.0,<5.0.0",  # Progress bar
+    "onnxruntime>=1.16.0,<2.0.0",  # ONNX inference
+    "kaldiio>=2.18.0,<3.0.0",  # Kaldi I/O
+    "librosa>=0.10.0,<1.0.0",  # Audio analysis
+    "transformers>=4.30.0,<6.0.0",  # HuggingFace transformers
+    "pyyaml>=6.0,<7.0.0",  # YAML parser
+    "torch-complex>=0.4.0,<1.0.0",  # Complex number support for torch
+
+
     # Network & HTTP dependencies
     "httpx>=0.28.0,<1.0.0",  # Async HTTP client - pre-1.0 API stability
     "urllib3>=2.6.3,<3.0.0",  # Security fix for CVE-2026-21441
@@ -48,6 +60,9 @@ dependencies = [
     # Low-level dependencies
     "llvmlite>=0.42.0,<0.43.0",  # LLVM compiler - locked for macOS x86_64 compatibility
     "numba>=0.59,<0.60",  # JIT compiler - compatible with llvmlite 0.42.x
+    "cffi>=1.15.0,<2.0.0",  # C Foreign Function Interface
+    "typing_extensions>=4.5.0,<5.0.0",  # Type hints backport
+    "packaging>=23.0,<25.0.0",  # Version parsing
 
     # GUI dependencies
     "pywebview>=6.1,<7.0.0",  # Web view - locked to v6.x
