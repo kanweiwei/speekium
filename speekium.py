@@ -483,7 +483,17 @@ class VoiceAssistant:
 
             logger.info("model_loading", model="SenseVoice")
             try:
-                self.asr_model = AutoModel(model=ASR_MODEL, device="cpu")
+                # Use GPU acceleration on Apple Silicon (MPS) or CUDA
+                import torch
+
+                if torch.backends.mps.is_available():
+                    device = "mps"
+                elif torch.cuda.is_available():
+                    device = "cuda"
+                else:
+                    device = "cpu"
+                logger.info("asr_device_selected", device=device)
+                self.asr_model = AutoModel(model=ASR_MODEL, device=device)
                 logger.info("model_loaded", model="SenseVoice")
             except Exception as e:
                 # 记录 ASR 加载错误
