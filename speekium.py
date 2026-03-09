@@ -18,6 +18,7 @@ import re
 import stat
 import sys
 import tempfile
+import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
@@ -950,21 +951,41 @@ class VoiceAssistant:
 
     def transcribe(self, audio):
         """Transcribe audio and detect language. Returns (text, language)."""
+        t0 = time.time()
         set_component("ASR")
-        logger.info("asr_processing")
+        logger.info("asr_processing", audio_duration=len(audio) / SAMPLE_RATE)
+
+        t1 = time.time()
         model = self.load_asr()
+        t2 = time.time()
+        logger.debug("asr_timing", step="load_asr", ms=int((t2 - t1) * 1000))
 
         # Lazy imports for cold start optimization
         import numpy as np
         from scipy.io.wavfile import write as write_wav
 
         # Security: Use secure temp file
+        t3 = time.time()
         tmp_file = create_secure_temp_file(suffix=".wav")
+        t4 = time.time()
+        logger.debug("asr_timing", step="create_temp_file", ms=int((t4 - t3) * 1000))
 
         try:
+            t5 = time.time()
             audio_int16 = (audio * 32767).astype(np.int16)
+            t6 = time.time()
+            logger.debug("asr_timing", step="convert_to_int16", ms=int((t6 - t5) * 1000))
+
+            t7 = time.time()
             write_wav(tmp_file, SAMPLE_RATE, audio_int16)
+            t8 = time.time()
+            logger.debug("asr_timing", step="write_wav_file", ms=int((t8 - t7) * 1000))
+
+            t9 = time.time()
             result = model.generate(input=tmp_file)
+            t10 = time.time()
+            logger.debug("asr_timing", step="model_generate", ms=int((t10 - t9) * 1000))
+
             raw_text = result[0]["text"] if result else ""
         finally:
             if tmp_file and os.path.exists(tmp_file):
@@ -977,7 +998,12 @@ class VoiceAssistant:
         # Clean all tags from text
         text = re.sub(r"<\|[^|]+\|>", "", raw_text).strip()
 
-        logger.info("asr_result", language=language, text=text)
+        total_ms = int((time.time() - t0) * 1000)
+        audio_duration_ms = int(len(audio) / SAMPLE_RATE * 1000)
+        rtf = total_ms / audio_duration_ms if audio_duration_ms > 0 else 0
+        logger.info(
+            "asr_result", language=language, text=text, total_ms=total_ms, rtf=f"{rtf:.2f}x"
+        )
         return text, language
 
     def detect_speech_start(self, timeout=1.5):

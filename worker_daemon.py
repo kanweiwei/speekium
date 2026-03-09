@@ -22,6 +22,7 @@ import json
 import resource  # NEW: For resource limits
 import signal  # NEW: For signal handling
 import sys
+import time
 import traceback
 from typing import Optional
 
@@ -286,6 +287,7 @@ class SpeekiumDaemon:
         from scipy.io import wavfile
 
         try:
+            t0 = time.time()
             self._log(f"🎤 PTT Audio: Loading file ({duration:.2f}s): {audio_path}")
 
             # Check file exists
@@ -293,9 +295,13 @@ class SpeekiumDaemon:
                 return {"success": False, "error": f"Audio file not found: {audio_path}"}
 
             # Load WAV file using scipy (simple and reliable)
+            t1 = time.time()
             wav_sample_rate, samples = wavfile.read(audio_path)
+            t2 = time.time()
+            logger.debug("ptt_timing", step="load_wav_file", ms=int((t2 - t1) * 1000))
 
             # Convert to float32 if needed
+            t3 = time.time()
             if samples.dtype == np.int16:
                 samples = samples.astype(np.float32) / 32768.0
             elif samples.dtype == np.int32:
@@ -306,6 +312,8 @@ class SpeekiumDaemon:
             # Convert to mono if stereo
             if len(samples.shape) > 1 and samples.shape[1] == 2:
                 samples = samples.mean(axis=1)
+            t4 = time.time()
+            logger.debug("ptt_timing", step="convert_format", ms=int((t4 - t3) * 1000))
 
             actual_duration = len(samples) / wav_sample_rate
             self._log(
@@ -324,8 +332,12 @@ class SpeekiumDaemon:
                 return {"success": False, "error": "Recording too short"}
 
             # ASR
+            t5 = time.time()
             self._log("🔄 识别中...")
             text, language = self.assistant.transcribe(samples)
+            t6 = time.time()
+            asr_ms = int((t6 - t5) * 1000)
+            logger.debug("ptt_timing", step="asr_total", ms=asr_ms)
             self._log(f"✅ 识别完成: '{text}' ({language})")
 
             if not text or not text.strip():
@@ -1135,7 +1147,10 @@ class SpeekiumDaemon:
         logger.info("daemon_success", message="Daemon ready, waiting for commands")
 
         # Send ready signal to stdout (Rust expects JSON with "event" field)
-        print(json.dumps({"event": "daemon_success", "message": "就绪，守护进程已准备好接受命令"}), flush=True)
+        print(
+            json.dumps({"event": "daemon_success", "message": "就绪，守护进程已准备好接受命令"}),
+            flush=True,
+        )
 
         # Main loop: listen for stdin commands
         loop = asyncio.get_event_loop()
