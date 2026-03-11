@@ -70,7 +70,7 @@ export const WORK_MODE_INFO: Record<WorkMode, WorkModeDisplayInfo> = {
 /**
  * Default work mode
  */
-export const DEFAULT_WORK_MODE: WorkMode = 'conversation';
+export const DEFAULT_WORK_MODE: WorkMode = 'text-input';
 
 /**
  * LocalStorage key name

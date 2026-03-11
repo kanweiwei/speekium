@@ -37,7 +37,7 @@ pub static RECORDING_ABORTED: AtomicBool = AtomicBool::new(false);
 pub static RECORDING_MODE: Mutex<crate::types::RecordingMode> = Mutex::new(crate::types::RecordingMode::PushToTalk);
 
 /// Current work mode
-pub static WORK_MODE: Mutex<crate::types::WorkMode> = Mutex::new(crate::types::WorkMode::Conversation);
+pub static WORK_MODE: Mutex<crate::types::WorkMode> = Mutex::new(crate::types::WorkMode::TextInput);
 
 /// Application status
 pub static APP_STATUS: Mutex<crate::types::AppStatus> = Mutex::new(crate::types::AppStatus::Idle);
