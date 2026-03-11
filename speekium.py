@@ -445,6 +445,8 @@ class VoiceAssistant:
 
     def load_asr(self):
         if self.asr_model is None:
+            import time
+
             set_component("ASR")
             from funasr import AutoModel
 
@@ -483,6 +485,7 @@ class VoiceAssistant:
                 logger.info("asr_model_found_in_cache", path=model_path)
 
             logger.info("model_loading", model="SenseVoice")
+            load_start = time.time()
             try:
                 # Use GPU acceleration on Apple Silicon (MPS) or CUDA
                 import torch
@@ -494,8 +497,34 @@ class VoiceAssistant:
                 else:
                     device = "cpu"
                 logger.info("asr_device_selected", device=device)
-                self.asr_model = AutoModel(model=ASR_MODEL, device=device)
-                logger.info("model_loaded", model="SenseVoice")
+
+                # Use quantization for faster loading
+                # quantize="fp16" for half precision (supported by FunASR)
+                # Note: quantize works best with CPU, for GPU use model without quantize
+                quantize = None
+                if device == "cpu":
+                    # Use fp16 quantization for faster CPU inference
+                    quantize = "fp16"
+                    logger.info("asr_quantization_enabled", quantize=quantize)
+
+                self.asr_model = AutoModel(model=ASR_MODEL, device=device, quantize=quantize)
+                load_time = time.time() - load_start
+                logger.info("model_loaded", model="SenseVoice", load_time_ms=int(load_time * 1000))
+
+                # Warmup model with dummy inference for faster first response
+                logger.info("asr_warmup_start")
+                try:
+                    import numpy as np
+
+                    # Create 1 second of dummy silence audio
+                    dummy_audio = np.zeros(int(16000 * 1.0), dtype=np.float32)
+                    # Use simple generate call without special parameters
+                    _ = self.asr_model.generate(input=dummy_audio)
+                    logger.info("asr_warmup_completed")
+                except Exception as e:
+                    # Warmup failure is not critical
+                    logger.warning("asr_warmup_failed", error=str(e)[:100])
+
             except Exception as e:
                 # 记录 ASR 加载错误
                 error_tracker = get_error_tracker()

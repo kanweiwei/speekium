@@ -170,11 +170,23 @@ class SpeekiumDaemon:
             logger.info("loading_voice_assistant")
             self.assistant = VoiceAssistant()
 
-            logger.info("preloading_vad_model")
-            self.assistant.load_vad()
+            # Load VAD and ASR models in parallel for faster startup
+            logger.info("preloading_vad_and_asr_models")
 
-            logger.info("preloading_asr_model")
-            self.assistant.load_asr()
+            async def load_vad_async():
+                return await self.loop.run_in_executor(None, self.assistant.load_vad)
+
+            async def load_asr_async():
+                return await self.loop.run_in_executor(None, self.assistant.load_asr)
+
+            # Load VAD and ASR concurrently
+            vad_task = asyncio.create_task(load_vad_async())
+            asr_task = asyncio.create_task(load_asr_async())
+
+            # Wait for both to complete
+            await asyncio.gather(vad_task, asr_task)
+
+            logger.info("vad_and_asr_models_loaded")
 
             self._log("🔄 预加载 LLM 后端...")
             self.assistant.load_llm()
