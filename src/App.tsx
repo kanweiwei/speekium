@@ -755,6 +755,12 @@ function App() {
     const message = text?.trim() || textInput.trim();
     if (!message || isProcessing) return;
 
+    // 在打字模式下，不调用 LLM，只发送消息后直接返回
+    if (workMode === 'text-input') {
+      // 只添加用户消息， 不调用 LLM
+      return;
+    }
+
     const userMessage = message;
     setTextInput('');
     setError(null);
