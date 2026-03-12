@@ -13,6 +13,7 @@
 // - Daemon Commands (2 commands)
 // ============================================================================
 
+use std::sync::MutexGuard;
 use tauri::Emitter;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
@@ -26,6 +27,17 @@ use crate::shortcuts;
 use std::sync::atomic::Ordering;
 use std::io::{BufRead, Write};
 use std::path::Path;
+use std::sync::Mutex;
+
+// ============================================================================
+// Error Handling Helpers
+// ============================================================================
+
+/// Helper function to acquire a mutex lock with proper error handling
+fn acquire_lock<'a, T>(lock: &'a Mutex<T>, context: &str) -> Result<MutexGuard<'a, T>, String> {
+    lock.lock()
+        .map_err(|e| format!("{}: lock poisoned: {}", context, e))
+}
 
 // ============================================================================
 // Recording Commands (9 commands)
@@ -61,7 +73,7 @@ pub async fn record_audio(app_handle: tauri::AppHandle, mode: String, duration: 
     }
 
     // Check if recording mode matches
-    let current_mode = *RECORDING_MODE.lock().unwrap();
+    let current_mode = *acquire_lock(&RECORDING_MODE, "record_audio")?;
     let is_continuous_mode = mode == "continuous";
 
     if is_continuous_mode && current_mode != RecordingMode::Continuous {
@@ -129,7 +141,7 @@ pub fn set_recording_mode(mode: String) -> Result<(), String> {
     let new_mode = RecordingMode::from_str(mode.as_str())
         .ok_or_else(|| format!("Invalid recording mode: {}", mode))?;
 
-    *RECORDING_MODE.lock().unwrap() = new_mode;
+    *acquire_lock(&RECORDING_MODE, "update_recording_mode")? = new_mode;
 
     if new_mode == RecordingMode::Continuous {
         RECORDING_ABORTED.store(false, Ordering::SeqCst);
@@ -148,7 +160,7 @@ pub fn set_recording_mode(mode: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_work_mode() -> Result<String, String> {
-    let mode = *WORK_MODE.lock().unwrap();
+    let mode = *acquire_lock(&WORK_MODE, "get_work_mode")?;
     Ok(mode.as_str().to_string())
 }
 
@@ -157,15 +169,15 @@ pub fn set_work_mode(mode: String) -> Result<(), String> {
     let new_mode = WorkMode::from_str(mode.as_str())
         .ok_or_else(|| format!("Invalid work mode: {}", mode))?;
 
-    let _old_mode = *WORK_MODE.lock().unwrap();
-    *WORK_MODE.lock().unwrap() = new_mode;
+    let _old_mode = *acquire_lock(&WORK_MODE, "set_work_mode")?;
+    *acquire_lock(&WORK_MODE, "update_work_mode")? = new_mode;
 
     Ok(())
 }
 
 #[tauri::command]
 pub fn get_recording_mode() -> Result<String, String> {
-    let mode = *RECORDING_MODE.lock().unwrap();
+    let mode = *acquire_lock(&RECORDING_MODE, "get_recording_mode")?;
     Ok(match mode {
         RecordingMode::PushToTalk => "push-to-talk".to_string(),
         RecordingMode::Continuous => "continuous".to_string(),
@@ -174,13 +186,13 @@ pub fn get_recording_mode() -> Result<String, String> {
 
 #[tauri::command]
 pub fn get_app_status() -> Result<String, String> {
-    let status = *APP_STATUS.lock().unwrap();
+    let status = *acquire_lock(&APP_STATUS, "get_app_status")?;
     Ok(status.as_str().to_string())
 }
 
 #[tauri::command]
 pub fn interrupt_operation(priority: u8) -> Result<String, String> {
-    let current_status = *APP_STATUS.lock().unwrap();
+    let current_status = *acquire_lock(&APP_STATUS, "interrupt_recording")?;
 
     if current_status.can_be_interrupted(priority) {
         match current_status {
@@ -198,7 +210,7 @@ pub fn interrupt_operation(priority: u8) -> Result<String, String> {
         }
 
         if priority <= 2 {
-            *APP_STATUS.lock().unwrap() = AppStatus::Idle;
+            *acquire_lock(&APP_STATUS, "interrupt_recording")? = AppStatus::Idle;
         }
 
         Ok(format!("Interrupted: {}", current_status.as_str()))
@@ -230,7 +242,7 @@ pub fn update_recording_mode(mode: String) -> Result<(), String> {
     }
 
     let is_recording = {
-        let status = APP_STATUS.lock().unwrap();
+        let status = acquire_lock(&APP_STATUS, "update_recording_mode")?;
         matches!(*status, AppStatus::Recording | AppStatus::Listening)
     };
 
@@ -244,7 +256,7 @@ pub fn update_recording_mode(mode: String) -> Result<(), String> {
                     });
                 }
                 RecordingMode::Continuous => {
-                    let mut current = CURRENT_PTT_SHORTCUT.lock().unwrap();
+                    let mut current = acquire_lock(&CURRENT_PTT_SHORTCUT, "update_recording_mode")?;
                     if let Some(ref shortcut_str) = *current {
                         if let Ok(shortcut) = shortcut_str.parse::<tauri_plugin_global_shortcut::Shortcut>() {
                             let _ = handle.global_shortcut().unregister(shortcut);
@@ -281,7 +293,15 @@ pub async fn chat_llm_stream(
     STREAMING_IN_PROGRESS.store(true, Ordering::SeqCst);
 
     std::thread::spawn(move || {
-        let mut daemon = DAEMON.lock().unwrap();
+        let daemon_lock = DAEMON.lock();
+        let mut daemon = match daemon_lock {
+            Ok(d) => d,
+            Err(e) => {
+                let _ = window.emit("chat-error", format!("DAEMON lock poisoned: {}", e));
+                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
         let daemon = match daemon.as_mut() {
             Some(d) => d,
             None => {
@@ -367,7 +387,15 @@ pub async fn chat_tts_stream(
     STREAMING_IN_PROGRESS.store(true, Ordering::SeqCst);
 
     std::thread::spawn(move || {
-        let mut daemon = DAEMON.lock().unwrap();
+        let daemon_lock = DAEMON.lock();
+        let mut daemon = match daemon_lock {
+            Ok(d) => d,
+            Err(e) => {
+                let _ = window.emit("chat-error", format!("DAEMON lock poisoned: {}", e));
+                STREAMING_IN_PROGRESS.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
         let daemon = match daemon.as_mut() {
             Some(d) => d,
             None => {

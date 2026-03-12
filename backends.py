@@ -293,6 +293,56 @@ class OllamaBackend(LLMBackend):
             traceback.print_exc()
             return f"Error: {e}"
 
+    def health_check(self) -> dict:
+        """
+        Health check for Ollama backend.
+        Returns a dict with 'healthy' (bool), 'message' (str), and 'models' (list).
+        """
+        try:
+            import httpx
+
+            # Check if Ollama server is reachable
+            response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
+
+            if response.status_code == 200:
+                data = response.json()
+                models = data.get("models", [])
+                # Check if our model is available
+                model_names = [m.get("name", "") for m in models]
+                model_available = any(self.model.split(":")[0] in name for name in model_names)
+
+                return {
+                    "healthy": True,
+                    "message": "Ollama server is running",
+                    "server_reachable": True,
+                    "model_available": model_available,
+                    "models": model_names,
+                }
+            else:
+                return {
+                    "healthy": False,
+                    "message": f"Ollama server returned status {response.status_code}",
+                    "server_reachable": True,
+                    "model_available": False,
+                    "models": [],
+                }
+        except httpx.ConnectError:
+            return {
+                "healthy": False,
+                "message": "Cannot connect to Ollama server",
+                "server_reachable": False,
+                "model_available": False,
+                "models": [],
+            }
+        except Exception as e:
+            return {
+                "healthy": False,
+                "message": f"Health check failed: {str(e)}",
+                "server_reachable": False,
+                "model_available": False,
+                "models": [],
+            }
+
     async def chat_stream(self, message: str) -> AsyncIterator[str]:
         logger.info("llm_processing", backend="ollama", model=self.model)
 

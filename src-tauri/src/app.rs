@@ -91,7 +91,8 @@ fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
         // Prevent window close, hide window and app instead
         api.prevent_close();
-        window.hide().unwrap();
+        // Ignore hide error - nothing we can do if it fails
+        let _ = window.hide();
         // macOS: Hide app and change to Accessory policy (removes from Dock)
         #[cfg(target_os = "macos")]
         {

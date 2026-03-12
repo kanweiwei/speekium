@@ -106,6 +106,11 @@ class SpeekiumDaemon:
         # Event loop reference (set during initialization)
         self.loop = None
 
+        # Health monitoring task
+        self.health_monitor_task = None
+        self.health_check_interval = 60  # seconds
+        self.health_check_enabled = True
+
         # Output startup log
         logger.info("daemon_initializing")
 
@@ -154,6 +159,12 @@ class SpeekiumDaemon:
                 self._log(f"⚠️ 关闭音频流失败: {e}")
             finally:
                 self.ptt_stream = None
+
+        # Stop health monitoring
+        if self.health_monitor_task and not self.health_monitor_task.done():
+            self._log("🧹 停止健康监控...")
+            self.health_monitor_task.cancel()
+            # Note: cancellation will be handled by the task itself
 
         # Note: PTT hotkey is now handled by Tauri, no pynput cleanup needed
 
@@ -930,15 +941,24 @@ class SpeekiumDaemon:
 
     async def handle_health(self) -> dict:
         """Health check"""
+        # Check LLM backend health
+        llm_health = None
+        if self.assistant and self.assistant.llm_backend:
+            backend = self.assistant.llm_backend
+            if hasattr(backend, "health_check"):
+                llm_health = backend.health_check()
+
         return {
             "success": True,
             "status": "healthy",
             "command_count": self.command_count,
             "models_loaded": {
-                "vad": self.assistant.vad_model is not None,
-                "asr": self.assistant.asr_model is not None,
-                "llm": self.assistant.llm_backend is not None,
+                "vad": self.assistant.vad_model is not None if self.assistant else False,
+                "asr": self.assistant.asr_model is not None if self.assistant else False,
+                "llm": self.assistant.llm_backend is not None if self.assistant else False,
             },
+            "llm_health": llm_health,
+            "health_monitor_active": self.health_monitor_task is not None and not self.health_monitor_task.done() if self.health_monitor_task else False,
         }
 
     async def handle_model_status(self) -> dict:
@@ -1148,6 +1168,92 @@ class SpeekiumDaemon:
         else:
             return {"success": False, "error": f"Unknown command: {command}"}
 
+    async def _health_monitor_loop(self):
+        """Background health monitoring loop for Ollama/LLM processes"""
+        logger.info("health_monitor_started", interval=self.health_check_interval)
+
+        while self.running and self.health_check_enabled:
+            try:
+                await asyncio.sleep(self.health_check_interval)
+
+                if not self.running:
+                    break
+
+                # Check LLM backend health
+                if self.assistant and self.assistant.llm_backend:
+                    backend = self.assistant.llm_backend
+
+                    # Check if backend has health_check method
+                    if hasattr(backend, "health_check"):
+                        health_result = backend.health_check()
+
+                        logger.info(
+                            "llm_health_check",
+                            healthy=health_result.get("healthy"),
+                            message=health_result.get("message"),
+                            server_reachable=health_result.get("server_reachable"),
+                            model_available=health_result.get("model_available"),
+                        )
+
+                        # If unhealthy, try to reload the LLM backend
+                        if not health_result.get("healthy"):
+                            self._log(f"⚠️ LLM backend unhealthy: {health_result.get('message')}")
+                            logger.warning(
+                                "llm_backend_unhealthy",
+                                message=health_result.get("message"),
+                            )
+
+                            # Reload LLM backend
+                            try:
+                                self._log("🔄 尝试重新加载 LLM 后端...")
+                                old_backend = self.assistant.llm_backend
+                                self.assistant.llm_backend = None
+
+                                # Clear history to avoid stale context
+                                if hasattr(old_backend, "history"):
+                                    old_backend.history.clear()
+
+                                # Reload
+                                self.assistant.load_llm()
+
+                                # Verify reload
+                                if self.assistant.llm_backend:
+                                    new_health = self.assistant.llm_backend.health_check()
+                                    if new_health.get("healthy"):
+                                        self._log("✅ LLM 后端重新加载成功")
+                                        logger.info("llm_backend_reloaded_success")
+                                    else:
+                                        self._log(f"⚠️ LLM 后端重新加载后仍不健康: {new_health.get('message')}")
+                                        logger.warning(
+                                            "llm_backend_reload_partial",
+                                            message=new_health.get("message"),
+                                        )
+                                else:
+                                    self._log("❌ LLM 后端重新加载失败")
+                                    logger.error("llm_backend_reload_failed")
+
+                            except Exception as reload_error:
+                                self._log(f"❌ LLM 后端重新加载异常: {reload_error}")
+                                logger.error(
+                                    "llm_backend_reload_error",
+                                    error=str(reload_error),
+                                    error_type=type(reload_error).__name__,
+                                )
+
+            except asyncio.CancelledError:
+                logger.info("health_monitor_cancelled")
+                break
+            except Exception as e:
+                logger.error(
+                    "health_monitor_error",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+                # Continue monitoring even if there's an error
+                await asyncio.sleep(self.health_check_interval)
+
+        logger.info("health_monitor_stopped")
+
     async def run_daemon(self):
         """Daemon main loop"""
         # Initialize
@@ -1157,6 +1263,11 @@ class SpeekiumDaemon:
 
         self._log("✅ Daemon ready, waiting for commands...")
         logger.info("daemon_success", message="Daemon ready, waiting for commands")
+
+        # Start background health monitoring task
+        if self.health_check_enabled:
+            self.health_monitor_task = asyncio.create_task(self._health_monitor_loop())
+            logger.info("health_monitor_task_started")
 
         # Send ready signal to stdout (Rust expects JSON with "event" field)
         print(

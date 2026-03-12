@@ -6,7 +6,14 @@ use rusqlite::{params, Connection, Result as SqliteResult};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::MutexGuard;
 use tauri::Manager;
+
+/// Helper function to acquire a mutex lock with proper error handling
+fn acquire_lock<'a, T>(lock: &'a Mutex<T>, context: &str) -> Result<MutexGuard<'a, T>, String> {
+    lock.lock()
+        .map_err(|e| format!("{}: lock poisoned: {}", context, e))
+}
 
 // ============================================================================
 // Data Structures
@@ -79,7 +86,7 @@ impl Database {
 
     /// Run database migrations
     fn run_migrations(&self) -> Result<(), String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "run_migrations")?;
 
         // Get current schema version
         let version: i32 = conn
@@ -153,7 +160,7 @@ impl Database {
 
     /// Create a new session
     pub fn create_session(&self, title: String) -> Result<Session, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "create_session")?;
 
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().timestamp_millis();
@@ -186,7 +193,7 @@ impl Database {
         page_size: i32,
         filter_favorite: Option<bool>,
     ) -> Result<PaginatedResult<Session>, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "list_sessions_filtered")?;
 
         // Build WHERE clause for filtering
         let where_clause = match filter_favorite {
@@ -244,7 +251,7 @@ impl Database {
 
     /// Get a single session by ID
     pub fn get_session(&self, session_id: &str) -> Result<Session, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "get_session")?;
 
         conn.query_row(
             "SELECT id, title, is_favorite, created_at, updated_at FROM sessions WHERE id = ?1",
@@ -264,7 +271,7 @@ impl Database {
 
     /// Toggle favorite status of a session
     pub fn toggle_favorite(&self, session_id: &str) -> Result<bool, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "toggle_favorite")?;
 
         // Get current state directly without calling get_session (avoids deadlock)
         let current_state: i32 = conn
@@ -295,7 +302,7 @@ impl Database {
 
     /// Update a session's title
     pub fn update_session(&self, session_id: &str, title: String) -> Result<Session, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "update_session")?;
 
         let now = chrono::Utc::now().timestamp_millis();
 
@@ -317,7 +324,7 @@ impl Database {
 
     /// Delete a session and all its messages
     pub fn delete_session(&self, session_id: &str) -> Result<bool, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "delete_session")?;
 
         let rows_affected = conn
             .execute("DELETE FROM sessions WHERE id = ?1", params![session_id])
@@ -337,7 +344,7 @@ impl Database {
         role: &str,
         content: &str,
     ) -> Result<Message, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "add_message")?;
 
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().timestamp_millis();
@@ -372,7 +379,7 @@ impl Database {
         page: i32,
         page_size: i32,
     ) -> Result<PaginatedResult<Message>, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "get_messages")?;
 
         // Get total count for this session
         let total: i64 = conn
@@ -423,7 +430,7 @@ impl Database {
 
     /// Delete a single message
     pub fn delete_message(&self, message_id: &str) -> Result<bool, String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = acquire_lock(&self.conn, "delete_message")?;
 
         let rows_affected = conn
             .execute("DELETE FROM messages WHERE id = ?1", params![message_id])

@@ -122,11 +122,141 @@ TTS_RATE = "+0%"  # Speed for Edge TTS: negative=slower, positive=faster, 0%=nor
 # ===== Edge TTS Voices (online, auto-selected based on detected language) =====
 DEFAULT_LANGUAGE = "zh"
 EDGE_TTS_VOICES = {
-    "zh": "zh-CN-XiaoyiNeural",  # Chinese female
-    "en": "en-US-JennyNeural",  # English female
-    "ja": "ja-JP-NanamiNeural",  # Japanese female
-    "ko": "ko-KR-SunHiNeural",  # Korean female
-    "yue": "zh-HK-HiuGaaiNeural",  # Cantonese female
+    # Chinese
+    "zh": "zh-CN-XiaoyiNeural",
+    "zh-CN": "zh-CN-XiaoyiNeural",
+    "zh-TW": "zh-TW-HsiaoYuNeural",
+    "zh-HK": "zh-HK-HiuGaaiNeural",
+    "yue": "zh-HK-HiuGaaiNeural",
+    # English
+    "en": "en-US-JennyNeural",
+    "en-US": "en-US-JennyNeural",
+    "en-GB": "en-GB-SoniaNeural",
+    "en-AU": "en-AU-NatashaNeural",
+    "en-CA": "en-CA-ClaraNeural",
+    "en-IN": "en-IN-NeerjaNeural",
+    # Japanese
+    "ja": "ja-JP-NanamiNeural",
+    "ja-JP": "ja-JP-NanamiNeural",
+    # Korean
+    "ko": "ko-KR-SunHiNeural",
+    "ko-KR": "ko-KR-SunHiNeural",
+    # French
+    "fr": "fr-FR-DeniseNeural",
+    "fr-FR": "fr-FR-DeniseNeural",
+    "fr-CA": "fr-CA-SylvieNeural",
+    # German
+    "de": "de-DE-KatjaNeural",
+    "de-DE": "de-DE-KatjaNeural",
+    "de-AT": "de-AT-IngridNeural",
+    "de-CH": "de-CH-LeniNeural",
+    # Spanish
+    "es": "es-ES-ElviraNeural",
+    "es-ES": "es-ES-ElviraNeural",
+    "es-MX": "es-MX-DaliaNeural",
+    "es-AR": "es-AR-TaniaNeural",
+    # Italian
+    "it": "it-IT-ElsaNeural",
+    "it-IT": "it-IT-ElsaNeural",
+    # Portuguese
+    "pt": "pt-BR",
+    "pt-FranciscaNeural-BR": "pt-BR-FranciscaNeural",
+    "pt-PT": "pt-PT-RaquelNeural",
+    # Russian
+    "ru": "ru-RU-SvetlanaNeural",
+    "ru-RU": "ru-RU-SvetlanaNeural",
+    # Hindi
+    "hi": "hi-IN-MadhurNeural",
+    "hi-IN": "hi-IN-MadhurNeural",
+    # Arabic
+    "ar": "ar-SA-ZariyahNeural",
+    "ar-SA": "ar-SA-ZariyahNeural",
+    # Dutch
+    "nl": "nl-NL-ColetteNeural",
+    "nl-NL": "nl-NL-ColetteNeural",
+    # Polish
+    "pl": "pl-PL-AgnieszkaNeural",
+    "pl-PL": "pl-PL-AgnieszkaNeural",
+    # Turkish
+    "tr": "tr-TR-SedaNeural",
+    "tr-TR": "tr-TR-SedaNeural",
+    # Vietnamese
+    "vi": "vi-VN-HoaiMyNeural",
+    "vi-VN": "vi-VN-HoaiMyNeural",
+    # Thai
+    "th": "th-TH-AcharaNeural",
+    "th-TH": "th-TH-AcharaNeural",
+    # Indonesian
+    "id": "id-ID-GadisNeural",
+    "id-ID": "id-ID-GadisNeural",
+    # Ukrainian
+    "uk": "uk-UA-PolinaNeural",
+    "uk-UA": "uk-UA-PolinaNeural",
+    # Czech
+    "cs": "cs-CZ-VlastaNeural",
+    "cs-CZ": "cs-CZ-VlastaNeural",
+    # Romanian
+    "ro": "ro-RO-AlinaNeural",
+    "ro-RO": "ro-RO-AlinaNeural",
+}
+
+# Language code to display name mapping
+LANGUAGE_NAMES = {
+    "zh": "中文",
+    "zh-CN": "中文（简体）",
+    "zh-TW": "中文（繁体）",
+    "zh-HK": "中文（粤语）",
+    "yue": "粤语",
+    "en": "English",
+    "en-US": "English (US)",
+    "en-GB": "English (UK)",
+    "en-AU": "English (Australia)",
+    "en-CA": "English (Canada)",
+    "en-IN": "English (India)",
+    "ja": "日本語",
+    "ja-JP": "日本語",
+    "ko": "한국어",
+    "ko-KR": "한국어",
+    "fr": "Français",
+    "fr-FR": "Français",
+    "fr-CA": "Français (Canada)",
+    "de": "Deutsch",
+    "de-DE": "Deutsch",
+    "de-AT": "Deutsch (Österreich)",
+    "de-CH": "Deutsch (Schweiz)",
+    "es": "Español",
+    "es-ES": "Español",
+    "es-MX": "Español (México)",
+    "es-AR": "Español (Argentina)",
+    "it": "Italiano",
+    "it-IT": "Italiano",
+    "pt": "Português",
+    "pt-BR": "Português (Brasil)",
+    "pt-PT": "Português (Portugal)",
+    "ru": "Русский",
+    "ru-RU": "Русский",
+    "hi": "हिन्दी",
+    "hi-IN": "हिन्दी",
+    "ar": "العربية",
+    "ar-SA": "العربية",
+    "nl": "Nederlands",
+    "nl-NL": "Nederlands",
+    "pl": "Polski",
+    "pl-PL": "Polski",
+    "tr": "Türkçe",
+    "tr-TR": "Türkçe",
+    "vi": "Tiếng Việt",
+    "vi-VN": "Tiếng Việt",
+    "th": "ไทย",
+    "th-TH": "ไทย",
+    "id": "Indonesia",
+    "id-ID": "Indonesia",
+    "uk": "Українська",
+    "uk-UA": "Українська",
+    "cs": "Čeština",
+    "cs-CZ": "Čeština",
+    "ro": "Română",
+    "ro-RO": "Română",
 }
 
 # ===== VAD Config =====
@@ -1156,46 +1286,112 @@ class VoiceAssistant:
         return None, None
 
     def detect_text_language(self, text):
-        """Detect language from text content using character analysis."""
-        # Count character types
-        cjk_count = 0
-        ja_specific = 0
-        ko_specific = 0
-        latin_count = 0
-
-        for char in text:
-            code = ord(char)
-            # CJK Unified Ideographs (Chinese/Japanese/Korean shared)
-            if 0x4E00 <= code <= 0x9FFF:
-                cjk_count += 1
-            # Hiragana/Katakana (Japanese specific)
-            elif 0x3040 <= code <= 0x30FF:
-                ja_specific += 1
-            # Hangul (Korean specific)
-            elif 0xAC00 <= code <= 0xD7AF or 0x1100 <= code <= 0x11FF:
-                ko_specific += 1
-            # Basic Latin letters
-            elif 0x0041 <= code <= 0x007A:
-                latin_count += 1
-
-        total = len(text.replace(" ", ""))
-        if total == 0:
+        """Detect language from text content using character analysis and common words."""
+        if not text:
             return DEFAULT_LANGUAGE
 
-        # Japanese has hiragana/katakana
-        if ja_specific > 0:
-            return "ja"
-        # Korean has hangul
-        if ko_specific > 0:
-            return "ko"
-        # Chinese if mostly CJK
-        if cjk_count > latin_count:
-            return "zh"
-        # Default to English for Latin text
-        if latin_count > 0:
-            return "en"
+        # Character-based detection
+        has_chinese = any("\u4e00" <= c <= "\u9fff" for c in text)
+        has_japanese_hiragana = any("\u3040" <= c <= "\u309f" for c in text)
+        has_japanese_katakana = any("\u30a0" <= c <= "\u30ff" for c in text)
+        has_japanese_kanji = any("\u4e00" <= c <= "\u9fff" for c in text) and (
+            has_japanese_hiragana or has_japanese_katakana
+        )
+        has_korean = any("\uac00" <= c <= "\ud7af" for c in text)
+        has_cyrillic = any("\u0400" <= c <= "\u04ff" for c in text)
+        has_arabic = any("\u0600" <= c <= "\u06ff" for c in text)
+        has_hindi = any("\u0900" <= c <= "\u097f" for c in text)
+        has_thai = any("\u0e00" <= c <= "\u0e7f" for c in text)
+        has_vietnamese = "ạảấầẩẫậắằẳẵặẹẻẽếềểễểỉịọỏốồổỗợụủứừửữựỳỵỷỹ"
+        has_vietnamese_chars = any(c in has_vietnamese.lower() for c in text.lower())
 
-        return DEFAULT_LANGUAGE
+        # Language detection logic
+        if has_japanese_kanji or has_japanese_hiragana or has_japanese_katakana:
+            return "ja"
+        elif has_korean:
+            return "ko"
+        elif has_chinese:
+            return "zh"
+        elif has_hindi:
+            return "hi"
+        elif has_arabic:
+            return "ar"
+        elif has_thai:
+            return "th"
+        elif has_vietnamese_chars:
+            return "vi"
+        elif has_cyrillic:
+            # Check for common Cyrillic letters
+            has_russian_ya = "я" in text  # я = ya
+            has_russian_e = "е" in text  # е = ye/e
+            has_russian_yo = "ё" in text  # ё = yo
+            has_russian_soft = "ь" in text  # soft sign
+            # Russian tends to have more е, ё, я
+            if has_russian_yo or (has_russian_ya and has_russian_e):
+                return "ru"
+            return "uk"
+
+        # Latin script languages - use scoring system
+        text_lower = text.lower()
+
+        # Language scores
+        scores = {
+            "fr": 0,
+            "de": 0,
+            "es": 0,
+            "it": 0,
+            "pt": 0,
+            "pl": 0,
+            "nl": 0,
+            "tr": 0,
+            "en": 0,
+        }
+
+        # French indicators (higher weight for distinctive words)
+        french_words = ["bonjour", "merci", "monsieur", "madame", "monde", "ami", "eau", "ville", "jour", "oui", "non", "etre", "avoir", "faire", "dit", "plus", "bien", "rien"]
+        scores["fr"] = sum(2 for w in french_words if w in text_lower)
+
+        # German indicators
+        german_words = ["hallo", "danke", "herr", "frau", "welt", "freund", "wasser", "stadt", "tag", "ja", "nein", "sein", "haben", "machen", "sagen", "mehr", "gut", "nichts"]
+        scores["de"] = sum(2 for w in german_words if w in text_lower)
+
+        # Spanish indicators
+        spanish_words = ["hola", "gracias", "senor", "senora", "mundo", "amigo", "agua", "ciudad", "dia", "si", "no", "ser", "tener", "hacer", "decir", "mas", "bien", "nada"]
+        scores["es"] = sum(2 for w in spanish_words if w in text_lower)
+
+        # Italian indicators
+        italian_words = ["ciao", "grazie", "signore", "signora", "mondo", "amico", "acqua", "citta", "giorno", "si", "no", "essere", "avere", "fare", "dire", "piu", "bene", "niente"]
+        scores["it"] = sum(2 for w in italian_words if w in text_lower)
+
+        # Portuguese indicators
+        portuguese_words = ["ola", "obrigado", "senhor", "senhora", "mundo", "amigo", "agua", "cidade", "dia", "sim", "nao", "ser", "ter", "fazer", "dizer", "mais", "bem", "nada"]
+        scores["pt"] = sum(2 for w in portuguese_words if w in text_lower)
+
+        # Polish indicators
+        polish_words = ["dzien dobry", "dziekuje", "pan", "pani", "swiat", "przyjaciel", "woda", "miasto", "dzien", "tak", "nie", "byc", "miec", "robic", "powiedziec", "wiecej", "dobrze", "nic"]
+        scores["pl"] = sum(2 for w in polish_words if w in text_lower)
+
+        # Dutch indicators
+        dutch_words = ["hallo", "dank u", "heer", "vrouw", "wereld", "vriend", "water", "stad", "dag", "ja", "nee", "zijn", "hebben", "maken", "zeggen", "meer", "goed", "niets"]
+        scores["nl"] = sum(2 for w in dutch_words if w in text_lower)
+
+        # Turkish indicators
+        turkish_words = ["merhaba", "tesekkurler", "bey", "hanim", "dunya", "arkadas", "su", "sehir", "gun", "evet", "hayir", "olmak", "varmak", "yapmak", "soylemek", "daha", "iyi", "hic"]
+        scores["tr"] = sum(2 for w in turkish_words if w in text_lower)
+
+        # English indicators
+        english_words = ["hello", "thanks", "thank", "mr", "mrs", "world", "friend", "water", "city", "day", "yes", "no", "be", "have", "do", "say", "more", "good", "nothing"]
+        scores["en"] = sum(2 for w in english_words if w in text_lower)
+
+        # Find the language with highest score
+        max_score = max(scores.values())
+        if max_score > 0:
+            for lang, score in scores.items():
+                if score == max_score:
+                    return lang
+
+        # Default to English
+        return "en"
 
     async def generate_audio(self, text, language=None):
         """Generate TTS audio file, returns file path."""
