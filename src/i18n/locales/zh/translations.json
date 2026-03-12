@@ -31,6 +31,48 @@
       "shortcutKey2": "⌥ Alt",
       "shortcutAction": "说话"
     },
+    "guide": {
+      "welcome": {
+        "title": "欢迎使用 Speekium",
+        "desc": "您的 AI 语音助手已准备就绪",
+        "feature1": "语音对话",
+        "feature2": "文字输入"
+      },
+      "mode": {
+        "title": "选择您的模式",
+        "desc": "选择您想要的交互方式",
+        "conversation": "语音对话",
+        "conversationDesc": "与 AI 自然对话",
+        "textInput": "文字输入",
+        "textInputDesc": "输入您的消息"
+      },
+      "hotkey": {
+        "title": "设置快捷键",
+        "desc": "按住说话"
+      },
+      "llm": {
+        "title": "配置 LLM",
+        "desc": "选择您的 AI 提供商",
+        "local": "本地",
+        "localDesc": "在本地运行 AI",
+        "api": "API",
+        "apiDesc": "使用云端 AI 服务"
+      },
+      "permission": {
+        "title": "需要权限",
+        "desc": "允许访问以使用语音功能",
+        "micTitle": "麦克风访问",
+        "micDesc": "语音输入所需"
+      },
+      "complete": {
+        "title": "一切就绪！",
+        "desc": "准备开始聊天",
+        "tip": "按下快捷键开始"
+      },
+      "skip": "跳过",
+      "next": "下一步",
+      "start": "开始使用"
+    },
     "ptt": {
       "recording": "录音中...",
       "recordingHint": "松开停止录音",
@@ -60,6 +102,12 @@
       "ttsFailed": "TTS 失败",
       "ttsError": "TTS 错误",
       "chatFailed": "对话失败"
+    },
+    "templates": {
+      "title": "对话模板",
+      "button": "模板",
+      "createCustom": "创建自定义模板",
+      "select": "选择模板"
     }
   },
   "buttons": {
@@ -80,7 +128,15 @@
     "loading": "加载中...",
     "success": "成功",
     "error": "错误",
-    "empty": "暂无数据"
+    "empty": "暂无数据",
+    "recording": "录音中...",
+    "processing": "处理中...",
+    "online": "就绪"
+  },
+  "modes": {
+    "label": "模式",
+    "conversation": "语音对话",
+    "textInput": "文字输入"
   },
   "themes": {
     "light": "浅色",
@@ -107,7 +163,8 @@
       "tts": "语音合成",
       "shortcuts": "快捷键",
       "appearance": "外观设置",
-      "advanced": "高级设置"
+      "advanced": "高级设置",
+      "miniMode": "迷你模式"
     },
     "descriptions": {
       "assistant": "配置 AI 助手的行为和对话参数",
@@ -280,6 +337,8 @@
       "text": "打字"
     },
     "recordMode": {
+      "label": "录音模式",
+      "ptt": "按键",
       "pushToTalk": "按键",
       "continuous": "自动"
     },
@@ -300,6 +359,14 @@
       "feature1": "语音输入",
       "feature2": "AI 对话"
     },
+    "mode": {
+      "title": "选择您的模式",
+      "desc": "选择您想要的交互方式",
+      "conversation": "语音对话",
+      "conversationDesc": "自然说话，获得语音回复",
+      "textInput": "文字输入",
+      "textInputDesc": "输入文字，获得语音回复"
+    },
     "hotkey": {
       "title": "设置快捷键",
       "desc": "按住快捷键开始录音"
@@ -311,6 +378,12 @@
       "localDesc": "离线运行，保护隐私",
       "api": "云端 API",
       "apiDesc": "更强大的模型"
+    },
+    "permission": {
+      "title": "麦克风权限",
+      "desc": "允许麦克风以使用语音输入",
+      "micTitle": "麦克风权限",
+      "micDesc": "我们需要麦克风权限来录制您的声音"
     },
     "complete": {
       "title": "设置完成！",

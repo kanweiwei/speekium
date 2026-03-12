@@ -31,6 +31,48 @@
       "shortcutKey2": "⌥ Alt",
       "shortcutAction": "to speak"
     },
+    "guide": {
+      "welcome": {
+        "title": "Welcome to Speekium",
+        "desc": "Your AI voice assistant is ready",
+        "feature1": "Voice Chat",
+        "feature2": "Text Input"
+      },
+      "mode": {
+        "title": "Choose Your Mode",
+        "desc": "Select how you want to interact",
+        "conversation": "Voice Chat",
+        "conversationDesc": "Talk naturally with AI",
+        "textInput": "Text Input",
+        "textInputDesc": "Type your messages"
+      },
+      "hotkey": {
+        "title": "Set Up Hotkey",
+        "desc": "Press and hold to speak"
+      },
+      "llm": {
+        "title": "Configure LLM",
+        "desc": "Choose your AI provider",
+        "local": "Local",
+        "localDesc": "Run AI locally",
+        "api": "API",
+        "apiDesc": "Use cloud AI service"
+      },
+      "permission": {
+        "title": "Permission Required",
+        "desc": "Allow access to use voice features",
+        "micTitle": "Microphone Access",
+        "micDesc": "Required for voice input"
+      },
+      "complete": {
+        "title": "You're All Set!",
+        "desc": "Ready to start chatting",
+        "tip": "Press the hotkey to begin"
+      },
+      "skip": "Skip",
+      "next": "Next",
+      "start": "Get Started"
+    },
     "ptt": {
       "recording": "Recording...",
       "recordingHint": "Release to stop recording",
@@ -60,6 +102,12 @@
       "ttsFailed": "TTS failed",
       "ttsError": "TTS Error",
       "chatFailed": "Chat failed"
+    },
+    "templates": {
+      "title": "Conversation Templates",
+      "button": "Templates",
+      "createCustom": "Create Custom Template",
+      "select": "Select Template"
     }
   },
   "buttons": {
@@ -80,7 +128,15 @@
     "loading": "Loading...",
     "success": "Success",
     "error": "Error",
-    "empty": "No data"
+    "empty": "No data",
+    "recording": "Recording...",
+    "processing": "Processing...",
+    "online": "Ready"
+  },
+  "modes": {
+    "label": "Mode",
+    "conversation": "Voice Chat",
+    "textInput": "Text Input"
   },
   "themes": {
     "light": "Light",
@@ -107,7 +163,8 @@
       "tts": "Voice Synthesis",
       "shortcuts": "Shortcuts",
       "appearance": "Appearance Settings",
-      "advanced": "Advanced Settings"
+      "advanced": "Advanced Settings",
+      "miniMode": "Mini Mode"
     },
     "descriptions": {
       "assistant": "Configure AI assistant behavior and conversation parameters",
@@ -280,6 +337,8 @@
       "text": "Type"
     },
     "recordMode": {
+      "label": "Recording Mode",
+      "ptt": "PTT",
       "pushToTalk": "PTT",
       "continuous": "Auto"
     },
@@ -300,6 +359,14 @@
       "feature1": "Voice Input",
       "feature2": "AI Chat"
     },
+    "mode": {
+      "title": "Choose Your Mode",
+      "desc": "Select how you want to interact",
+      "conversation": "Voice Chat",
+      "conversationDesc": "Speak naturally, get voice replies",
+      "textInput": "Text Input",
+      "textInputDesc": "Type messages, get voice replies"
+    },
     "hotkey": {
       "title": "Set Up Shortcut",
       "desc": "Hold the shortcut to record your voice"
@@ -311,6 +378,12 @@
       "localDesc": "Offline, privacy-first",
       "api": "Cloud API",
       "apiDesc": "More powerful models"
+    },
+    "permission": {
+      "title": "Microphone Access",
+      "desc": "Allow microphone for voice input",
+      "micTitle": "Microphone Permission",
+      "micDesc": "We need microphone access to capture your voice"
     },
     "complete": {
       "title": "You're All Set!",
@@ -330,3 +403,4 @@
     "noErrors": "No errors to report"
   }
 }
+

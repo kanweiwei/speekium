@@ -31,6 +31,48 @@
       "shortcutKey2": "⌥ Alt",
       "shortcutAction": "話す"
     },
+    "guide": {
+      "welcome": {
+        "title": "Speekium へようこそ",
+        "desc": "AI 音声アシスタントの準備ができました",
+        "feature1": "音声チャット",
+        "feature2": "テキスト入力"
+      },
+      "mode": {
+        "title": "モードを選択",
+        "desc": "インタラクション方法を選択",
+        "conversation": "音声チャット",
+        "conversationDesc": "AI と自然に話す",
+        "textInput": "テキスト入力",
+        "textInputDesc": "メッセージを入力"
+      },
+      "hotkey": {
+        "title": "ホットキー設定",
+        "desc": "押して話す"
+      },
+      "llm": {
+        "title": "LLM 設定",
+        "desc": "AI プロバイダーを選択",
+        "local": "ローカル",
+        "localDesc": "AI をローカル実行",
+        "api": "API",
+        "apiDesc": "クラウド AI サービスを使用"
+      },
+      "permission": {
+        "title": "権限が必要です",
+        "desc": "音声機能の使用を許可",
+        "micTitle": "マイクへのアクセス",
+        "micDesc": "音声入力に必要"
+      },
+      "complete": {
+        "title": "準備完了！",
+        "desc": "チャットを始める準備ができました",
+        "tip": "ホットキーを押して開始"
+      },
+      "skip": "スキップ",
+      "next": "次へ",
+      "start": "始める"
+    },
     "ptt": {
       "recording": "録音中...",
       "recordingHint": "離して録音停止",
@@ -42,6 +84,10 @@
     },
     "collapse": "折りたたむ",
     "expand": "展開",
+    "autoCollapse": {
+      "warning": "入力ボックスは3秒後に自動折りたたみ",
+      "cancel": "折りたたみをキャンセル"
+    },
     "messages": {
       "placeholder": "メッセージを入力...",
       "user": "あなた",
@@ -56,6 +102,12 @@
       "ttsFailed": "TTS失敗",
       "ttsError": "TTSエラー",
       "chatFailed": "チャット失敗"
+    },
+    "templates": {
+      "title": "会話テンプレート",
+      "button": "テンプレート",
+      "createCustom": "カスタムテンプレートを作成",
+      "select": "テンプレートを選択"
     }
   },
   "buttons": {
@@ -63,16 +115,38 @@
     "confirm": "確認",
     "create": "作成",
     "save": "保存",
+    "saveSettings": "設定を保存",
+    "saving": "保存中...",
     "delete": "削除",
     "close": "閉じる",
     "back": "戻る",
-    "send": "送信"
+    "load": "読み込み",
+    "send": "送信",
+    "refresh": "更新"
+  },
+  "status": {
+    "loading": "読み込み中...",
+    "success": "成功",
+    "error": "エラー",
+    "empty": "データなし",
+    "recording": "録音中...",
+    "processing": "処理中...",
+    "online": "準備完了"
+  },
+  "modes": {
+    "label": "モード",
+    "conversation": "音声会話",
+    "textInput": "テキスト入力"
   },
   "themes": {
     "light": "ライト",
     "dark": "ダーク",
     "system": "システム",
-    "accentColor": "アクセントカラー"
+    "lightMode": "ライトモード",
+    "darkMode": "ダークモード",
+    "systemMode": "システムに従う",
+    "accentColor": "アクセントカラー",
+    "accentColorDescription": "アプリのテーマ色をカスタマイズ"
   },
   "languages": {
     "en": "English",
@@ -82,6 +156,7 @@
   },
   "settings": {
     "title": "設定",
+    "description": "音声アシスタントのパラメータを設定",
     "categories": {
       "assistant": "アシスタント設定",
       "voiceRecognition": "音声認識",
@@ -89,23 +164,244 @@
       "tts": "音声合成",
       "shortcuts": "ショートカット",
       "appearance": "外観設定",
-      "advanced": "高度な設定"
+      "advanced": "高度な設定",
+      "miniMode": "ミニモード"
+    },
+    "descriptions": {
+      "assistant": "AIアシスタントの動作と対話パラメータを設定",
+      "voiceRecognition": "録音モードと音声検出パラメータを設定",
+      "aiModel": "AIサービスとモデル設定を選択",
+      "tts": "テキスト読み上げエンジンとパラメータを設定",
+      "shortcuts": "ショートカットの表示と設定",
+      "appearance": "外観とテーマをカスタマイズ",
+      "advanced": "危険操作とシステム情報"
     },
     "fields": {
       "workMode": "モード",
       "systemPrompt": "システムプロンプト",
       "maxHistory": "最大履歴数",
+      "items": "件",
+      "recordingMode": "録音モード",
+      "pushToTalk": "プッシュトゥトーク（推奨）",
+      "continuous": "自動検出",
+      "vadThreshold": "VAD感度",
+      "silenceTimeout": "無音検出時間",
+      "seconds": "秒",
       "llmBackend": "プロバイダー",
+      "zhipuApiKey": "智譜AI API Key",
+      "apiKey": "API Key",
+      "ollamaModel": "モデル名",
+      "ollamaUrl": "API URL",
       "ttsEngine": "TTSエンジン",
-      "theme": "テーマ"
+      "ttsRate": "読み上げ速度",
+      "ttsVoice": "音声",
+      "autoTTS": "自動再生",
+      "language": "言語",
+      "showModeBadges": "モード状態を表示",
+      "theme": "テーマ",
+      "accentColor": "テーマ色",
+      "toggleWindow": "ウィンドウ表示/非表示",
+      "serviceStatus": "サービス状態",
+      "running": "実行中"
+    },
+    "workModes": {
+      "conversation": "会話モード",
+      "text": "テキスト入力モード"
+    },
+    "workModeDescriptions": {
+      "conversation": "音声 → AI対話 → 音声再生",
+      "text": "音声 → テキストを入力"
+    },
+    "placeholders": {
+      "systemPrompt": "あなたは有帮助な音声アシスタントです...",
+      "apiKey": "sk-...",
+      "ollamaModel": "qwen2.5:1.5b",
+      "ollamaUrl": "http://localhost:11434",
+      "selectLlmBackend": "LLMバックエンドを選択",
+      "selectTtsBackend": "TTSバックエンドを選択"
+    },
+    "hints": {
+      "workMode": "音声入力の処理方法を選択",
+      "systemPrompt": "AIアシスタントの動作をカスタマイズ",
+      "maxHistory": "保持する対話履歴の数",
+      "recordingMode": "録音トリガーの方法を選択",
+      "autoDetection": "音声の開始と終了を自動検出",
+      "vadThreshold": "音声活動検出の感度、値が低いほど敏感",
+      "silenceTimeout": "無音検出後の待機時間",
+      "apiKey": "クラウドサービス使用時にのみ必要",
+      "ollamaModel": "モデル名を入力例：qwen2.5:1.5b, llama3.2:latest",
+      "ollamaUrl": "APIサービスアドレス、デフォルトでローカルのOllamaサービス",
+      "ttsRate": "読み上げ速度調整例：+0%、+20%、-10%",
+      "autoTTS": "AI応答後に自動朗読",
+      "showModeBadges": "現在の作業モードと録音モードをトップバーに表示",
+      "theme": "アイコンをクリックして切替：ライト → ダーク → システム",
+      "language": "アイコンをクリックして切替：中文 ↔ English",
+      "ptt": "押して録音開始、離して送信",
+      "toggleWindow": "グローバルショートカット、メインビジュエイ表示/非表示",
+      "servicesRunning": "全サービス正常に動作中",
+      "clearHistory": "全履歴を削除（復元不可）"
+    },
+    "tts": {
+      "preview": "音声プレビュー",
+      "previewText": "こんにちは、音声プレビューテストです。",
+      "voice": "音声選択",
+      "voiceDescription": "TTS音声を選択"
+    },
+    "connection": {
+      "test": "接続テスト",
+      "testing": "テスト中...",
+      "success": "✓ 接続成功！モデルが利用可能です。",
+      "failed": "✗ 接続失敗。アドレスとモデル名を確認してください。",
+      "serviceError": "Ollamaサービス利用不可。",
+      "modelError": "モデルがインストールされていません。",
+      "networkError": "ネットワークエラーまたはアドレスが無効です。"
+    },
+    "audio": {
+      "previewSuccess": "オーディオプレビュー再生成功",
+      "previewFailed": "オーディオ再生失敗",
+      "generationFailed": "音声生成失敗",
+      "unknownError": "不明なエラー"
+    },
+    "service": {
+      "status": "サービス状態",
+      "running": "実行中",
+      "allServicesNormal": "全サービス正常に動作中"
+    },
+    "models": {
+      "title": "AIモデル",
+      "asr": "ASRモデル",
+      "vad": "VADモデル",
+      "loaded": "読み込み済み",
+      "downloaded": "ダウンロード済み",
+      "notFound": "見つかりません",
+      "openFolder": "フォルダを開く",
+      "openVadFolder": "VADフォルダを開く",
+      "openAsrFolder": "ASRフォルダを開く"
+    },
+    "danger": {
+      "title": "危険操作",
+      "clearHistory": "履歴を削除",
+      "clearHistoryConfirm": "全履歴を削除しますか？この操作は元に戻せません。"
+    },
+    "about": {
+      "version": "バージョン",
+      "description": "AI駆動のインテリジェント音声アシスタント"
     }
   },
   "history": {
     "title": "履歴",
+    "search": "対話を検索...",
     "newSession": "新規セッション",
+    "filter": {
+      "all": "全対話",
+      "starredOnly": "お気に入りのみ",
+      "unstarredOnly": "未お気に入り"
+    },
+    "timeGroups": {
+      "today": "今日",
+      "yesterday": "昨日",
+      "thisWeek": "今週",
+      "thisMonth": "今月",
+      "earlier": "それ以前"
+    },
     "empty": {
-      "title": "履歴がありません",
+      "title": "対話履歴がありません",
       "description": "会話を始めると自動保存されます"
+    },
+    "actions": {
+      "load": "この対話を読み込み",
+      "delete": "削除",
+      "confirm": "確認",
+      "cancel": "キャンセル",
+      "star": "お気に入り",
+      "unstar": "お気に入り解除"
     }
+  },
+  "session": {
+    "newSession": {
+      "title": "新規セッション",
+      "description": "新しいセッションのタイトルを設定してください。空欄の場合は最初のメッセージ送信時に自動命名されます。",
+      "placeholder": "タイトルを入力...",
+      "characterLimit": "{{count}}/{{max}}"
+    }
+  },
+  "toast": {
+    "modeSwitched": "モード切替完了",
+    "conversationMode": "現在のモード: 音声 → AI対話 → 音声再生",
+    "textMode": "現在のモード: 音声 → テキスト入力",
+    "switchFailed": "モード切替失敗、再試行してください",
+    "error": "エラー"
+  },
+  "modeStatus": {
+    "workMode": {
+      "conversation": "会話",
+      "text": "テキスト"
+    },
+    "recordMode": {
+      "label": "録音モード",
+      "ptt": "プッシュ",
+      "pushToTalk": "プッシュ",
+      "continuous": "自動"
+    },
+    "switchWorkMode": "作業モードを切り替え",
+    "switchRecordMode": "録音モードを切り替え"
+  },
+  "tray": {
+    "newConversation": "🗣️ 新規対話を開始",
+    "history": "📖 履歴",
+    "clearHistory": "🗑️ 対話履歴を削除",
+    "settings": "⚙️ 設定",
+    "quit": "❌ アプリを終了"
+  },
+  "guide": {
+    "welcome": {
+      "title": "Speekiumへようこそ",
+      "desc": "あなたのインテリジェント音声アシスタント",
+      "feature1": "音声入力",
+      "feature2": "AI対話"
+    },
+    "mode": {
+      "title": "モードを選択",
+      "desc": "対話方法を選びましょう",
+      "conversation": "音声会話",
+      "conversationDesc": "話して、音声で返信 받取る",
+      "textInput": "テキスト入力",
+      "textInputDesc": "入力して、音声で返信 받取る"
+    },
+    "hotkey": {
+      "title": "ショートカットを設定",
+      "desc": "ショートカットを押して録音開始"
+    },
+    "llm": {
+      "title": "AIモデルを選択",
+      "desc": "お好みのAIサービスを選択",
+      "local": "ローカル (Ollama)",
+      "localDesc": "オフライン動作、プライバシー保護",
+      "api": "クラウドAPI",
+      "apiDesc": "より強力なモデル"
+    },
+    "permission": {
+      "title": "マイクのアクセス権限",
+      "desc": "音声入力のためにマイクを許可",
+      "micTitle": "マイクの許可",
+      "micDesc": "声を録音するためにマイクの許可が必要です"
+    },
+    "complete": {
+      "title": "設定完了！",
+      "desc": "チャットを始める準備ができました",
+      "tip": "会話を試してみましょう！"
+    },
+    "skip": "スキップ",
+    "next": "次へ",
+    "start": "始める"
+  },
+  "errors": {
+    "report": "エラーを報告",
+    "pending": "保留中",
+    "total": "合計",
+    "reported": "報告済み",
+    "success": "エラー報告成功",
+    "noErrors": "報告するエラーはありません"
   }
 }
+

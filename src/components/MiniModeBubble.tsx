@@ -116,9 +116,9 @@ export function MiniModeBubble({
 
   // 获取模式文字
   const getModeText = () => {
-    return workMode === 'conversation' 
-      ? t('app.modes.conversation') 
-      : t('app.modes.textInput');
+    return workMode === 'conversation'
+      ? t('modes.conversation')
+      : t('modes.textInput');
   };
 
   return (

@@ -8,7 +8,10 @@ export function LanguageSwitcher() {
 
   const toggleLanguage = async () => {
     const currentLang = i18n.language;
-    const newLang = currentLang === 'en' ? 'zh' : 'en';
+    // Cycle through: en -> zh -> ja -> en
+    const langCycle = ['en', 'zh', 'ja'];
+    const currentIndex = langCycle.indexOf(currentLang);
+    const newLang = langCycle[(currentIndex + 1) % langCycle.length];
     i18n.changeLanguage(newLang);
     // Sync language change to config file for tray menu
     try {
@@ -32,7 +35,7 @@ export function LanguageSwitcher() {
       <Languages className="h-[1.2rem] w-[1.2rem]" />
       <span className="sr-only">{t('languages.switch')}</span>
       <span className="absolute -bottom-1 -right-1 text-[0.6rem] font-bold text-foreground">
-        {i18n.language === 'en' ? 'EN' : '中'}
+        {i18n.language === 'en' ? 'EN' : i18n.language === 'zh' ? '中' : '日'}
       </span>
     </Button>
   );

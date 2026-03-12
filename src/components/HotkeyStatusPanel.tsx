@@ -60,12 +60,12 @@ export function HotkeyStatusPanel({
 
   // 获取模式显示名称
   const getModeName = (mode: WorkMode) => {
-    return mode === 'conversation' ? t('app.modes.conversation') : t('app.modes.textInput');
+    return mode === 'conversation' ? t('modes.conversation') : t('modes.textInput');
   };
 
   // 获取录音模式显示名称
   const getRecordModeName = (mode: 'push-to-talk' | 'continuous') => {
-    return mode === 'push-to-talk' ? t('app.recordMode.ptt') : t('app.recordMode.continuous');
+    return mode === 'push-to-talk' ? t('modeStatus.recordMode.ptt') : t('modeStatus.recordMode.continuous');
   };
 
   return (
@@ -87,14 +87,14 @@ export function HotkeyStatusPanel({
       {/* 工作模式 */}
       <div className="flex items-center gap-2">
         <MessageSquare className="w-3.5 h-3.5 text-purple-500" />
-        <span className="text-muted-foreground">{t('app.modes.label')}:</span>
+        <span className="text-muted-foreground">{t('modes.label')}:</span>
         <span className="font-medium text-foreground">{getModeName(workMode)}</span>
       </div>
 
       {/* 录音模式 */}
       <div className="flex items-center gap-2">
         <span className="w-3.5 h-3.5 flex items-center justify-center text-orange-500">🔄</span>
-        <span className="text-muted-foreground">{t('app.recordMode.label')}:</span>
+        <span className="text-muted-foreground">{t('modeStatus.recordMode.label')}:</span>
         <span className="font-medium text-foreground">{getRecordModeName(recordMode)}</span>
       </div>
 

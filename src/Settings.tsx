@@ -976,12 +976,81 @@ export function Settings({
                         <SelectValue placeholder={t('settings.fields.ttsVoice') || 'Select voice'} />
                       </SelectTrigger>
                       <SelectContent className="bg-muted border-border">
+                        {/* Chinese Voices */}
                         <SelectItem value="zh-CN-XiaoxiaoNeural">Xiaoxiao (中文女声)</SelectItem>
+                        <SelectItem value="zh-CN-XiaoyiNeural">Xiaoyi (中文女声)</SelectItem>
                         <SelectItem value="zh-CN-YunxiNeural">Yunxi (中文男声)</SelectItem>
                         <SelectItem value="zh-CN-YunyangNeural">Yunyang (中文男声)</SelectItem>
-                        <SelectItem value="en-US-JennyNeural">Jenny (英文女声)</SelectItem>
-                        <SelectItem value="en-US-GuyNeural">Guy (英文男声)</SelectItem>
+                        <SelectItem value="zh-CN-YunhaoNeural">Yunhao (中文男声)</SelectItem>
+                        <SelectItem value="zh-TW-HsiaoYuNeural">HsiaoYu (台语女声)</SelectItem>
+                        <SelectItem value="zh-HK-HiuGaaiNeural">HiuGaai (粤语女声)</SelectItem>
+                        <SelectItem value="zh-HK-HiuMaanNeural">HiuMaan (粤语女声)</SelectItem>
+
+                        {/* English Voices */}
+                        <SelectItem value="en-US-JennyNeural">Jenny (美音女声)</SelectItem>
+                        <SelectItem value="en-US-GuyNeural">Guy (美音男声)</SelectItem>
+                        <SelectItem value="en-US-AriaNeural">Aria (美音女声)</SelectItem>
+                        <SelectItem value="en-US-SaraNeural">Sara (美音女声)</SelectItem>
+                        <SelectItem value="en-US-TonyNeural">Tony (美音男声)</SelectItem>
+                        <SelectItem value="en-GB-SoniaNeural">Sonia (英音女声)</SelectItem>
+                        <SelectItem value="en-GB-RyanNeural">Ryan (英音男声)</SelectItem>
+                        <SelectItem value="en-AU-NatashaNeural">Natasha (澳音女声)</SelectItem>
+                        <SelectItem value="en-CA-ClaraNeural">Clara (加音女声)</SelectItem>
+                        <SelectItem value="en-IN-NeerjaNeural">Neerja (印英女声)</SelectItem>
+
+                        {/* Japanese Voices */}
                         <SelectItem value="ja-JP-NanamiNeural">Nanami (日文女声)</SelectItem>
+                        <SelectItem value="ja-JP-KeitaNeural">Keita (日文男声)</SelectItem>
+
+                        {/* Korean Voices */}
+                        <SelectItem value="ko-KR-SunHiNeural">SunHi (韩文女声)</SelectItem>
+                        <SelectItem value="ko-KR-JunhoNeural">Junho (韩文男声)</SelectItem>
+
+                        {/* French Voices */}
+                        <SelectItem value="fr-FR-DeniseNeural">Denise (法文女声)</SelectItem>
+                        <SelectItem value="fr-FR-HenriNeural">Henri (法文男声)</SelectItem>
+                        <SelectItem value="fr-CA-SylvieNeural">Sylvie (加法女声)</SelectItem>
+                        <SelectItem value="fr-CA-AntoineNeural">Antoine (加法男声)</SelectItem>
+
+                        {/* German Voices */}
+                        <SelectItem value="de-DE-KatjaNeural">Katja (德文女声)</SelectItem>
+                        <SelectItem value="de-DE-ConradNeural">Conrad (德文男声)</SelectItem>
+                        <SelectItem value="de-AT-IngridNeural">Ingrid (奥语女声)</SelectItem>
+
+                        {/* Spanish Voices */}
+                        <SelectItem value="es-ES-ElviraNeural">Elvira (西语女声)</SelectItem>
+                        <SelectItem value="es-ES-AlvaroNeural">Alvaro (西语男声)</SelectItem>
+                        <SelectItem value="es-MX-DaliaNeural">Dalia (墨语女声)</SelectItem>
+                        <SelectItem value="es-AR-TaniaNeural">Tania (阿语女声)</SelectItem>
+
+                        {/* Italian Voices */}
+                        <SelectItem value="it-IT-ElsaNeural">Elsa (意大利女声)</SelectItem>
+                        <SelectItem value="it-IT-DiegoNeural">Diego (意大利男声)</SelectItem>
+
+                        {/* Portuguese Voices */}
+                        <SelectItem value="pt-BR-FranciscaNeural">Francisca (巴葡女声)</SelectItem>
+                        <SelectItem value="pt-BR-AntonioNeural">Antonio (巴葡男声)</SelectItem>
+                        <SelectItem value="pt-PT-RaquelNeural">Raquel (葡语女声)</SelectItem>
+
+                        {/* Russian Voices */}
+                        <SelectItem value="ru-RU-SvetlanaNeural">Svetlana (俄语女声)</SelectItem>
+                        <SelectItem value="ru-RU-DmitryNeural">Dmitry (俄语男声)</SelectItem>
+
+                        {/* Hindi Voices */}
+                        <SelectItem value="hi-IN-MadhurNeural">Madhur (印地语女声)</SelectItem>
+                        <SelectItem value="hi-IN-AmitNeural">Amit (印地语男声)</SelectItem>
+
+                        {/* Arabic Voices */}
+                        <SelectItem value="ar-SA-ZariyahNeural">Zariyah (阿拉伯语女声)</SelectItem>
+                        <SelectItem value="ar-SA-HamedNeural">Hamed (阿拉伯语男声)</SelectItem>
+
+                        {/* Other Languages */}
+                        <SelectItem value="nl-NL-ColetteNeural">Colette (荷兰语女声)</SelectItem>
+                        <SelectItem value="pl-PL-AgnieszkaNeural">Agnieszka (波兰语女声)</SelectItem>
+                        <SelectItem value="tr-TR-SedaNeural">Seda (土耳其语女声)</SelectItem>
+                        <SelectItem value="vi-VN-HoaiMyNeural">HoaiMy (越南语女声)</SelectItem>
+                        <SelectItem value="th-TH-AcharaNeural">Achara (泰语女声)</SelectItem>
+                        <SelectItem value="id-ID-GadisNeural">Gadis (印尼语女声)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
