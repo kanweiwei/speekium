@@ -11,14 +11,20 @@ import "./index.css";
 import App from "./App";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { WorkModeProvider } from "./contexts/WorkModeContext";
+import { SettingsProvider } from "./contexts/SettingsContext";
+import { ErrorProvider } from "./contexts/ErrorContext";
 import "./i18n"; // Initialize i18n
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider defaultTheme="dark" storageKey="speekium-theme">
-      <WorkModeProvider>
-        <App />
-      </WorkModeProvider>
+      <ErrorProvider>
+        <SettingsProvider>
+          <WorkModeProvider>
+            <App />
+          </WorkModeProvider>
+        </SettingsProvider>
+      </ErrorProvider>
     </ThemeProvider>
   </React.StrictMode>,
 );

@@ -12,13 +12,11 @@ import type { ToastType } from './components/SystemToast';
 import { CollapsibleInput } from './components/CollapsibleInput';
 import { historyAPI } from './useTauriAPI';
 import { useWorkMode } from './contexts/WorkModeContext';
+import { useError } from './contexts/ErrorContext';
 import type { WorkModeChangeEvent } from './types/workMode';
-import { SettingsProvider } from './contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import {
   Settings as SettingsIcon,
-  AlertCircle,
-  X,
   Clock,
   PenSquare,
   Bell,
@@ -39,10 +37,10 @@ import { NotificationCenter } from './components/NotificationCenter';
 function App() {
   const { t } = useTranslation();
   const { workMode, setWorkMode } = useWorkMode();
+  const { addError, dismissError } = useError();
   const [textInput, setTextInput] = React.useState<string>('');
   const [autoTTS, setAutoTTS] = React.useState<boolean>(true);
   const [isSpeaking, setIsSpeaking] = React.useState<boolean>(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
   const [isStreaming, setIsStreaming] = React.useState<boolean>(false);
   const [isWaitingForLLM, setIsWaitingForLLM] = React.useState<boolean>(false);
@@ -447,8 +445,8 @@ function App() {
             await invoke<string>('type_text_command', { text: userText });
           } catch (error) {
             console.error('[PTT] 文字输入失败:', error);
-            setError(`文字输入失败: ${error}`);
-            setTimeout(() => setError(null), 3000);
+            addError(`文字输入失败: ${error}`, 'runtime');
+            setTimeout(() => dismissError(), 3000);
           }
         } else {
           // Conversation mode: display user message and wait for LLM response
@@ -521,7 +519,7 @@ function App() {
       const unlistenError = await listen<string>('ptt-error', (event) => {
         setIsWaitingForLLM(false);  // Reset waiting state on error
         setIsStreaming(false);
-        setError(`${t('app.errors.pttError')}: ${event.payload}`);
+        addError(`${t('app.errors.pttError')}: ${event.payload}`, 'runtime');
       });
 
       return () => {
@@ -541,7 +539,7 @@ function App() {
   React.useEffect(() => {
     localStorage.setItem('recordMode', recordMode);
     if (recordMode === 'push-to-talk') {
-      setError(null);
+      dismissError();
     }
   }, [recordMode]);
 
@@ -620,7 +618,7 @@ function App() {
               continue;
             }
             // For other errors, show error and wait longer before retry
-            setError(result.error || t('app.errors.listenFailed'));
+            addError(result.error || t('app.errors.listenFailed'), 'api');
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         } catch (error) {
@@ -642,7 +640,7 @@ function App() {
     } else {
       shouldKeepListening = false;
       abortController.abort();
-      setError(null);
+      dismissError();
     }
 
     return () => {
@@ -651,7 +649,7 @@ function App() {
       abortController.abort();
       if (recordMode !== 'continuous') {
         forceStopRecording();
-        setError(null);
+        dismissError();
       }
     };
   }, [recordMode, daemonStatus, workMode]); // Add workMode dependency for toast
@@ -735,7 +733,7 @@ function App() {
     setCurrentSessionId(null);
     currentSessionIdRef.current = null;
     // Clear error state
-    setError(null);
+    dismissError();
     // Reset session title
     setCurrentSessionTitle(customTitle || null);
 
@@ -763,7 +761,7 @@ function App() {
 
     const userMessage = message;
     setTextInput('');
-    setError(null);
+    dismissError();
 
     // Add user message to chat list
     addMessage('user', userMessage);
@@ -819,16 +817,16 @@ function App() {
         try {
           const ttsResult = await generateTTS(result.content);
           if (!ttsResult.success) {
-            setError(`${t('app.errors.ttsFailed')}: ${ttsResult.error}`);
+            addError(`${t('app.errors.ttsFailed')}: ${ttsResult.error}`, 'api');
           }
         } catch (ttsError) {
-          setError(`${t('app.errors.ttsError')}: ${ttsError}`);
+          addError(`${t('app.errors.ttsError')}: ${ttsError}`, 'runtime');
         } finally {
           setIsSpeaking(false);
         }
       }
     } catch (chatError) {
-      setError(`${t('app.errors.chatFailed')}: ${chatError}`);
+      addError(`${t('app.errors.chatFailed')}: ${chatError}`, 'api');
     }
   };
 
@@ -845,19 +843,16 @@ function App() {
   // Show loading screen while daemon is initializing
   if (daemonStatus !== 'ready') {
     return (
-      <SettingsProvider>
-        <LoadingScreen
-          message={loadingMessage}
-          status={daemonStatus}
-          downloadProgress={downloadProgress}
-          modelLoadingStages={modelLoadingStages}
-        />
-      </SettingsProvider>
+      <LoadingScreen
+        message={loadingMessage}
+        status={daemonStatus}
+        downloadProgress={downloadProgress}
+        modelLoadingStages={modelLoadingStages}
+      />
     );
   }
 
   return (
-    <SettingsProvider>
       <div className="flex flex-col h-screen bg-background text-foreground">
       {/* 顶栏 */}
       <header className="h-14 border-b border-border/50 bg-background/80 backdrop-blur-xl flex items-center justify-between px-4 sticky top-0 z-40">
@@ -1002,22 +997,6 @@ function App() {
         {/* 消息区域 */}
         {!isMiniMode && (
         <div className="h-full overflow-y-auto px-4">
-          {/* 错误提示 */}
-          {error && (
-            <div className="max-w-[680px] mx-auto mt-4">
-              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-                <span className="flex-1 text-sm text-destructive">{error}</span>
-                <button
-                  onClick={() => setError(null)}
-                  className="text-destructive hover:text-destructive/80 transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* 空状态或消息列表 */}
           <div className="max-w-[680px] mx-auto py-4">
             {messages.length === 0 ? (
@@ -1048,7 +1027,7 @@ function App() {
                         if (!isSpeaking) {
                           setIsSpeaking(true);
                           generateTTS(content)
-                            .catch(err => setError(`${t('app.errors.ttsFailed')}: ${err}`))
+                            .catch(err => addError(`${t('app.errors.ttsFailed')}: ${err}`, 'api'))
                             .finally(() => setIsSpeaking(false));
                         }
                       } : undefined}
@@ -1157,7 +1136,6 @@ function App() {
         onCreate={handleNewSession}
       />
       </div>
-    </SettingsProvider>
   );
 }
 
